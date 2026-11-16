@@ -46,12 +46,19 @@ class DrivingReportTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def trip(self, start: str, end: str, km: float, kwh: float | None = None, regen: float | None = None,
-             vmax: float | None = None, a: int | None = 0, b: int | None = 0, t: int | None = 0) -> None:
+             vmax: float | None = None, a: int | None = 0, b: int | None = 0, t: int | None = 0,
+             gross: float | None = None) -> None:
         dur = (parse_ts(end) - parse_ts(start)).total_seconds()
+        # Older fixtures treated kwh as the lifetime rise. Pass gross to separate net kwh from it.
+        if gross is None and kwh is not None:
+            gross = kwh
+        life_s = 0.0 if gross is not None else None
+        life_e = gross
         self.conn.execute(
             "INSERT INTO trips (vehicle_id, start_ts, end_ts, km, kwh, duration_s, regen_kwh, max_speed, "
-            "hard_accel, hard_brake, hard_turn) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (VID, start, end, km, kwh, dur, regen, vmax, a, b, t))
+            "hard_accel, hard_brake, hard_turn, start_lifetime_kwh, end_lifetime_kwh) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (VID, start, end, km, kwh, dur, regen, vmax, a, b, t, life_s, life_e))
         self.conn.commit()
 
     def test_period_bounds_kst(self) -> None:

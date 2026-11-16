@@ -85,7 +85,14 @@ SELECT COUNT(*),
        COALESCE(SUM(CASE WHEN kwh IS NOT NULL AND km >= 0.1 THEN km END), 0),
        SUM(CASE WHEN kwh IS NOT NULL AND km >= 0.1 THEN 1 ELSE 0 END),
        SUM(CASE WHEN regen_kwh IS NOT NULL AND kwh IS NOT NULL THEN regen_kwh END),
-       SUM(CASE WHEN regen_kwh IS NOT NULL AND kwh IS NOT NULL THEN kwh END)
+       SUM(CASE WHEN regen_kwh IS NOT NULL
+                 AND start_lifetime_kwh IS NOT NULL
+                 AND end_lifetime_kwh > start_lifetime_kwh + 0.01
+            THEN regen_kwh END),
+       SUM(CASE WHEN regen_kwh IS NOT NULL
+                 AND start_lifetime_kwh IS NOT NULL
+                 AND end_lifetime_kwh > start_lifetime_kwh + 0.01
+            THEN end_lifetime_kwh - start_lifetime_kwh END)
 """
 
 
@@ -104,7 +111,8 @@ def trips_summary(conn: sqlite3.Connection, vid: str, date_from: str | None = No
                   recent: int | None = None) -> dict[str, Any]:
     """횟수, km, 운전 시간, 전비, 쓴 전력, 회생. 전비는 kWh가 있는 0.1 km 이상 주행만.
 
-    주차 중 소모는 여기 두지 않는다. 충전 요약이 같은 기간으로 센다.
+    회생 비율은 회생과 누적 사용량 증가가 둘 다 있는 주행만 더해서 나눈다.
+    쓴 전력과 전비는 순 사용량이다. 주차 중 소모는 여기 두지 않는다.
     """
     if recent:
         starts = _recent_trip_starts(conn, vid, recent)
@@ -115,7 +123,7 @@ def trips_summary(conn: sqlite3.Connection, vid: str, date_from: str | None = No
                 [vid, *starts]).fetchone()
             span = (_kst_day(min(starts)), _kst_day(max(starts)))
         else:
-            row, span = (0, 0, 0, 0, 0, 0, None, None), (None, None)
+            row, span = (0, 0, 0, 0, 0, 0, None, None, None), (None, None)
     else:
         extra, params = _range_sql(_TRIP_KST, date_from, date_to)
         row = conn.execute(
@@ -128,7 +136,8 @@ def trips_summary(conn: sqlite3.Connection, vid: str, date_from: str | None = No
     eff_km = float(row[4] or 0)
     eff_n = int(row[5] or 0)
     regen = row[6]
-    regen_base = row[7]
+    ratio_regen = row[7]
+    ratio_base = row[8]
     return {
         "vehicle_id": vid, "from": span[0], "to": span[1], "recent": recent,
         "trip_count": n, "km": round(km, 2),
@@ -136,7 +145,10 @@ def trips_summary(conn: sqlite3.Connection, vid: str, date_from: str | None = No
         "kwh": round(eff_kwh, 3) if eff_n else None,
         "km_per_kwh": round(eff_km / eff_kwh, 2) if eff_n and eff_kwh > 0.01 else None,
         "regen_kwh": round(float(regen), 3) if regen is not None else None,
-        "regen_ratio": round(float(regen) / float(regen_base), 3) if regen is not None and regen_base and float(regen_base) > 0.01 else None,
+        "regen_ratio": (
+            round(float(ratio_regen) / float(ratio_base), 3)
+            if ratio_regen is not None and ratio_base and float(ratio_base) > 0.01 else None
+        ),
     }
 
 
@@ -174,8 +186,9 @@ def trips_trend(conn: sqlite3.Connection, vid: str, date_from: str | None, date_
     try:
         rows = conn.execute(
             "SELECT start_ts, end_ts, km, kwh, duration_s, regen_kwh, max_speed, hard_accel, "
-            "hard_brake, hard_turn FROM trips WHERE vehicle_id = ? AND start_ts >= ? AND start_ts < ? "
-            "ORDER BY start_ts", (vid, _utc(start), _utc(end)),
+            "hard_brake, hard_turn, start_lifetime_kwh, end_lifetime_kwh FROM trips "
+            "WHERE vehicle_id = ? AND start_ts >= ? AND start_ts < ? ORDER BY start_ts",
+            (vid, _utc(start), _utc(end)),
         ).fetchall()
     finally:
         conn.row_factory = None

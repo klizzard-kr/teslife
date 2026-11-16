@@ -42,11 +42,32 @@ def _rows(conn: sqlite3.Connection, vid: str, start: date, end: date) -> list[sq
     try:
         return conn.execute(
             "SELECT start_ts, end_ts, km, kwh, duration_s, regen_kwh, max_speed, hard_accel, "
-            "hard_brake, hard_turn FROM trips WHERE vehicle_id = ? AND start_ts >= ? AND start_ts < ? "
-            "ORDER BY start_ts", (vid, _utc(start), _utc(end)),
+            "hard_brake, hard_turn, start_lifetime_kwh, end_lifetime_kwh FROM trips "
+            "WHERE vehicle_id = ? AND start_ts >= ? AND start_ts < ? ORDER BY start_ts",
+            (vid, _utc(start), _utc(end)),
         ).fetchall()
     finally:
         conn.row_factory = None
+
+
+def regen_gross_kwh(row: Any) -> float | None:
+    """Gross lifetime kWh used as one trip's regen-ratio base.
+
+    Matches apply_trip_net: end_lifetime_kwh - start_lifetime_kwh when that rise
+    is above 0.01. Stored kwh is net and is not this base. A trip with no
+    lifetime rise is left out of an aggregate ratio.
+    """
+    try:
+        life_s = row["start_lifetime_kwh"]
+        life_e = row["end_lifetime_kwh"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    if life_s is None or life_e is None:
+        return None
+    lifetime = float(life_e) - float(life_s)
+    if lifetime > 0.01:
+        return lifetime
+    return None
 
 
 def _per100(n: int, km: float) -> float | None:
@@ -69,7 +90,17 @@ def summarize(rows: list[sqlite3.Row]) -> dict[str, Any]:
     kwh_km = sum(r["km"] for r in kwh_rows)
     regen_rows = [r for r in rows if r["regen_kwh"] is not None and r["kwh"] is not None]
     regen = sum(r["regen_kwh"] for r in regen_rows)
-    regen_base = sum(r["kwh"] for r in regen_rows)
+    # Ratio uses the same trips in both sums: regen and a gross lifetime rise.
+    ratio_rows = []
+    for r in rows:
+        if r["regen_kwh"] is None:
+            continue
+        base = regen_gross_kwh(r)
+        if base is None:
+            continue
+        ratio_rows.append((float(r["regen_kwh"]), base))
+    ratio_regen = sum(part for part, _base in ratio_rows)
+    ratio_base = sum(base for _part, base in ratio_rows)
     # harsh counts only from trips that had acceleration samples (None = no data, not zero)
     harsh_rows = [r for r in rows if r["hard_accel"] is not None and r["hard_brake"] is not None]
     turn_rows = [r for r in rows if r["hard_turn"] is not None]
@@ -94,7 +125,7 @@ def summarize(rows: list[sqlite3.Row]) -> dict[str, Any]:
         "kwh": round(kwh, 3) if kwh_rows else None,
         "km_per_kwh": round(kwh_km / kwh, 2) if kwh_rows and kwh > 0.01 else None,
         "regen_kwh": round(regen, 3) if regen_rows else None,
-        "regen_ratio": round(regen / regen_base, 3) if regen_rows and regen_base > 0.01 else None,
+        "regen_ratio": round(ratio_regen / ratio_base, 3) if ratio_rows and ratio_base > 0.01 else None,
         "max_speed": max(speeds) if speeds else None,
         "avg_speed": round(km / (secs / 3600.0), 1) if secs > 0 and km >= MIN_TRIP_KM else None,
         "harsh": counts,

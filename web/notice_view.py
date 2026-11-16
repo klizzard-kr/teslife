@@ -6,6 +6,7 @@ body are converted here, at read time.
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -430,6 +431,7 @@ def trip_end_summary(body: str, details: list | None = None) -> str:
             soc = _SOC.search(text)
             if soc:
                 battery = soc.group(2) + "%"
+    battery = _list_battery(battery) if battery else ""
     range_num = _number(labeled.get("주행가능") or labeled.get("주행가능거리") or "")
     if range_num is None:
         found = _RANGE.search(text)
@@ -812,6 +814,49 @@ def format_soc(value: float) -> str:
     return text + "%"
 
 
+def _soc_tenths(value: float) -> int:
+    """One-decimal percent as tenths. Matches Math.round(value * 10) for a battery %."""
+    return int(math.floor(float(value) * 10 + 0.5))
+
+
+def _soc_tenths_text(tenths: int) -> str:
+    whole, frac = divmod(abs(int(tenths)), 10)
+    if frac == 0:
+        return str(whole)
+    return f"{whole}.{frac}"
+
+
+def format_soc_change(start: float | None, end: float | None) -> str | None:
+    """Detail battery line. One decimal, trailing .0 dropped, no delta.
+
+    Equal displayed values are a single number. A missing side is left out.
+    """
+    if start is None and end is None:
+        return None
+    if start is None:
+        return _soc_tenths_text(_soc_tenths(end)) + "%"  # type: ignore[arg-type]
+    if end is None:
+        return _soc_tenths_text(_soc_tenths(start)) + "%"
+    a = _soc_tenths(start)
+    b = _soc_tenths(end)
+    if a == b:
+        return _soc_tenths_text(a) + "%"
+    return f"{_soc_tenths_text(a)}% → {_soc_tenths_text(b)}%"
+
+
+def _list_battery(text: str) -> str:
+    """List and push keep one battery number. A detail arrow uses the arrival side."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    found = re.search(r"→\s*(\d+(?:\.\d+)?)\s*%", raw)
+    if found:
+        return found.group(1) + "%"
+    if "%" in raw:
+        return raw
+    return raw + "%"
+
+
 def format_range_km(value: float) -> str:
     """Home range text. The number is rounded the way the home tile rounds."""
     rounded = int(float(value) + 0.5)
@@ -911,9 +956,15 @@ def event_facts(body: str, details: list | None = None, notice_id: str = "") -> 
     if tires:
         facts["tires_psi"] = [float(value) for value in tires.groups()]
     labeled = _detail_map(details)
-    battery = _number(labeled.get("배터리", ""))
-    if battery is not None:
-        facts["battery_pct"] = battery
+    battery_text = labeled.get("배터리", "")
+    arrival = re.search(r"→\s*(\d+(?:\.\d+)?)\s*%", battery_text)
+    if arrival:
+        number = arrival.group(1)
+        facts["battery_pct"] = float(number) if "." in number else int(number)
+    else:
+        battery = _number(battery_text)
+        if battery is not None:
+            facts["battery_pct"] = battery
     distance = _number(labeled.get("주행가능") or labeled.get("주행가능거리") or "")
     if distance is not None:
         facts["range_km"] = int(distance)

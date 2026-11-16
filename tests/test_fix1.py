@@ -153,7 +153,7 @@ class TripEndWaitTests(DbCase):
         ends = self.ends()
         self.assertEqual(len(ends), 1)
         self.assertIn("38.4/38.4/38.8/38.4 psi", ends[0]["message"])
-        self.assertIn("배터리|59.8%", ends[0]["message"])
+        self.assertIn("배터리|60% → 59.8%", ends[0]["message"])
         self.assertIn("앞 왼쪽|38.4 psi", ends[0]["message"])
         self.assertNotIn("주행가능거리", ends[0]["message"])
         self.assertNotIn("출발 시", ends[0]["message"])
@@ -180,7 +180,7 @@ class TripEndWaitTests(DbCase):
         finally:
             conn.close()
         self.assertIn("달렸어요", shown["display_body"])
-        self.assertEqual(dict(shown["display_details"])["배터리"], "59.8%")
+        self.assertEqual(dict(shown["display_details"])["배터리"], "60% → 59.8%")
         self.assertEqual(dict(shown["display_details"])["앞 왼쪽"], "39.2 psi")
         payload = event_payload(shown["id"], shown["body"], shown["details"], shown["ts"])
         self.assertEqual(payload["values"]["battery_pct"], 59.8)
