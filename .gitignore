@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.db
+*.db-*
+*.bak*
+*.pem
+*.key
+*.ndjson
+.env
+vapid.json
+current.json
+next.json
+after.json
