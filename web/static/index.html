@@ -823,6 +823,8 @@
     }
     #push-prefs.is-off { opacity: 0.45; }
     #push-prefs.is-off .pref-row { pointer-events: none; }
+    /* Parent opacity fades a checked track to green. Force the off gray while the master switch is off. */
+    #push-prefs.is-off .ios-switch input:checked + .knob { background: #c7c7cc; }
     .sheet-body label.pref-row > .pref-text,
     .sheet-body label.pref-row > span:not(.ios-switch) {
       flex: 1 1 auto; min-width: 0; text-align: left;
@@ -831,6 +833,12 @@
     .pref-label { display: grid; gap: 1px; min-width: 0; flex: 1 1 auto; }
     .pref-example { color: var(--text-secondary); font-size: 12px; line-height: 16px; }
     .pref-row input:disabled { opacity: 0.35; }
+    /* iOS Safari still paints a disabled checkbox (green fill and check) through opacity. */
+    .pref-row .ios-switch input:disabled {
+      opacity: 0; visibility: hidden; -webkit-appearance: none; appearance: none;
+      background: transparent; border: 0; accent-color: transparent;
+      width: 1px; height: 1px; clip: rect(0, 0, 0, 0); clip-path: inset(50%); pointer-events: none;
+    }
     .tariff-line { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; line-height: 20px; }
     .tariff-line span { color: var(--text-secondary); }
     .notice-list { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
@@ -848,12 +856,17 @@
     .notice-pad { flex: 0 0 44px; width: 44px; height: 44px; }
     .sheet-tools { display: flex; align-items: center; gap: 8px; }
     button.unit-tag { border: 0; background: transparent; padding: 8px 4px; min-height: 44px; cursor: pointer; font: inherit; }
-    button.tire-unit {
+    button.unit-tag.tire-unit {
       -webkit-appearance: none; appearance: none; touch-action: manipulation;
-      color: var(--text-secondary); font-size: 12px; line-height: 18px;
-      padding: 10px 2px; text-decoration: underline; text-underline-offset: 3px;
+      display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+      margin: 0; border: 1px solid var(--control-border); border-radius: 999px;
+      background: transparent; color: var(--text-secondary);
+      font: inherit; font-size: 12px; line-height: 16px; font-weight: 500;
+      min-height: 22px; padding: 2px 8px; text-decoration: none; cursor: pointer;
     }
-    button.tire-unit:active { opacity: 0.55; }
+    button.unit-tag.tire-unit:active { background: var(--accent-surface); opacity: 1; }
+    .tire-unit-row { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+    .tire-phase { color: var(--text-secondary); font-size: 12px; line-height: 18px; font-weight: 400; }
     .notice-trash svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
     .inbox-actions { display: flex; gap: 8px; margin: 12px 0 4px; }
     .inbox-actions button {
@@ -890,6 +903,8 @@
     .ios-switch { position: relative; width: 51px; height: 31px; flex: none; }
     .ios-switch input {
       position: absolute; inset: 0; width: 51px; height: 31px; margin: 0; opacity: 0;
+      -webkit-appearance: none; appearance: none; border: 0; background: transparent;
+      accent-color: transparent;
     }
     .ios-switch .knob {
       display: block; width: 51px; height: 31px; border-radius: 16px; background: #c7c7cc;
@@ -1071,7 +1086,7 @@
         </div>
       </section>
       <section class="card" id="tire-card">
-        <div class="card-head"><h2>타이어 공기압</h2><button type="button" id="pressure-unit" class="unit-tag" aria-label="공기압 단위">psi</button></div>
+        <div class="card-head"><h2>타이어 공기압</h2><button type="button" id="pressure-unit" class="unit-tag tire-unit" aria-label="공기압 단위">psi</button></div>
         <div class="tire-board" id="home-tires">
           <div class="tire-cell" id="m-fl" data-wheel="fl"><div class="tw">앞 좌측</div><div class="value tv" id="v-fl"></div></div>
           <div class="tire-cell" id="m-fr" data-wheel="fr"><div class="tw">앞 우측</div><div class="value tv" id="v-fr"></div></div>
@@ -1990,8 +2005,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.15.1"; // display constant only
+    const APP_VERSION = "v1.15.2"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.15.2", features: ["공기압 단위: 홈과 주행 상세의 단위가 작은 둥근 버튼이에요"], fixes: ["공기압: 주행 후 값이 없으면 주행 전 값만 보여요", "알림 스위치: 알림 받기를 끄면 아래 스위치는 체크 없이 회색이에요"] },
       { version: "1.15.1", features: ["배터리: 주행·충전·알림 상세는 시작과 끝을 소수 한 자리로 보여요", "공기압: 주행 상세의 단위를 누르면 psi와 bar가 바뀌어요"], fixes: ["회생 비율: 요약의 회생 비율을 순 전력이 아니라 누적 사용량으로 나눠요"] },
       { version: "1.15.0", features: ["안내: 설치 방법과 MIT 라이선스를 정리했어요"], fixes: [] },
       { version: "1.14.10", features: ["충전 단가: 평균 단가는 할인을 더한 금액으로 보여요"], fixes: [] },
@@ -4121,17 +4137,25 @@
       if (!isFinite(v)) return null;
       return pressureUnit === "bar" ? v.toFixed(2) : (v * PSI_PER_BAR).toFixed(1);
     }
+    function tirePairText(beforeBar, afterBar) {
+      const a = psiNum(beforeBar);
+      const b = psiNum(afterBar);
+      if (b == null) return a == null ? "—" : a;
+      if (a == null) return "— → " + b;
+      return a + " → " + b;
+    }
     function tireCompareHtml(before, after) {
       const wheels = [["fl", "앞 좌측", "fl"], ["fr", "앞 우측", "fr"], ["rl", "뒤 좌측", "rl"], ["rr", "뒤 우측", "rr"]];
       const any = wheels.some(([k]) => psiNum(before && before[k]) != null || psiNum(after && after[k]) != null);
       if (!any) return "";
       const unitName = pressureUnit === "bar" ? "bar" : "psi";
-      return "<div class='card-head'><strong>타이어 공기압</strong><button type='button' class='unit-tag tire-unit' aria-label='공기압 단위'>주행 전 → 후 · " + unitName + "</button></div>" +
+      const anyAfter = wheels.some(([k]) => psiNum(after && after[k]) != null);
+      const phase = anyAfter ? "<span class='tire-phase'>주행 전 → 후</span>" : "";
+      return "<div class='card-head'><strong>타이어 공기압</strong><span class='tire-unit-row'>" + phase +
+        "<button type='button' class='unit-tag tire-unit' aria-label='공기압 단위'>" + unitName + "</button></span></div>" +
         "<div class='tire-board'>" + wheels.map(([k, name, area]) => {
-          const a = psiNum(before && before[k]);
-          const b = psiNum(after && after[k]);
-          const text = (a == null && b == null) ? "—" : ((a == null ? "—" : a) + " → " + (b == null ? "—" : b));
-          return "<div class='tire-cell' style='grid-area:" + area + "'><div class='tw'>" + name + "</div><div class='tv'>" + text + "</div></div>";
+          return "<div class='tire-cell' style='grid-area:" + area + "'><div class='tw'>" + name + "</div><div class='tv'>" +
+            tirePairText(before && before[k], after && after[k]) + "</div></div>";
         }).join("") + "<div class='tire-car'>" + carTopSvg() + "</div></div>";
     }
     function foldHtml(title, preview, body) {
