@@ -34,6 +34,10 @@ python -m web --db signals.db
 python -m unittest discover -s tests -q
 ```
 
+## 내 차 연결하기
+
+실제 차를 이 저장소에 연결하는 절차는 [docs/SETUP.md](docs/SETUP.md)에 있습니다.
+
 ## 라이선스
 
 MIT. Copyright 2026 klizzard-kr.
