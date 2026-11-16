@@ -848,6 +848,12 @@
     .notice-pad { flex: 0 0 44px; width: 44px; height: 44px; }
     .sheet-tools { display: flex; align-items: center; gap: 8px; }
     button.unit-tag { border: 0; background: transparent; padding: 8px 4px; min-height: 44px; cursor: pointer; font: inherit; }
+    button.tire-unit {
+      -webkit-appearance: none; appearance: none; touch-action: manipulation;
+      color: var(--text-secondary); font-size: 12px; line-height: 18px;
+      padding: 10px 2px; text-decoration: underline; text-underline-offset: 3px;
+    }
+    button.tire-unit:active { opacity: 0.55; }
     .notice-trash svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
     .inbox-actions { display: flex; gap: 8px; margin: 12px 0 4px; }
     .inbox-actions button {
@@ -1984,8 +1990,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.15.0"; // display constant only
+    const APP_VERSION = "v1.15.1"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.15.1", features: ["배터리: 주행·충전·알림 상세는 시작과 끝을 소수 한 자리로 보여요", "공기압: 주행 상세의 단위를 누르면 psi와 bar가 바뀌어요"], fixes: ["회생 비율: 요약의 회생 비율을 순 전력이 아니라 누적 사용량으로 나눠요"] },
       { version: "1.15.0", features: ["안내: 설치 방법과 MIT 라이선스를 정리했어요"], fixes: [] },
       { version: "1.14.10", features: ["충전 단가: 평균 단가는 할인을 더한 금액으로 보여요"], fixes: [] },
       { version: "1.14.9", features: ["짧은 주행: 계기판이 안 움직이면 속도로 거리를 보여요"], fixes: [] },
@@ -2431,7 +2438,7 @@
       add("쓴 전력", t.kwh == null ? null : (t.kwh_estimated ? "약 " : "") + fmt(t.kwh, 2) + " kWh");
       add("전비", t.km_per_kwh == null ? null : (t.kwh_estimated ? "약 " : "") + fmt(t.km_per_kwh, 1) + " km/kWh");
       if (t.avg_speed != null || t.max_speed != null) add("평균·최고 속도", fmt(t.avg_speed, 0) + " · " + fmt(t.max_speed, 0) + " km/h");
-      if (t.start_soc != null) add("배터리", fmt(t.start_soc, 0) + "→" + fmt(t.end_soc, 0) + " %");
+      if (t.start_soc != null || t.end_soc != null) add("배터리", socChangeText(t.start_soc, t.end_soc));
       const r0 = t.start_est_range_km != null ? t.start_est_range_km : t.start_range_km;
       const r1 = t.end_est_range_km != null ? t.end_est_range_km : t.end_range_km;
       if (r0 != null) add("주행가능", fmt(r0, 0) + "→" + fmt(r1, 0) + " km");
@@ -3297,7 +3304,7 @@
       add("종류", known(c.kind) ? (c.kind_label ? c.kind_label + " · " : "") + fmtKind(c.kind) : null);
       add("충전기", known(c.max_charger_voltage) && known(c.max_charge_amps)
         ? fmt(c.max_charger_voltage, 0) + " V · " + fmt(c.max_charge_amps, 0) + " A" : null);
-      add("배터리", known(c.start_soc) && known(c.end_soc) ? fmt(c.start_soc, 0) + "→" + fmt(c.end_soc, 0) + "%" : null);
+      add("배터리", known(c.start_soc) || known(c.end_soc) ? socChangeText(c.start_soc, c.end_soc) : null);
       add("충전기에서 받은 양", known(charger) ? fmt(charger, 2) + " kWh" : null);
       add("배터리에 들어간 양", known(c.battery_kwh) ? fmt(c.battery_kwh, 2) + " kWh" : null);
       const eff = chargeEfficiencyPct(c);
@@ -4066,23 +4073,47 @@
       const row = (pairs || []).find(p => p[0] === key);
       return row ? row[1] : "";
     }
+    function socTenths(v) {
+      const n = Number(v);
+      if (!isFinite(n)) return null;
+      return Math.round(n * 10);
+    }
+    function socTenthsText(tenths) {
+      const n = Math.abs(tenths);
+      const whole = Math.floor(n / 10);
+      const frac = n % 10;
+      return frac === 0 ? String(whole) : whole + "." + frac;
+    }
+    function socChangeText(start, end) {
+      const a = start == null || start === "" ? null : socTenths(start);
+      const b = end == null || end === "" ? null : socTenths(end);
+      if (a == null && b == null) return "";
+      if (a == null) return socTenthsText(b) + "%";
+      if (b == null) return socTenthsText(a) + "%";
+      if (a === b) return socTenthsText(a) + "%";
+      return socTenthsText(a) + "% → " + socTenthsText(b) + "%";
+    }
     function socBarHtml(start, end) {
-      if (start == null && end == null) return "";
-      const a = start == null ? null : Number(start);
-      const b = end == null ? null : Number(end);
-      const delta = (a != null && b != null) ? (b - a) : null;
-      const deltaText = delta == null ? "" : " (" + (delta > 0 ? "+" : delta < 0 ? "−" : "") + Math.abs(Math.round(delta)) + "%p)";
-      const lo = Math.min(a == null ? b : a, b == null ? a : b);
-      const hi = Math.max(a == null ? b : a, b == null ? a : b);
-      const left = Math.max(0, Math.min(100, lo));
-      const width = Math.max(0, Math.min(100 - left, hi - lo));
-      const endLeft = Math.max(0, Math.min(100, b == null ? lo : b));
-      const cap = (v) => v == null ? "—" : (Math.round(v) + "%");
-      const down = delta != null && delta < 0;
-      return "<div class='soc-block'><div class='soc-head'><span>배터리</span><strong>" +
-        cap(a) + " → " + cap(b) + deltaText + "</strong></div>" +
-        "<div class='soc-track' aria-hidden='true'><i class='soc-base' style='left:0;width:" + endLeft + "%'></i>" +
-        "<i class='soc-delta " + (down ? "down" : "up") + "' style='left:" + left + "%;width:" + width + "%'></i></div></div>";
+      if ((start == null || start === "") && (end == null || end === "")) return "";
+      const a = start == null || start === "" ? null : socTenths(start);
+      const b = end == null || end === "" ? null : socTenths(end);
+      const text = socChangeText(start, end);
+      const endShown = b == null ? a : b;
+      const endLeft = endShown == null ? 0 : Math.max(0, Math.min(100, endShown / 10));
+      let delta = "";
+      if (a != null && b != null && a !== b) {
+        const lo = Math.min(a, b) / 10;
+        const hi = Math.max(a, b) / 10;
+        const left = Math.max(0, Math.min(100, lo));
+        const width = Math.max(0, Math.min(100 - left, hi - lo));
+        if (width > 0) {
+          delta = "<i class='soc-delta " + (b < a ? "down" : "up") + "' style='left:" +
+            left.toFixed(1) + "%;width:" + width.toFixed(1) + "%'></i>";
+        }
+      }
+      return "<div class='soc-block'><div class='soc-head'><span>배터리</span><strong>" + text +
+        "</strong></div><div class='soc-track' aria-hidden='true'><i class='soc-base' style='left:0;width:" +
+        endLeft.toFixed(1) + "%'></i>" + delta + "</div></div>";
     }
     function psiNum(bar) {
       if (bar == null || bar === "") return null;
@@ -4095,7 +4126,7 @@
       const any = wheels.some(([k]) => psiNum(before && before[k]) != null || psiNum(after && after[k]) != null);
       if (!any) return "";
       const unitName = pressureUnit === "bar" ? "bar" : "psi";
-      return "<div class='card-head'><strong>타이어 공기압</strong><span class='unit-tag'>주행 전 → 후 · " + unitName + "</span></div>" +
+      return "<div class='card-head'><strong>타이어 공기압</strong><button type='button' class='unit-tag tire-unit' aria-label='공기압 단위'>주행 전 → 후 · " + unitName + "</button></div>" +
         "<div class='tire-board'>" + wheels.map(([k, name, area]) => {
           const a = psiNum(before && before[k]);
           const b = psiNum(after && after[k]);
@@ -6117,7 +6148,7 @@
       });
       await paintPushState();
     }
-    document.getElementById("pressure-unit").addEventListener("click", () => {
+    function togglePressureUnit() {
       const next = pressureUnit === "bar" ? "psi" : "bar";
       pressureUnit = next;
       try { localStorage.setItem(PRESSURE_KEY, next); } catch (e) {}
@@ -6127,6 +6158,13 @@
       if (openNoticeRow && document.getElementById("notice-overlay").classList.contains("show")) openNotice(openNoticeRow);
       if (inboxView && document.getElementById("inbox-overlay").classList.contains("show")) renderInbox(inboxView);
       writeJson("PUT", "/api/settings", { pressure_unit: next }).catch(() => {});
+    }
+    document.getElementById("pressure-unit").addEventListener("click", togglePressureUnit);
+    document.getElementById("trip-sheet-body").addEventListener("click", (ev) => {
+      const btn = ev.target.closest && ev.target.closest(".tire-unit");
+      if (!btn) return;
+      ev.preventDefault();
+      togglePressureUnit();
     });
     fetchJson("/api/settings").then(settings => {
       const unit = settings && settings.pressure_unit;
@@ -6135,6 +6173,7 @@
       try { localStorage.setItem(PRESSURE_KEY, unit); } catch (e) {}
       paintPressureUnit();
       if (lastPayload) applyLive(lastPayload);
+      if (openTripRow && document.getElementById("trip-overlay").classList.contains("show")) openTripSheet(openTripRow);
       if (openNoticeRow && document.getElementById("notice-overlay").classList.contains("show")) openNotice(openNoticeRow);
     }).catch(() => {});
     document.getElementById("inbox-open").addEventListener("click", async () => {

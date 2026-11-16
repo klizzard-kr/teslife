@@ -340,7 +340,7 @@ def check_trip_end(conn, vid, ev, now, sender, tire_alert_bar: float = 2.6) -> N
         short_bits.append(f"급가속 {int(accel)}")
     if brake is not None:
         short_bits.append(f"급제동 {int(brake)}")
-    from web.notice_view import format_range_km, format_soc
+    from web.notice_view import format_range_km, format_soc, format_soc_change
     from web.pressure import format_bar_number
 
     detail = [f"거리|{distance}"]
@@ -353,8 +353,14 @@ def check_trip_end(conn, vid, ev, now, sender, tire_alert_bar: float = 2.6) -> N
     if row["km_per_kwh"] is not None:
         detail.append(f"전비|{approx}{float(row['km_per_kwh']):.1f} km/kWh")
     soc = _as_float(ev.at("BatteryLevel", end))
-    if soc is not None:
+    start_soc = _as_float(row["start_soc"]) if "start_soc" in row.keys() else None
+    end_soc = _as_float(row["end_soc"]) if "end_soc" in row.keys() else None
+    change = format_soc_change(start_soc, end_soc) if start_soc is not None and end_soc is not None else None
+    if change:
+        detail.append(f"배터리|{change}")
+    elif soc is not None:
         detail.append(f"배터리|{format_soc(soc)}")
+    if soc is not None:
         data["battery_pct"] = round(float(soc), 1)
     estimated_range = _as_float(ev.at("EstBatteryRange", end))
     rated = _as_float(ev.at("RatedRange", end))
@@ -561,6 +567,12 @@ def check_charge_end(conn, vid, ev, now, sender) -> None:
     kwh_bit = f"{float(kwh):.1f}kWh" if kwh is not None else ""
     short = ", ".join(bit for bit in (soc_bit, kwh_bit) if bit) or head
     rows = []
+    if row["start_soc"] is not None and row["end_soc"] is not None:
+        from web.notice_view import format_soc_change
+
+        change = format_soc_change(float(row["start_soc"]), float(row["end_soc"]))
+        if change:
+            rows.append(f"배터리|{change}")
     if kwh is not None:
         rows.append(f"충전량|{float(kwh):.1f} kWh")
     rows.append("시간|" + (f"{h}시간 {m}분" if h else f"{m}분"))
