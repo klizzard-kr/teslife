@@ -2005,8 +2005,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.15.2"; // display constant only
+    const APP_VERSION = "v1.15.3"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.15.3", features: ["공기압: 주행 상세에서 값 하나만 보일 때 숫자 뒤에 psi나 bar를 붙여요", "충전 그래프: 멈춘 구간은 범례의 충전 멈춤으로 봐요"], fixes: ["배터리: 시간별 말풍선은 시작과 끝만 보여주고, 정각 값이 이어져요", "충전 그래프: 온도 띠 시작의 짧은 세로 막대를 빼요"] },
       { version: "1.15.2", features: ["공기압 단위: 홈과 주행 상세의 단위가 작은 둥근 버튼이에요"], fixes: ["공기압: 주행 후 값이 없으면 주행 전 값만 보여요", "알림 스위치: 알림 받기를 끄면 아래 스위치는 체크 없이 회색이에요"] },
       { version: "1.15.1", features: ["배터리: 주행·충전·알림 상세는 시작과 끝을 소수 한 자리로 보여요", "공기압: 주행 상세의 단위를 누르면 psi와 bar가 바뀌어요"], fixes: ["회생 비율: 요약의 회생 비율을 순 전력이 아니라 누적 사용량으로 나눠요"] },
       { version: "1.15.0", features: ["안내: 설치 방법과 MIT 라이선스를 정리했어요"], fixes: [] },
@@ -2504,14 +2505,17 @@
       let holdMin = null, holdMax = null;
       const band = [];
       samples.forEach(sample => {
-        if (sample.min != null) holdMin = Number(sample.min);
-        if (sample.max != null) holdMax = Number(sample.max);
+        const gotMin = sample.min != null && sample.min !== "";
+        const gotMax = sample.max != null && sample.max !== "";
+        if (gotMin) holdMin = Number(sample.min);
+        if (gotMax) holdMax = Number(sample.max);
         let lo = holdMin, hi = holdMax;
         if (lo != null && hi != null && lo > hi) lo = hi;
         if (lo == null && hi != null) lo = hi;
         if (hi == null && lo != null) hi = lo;
         if (lo == null || hi == null || !isFinite(Date.parse(sample.ts))) return;
-        band.push({ ts: sample.ts, lo: lo, hi: hi });
+        // paired: both readings share this timestamp. Otherwise lo/hi mix two times.
+        band.push({ ts: sample.ts, lo: lo, hi: hi, paired: gotMin && gotMax });
       });
       const tvals = band.flatMap(b => [b.lo, b.hi]);
       const dataLo = tvals.length ? Math.min.apply(null, tvals) : 0;
@@ -2526,16 +2530,26 @@
       if (tvals.length) [axisLo, axisHi].forEach(v => {
         html += '<text x="' + (W - R + 4) + '" y="' + (yT(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11">' + fmt(v, 0) + "</text>";
       });
-      // Step only where a temperature sample exists. No line back to the empty start.
+      // Step only where a temperature sample exists. Each step runs to the next
+      // sample, so neighbouring steps share an edge. No line back to the empty start.
+      // A min and a max a few seconds apart are not one temperature. Drop that
+      // short mixed sliver when it hangs outside the next step (under 2 minutes).
+      const THIN_MS = 2 * 60 * 1000;
       for (let i = 0; i < band.length; i++) {
+        const nextTs = i + 1 < band.length ? band[i + 1].ts : (endTs || band[i].ts);
         const x0 = x(band[i].ts);
-        const x1 = x(i + 1 < band.length ? band[i + 1].ts : (endTs || band[i].ts));
+        const x1 = x(nextTs);
         if (x0 == null || x1 == null) continue;
+        if (i + 1 < band.length && !band[i].paired) {
+          const dur = Date.parse(nextTs) - Date.parse(band[i].ts);
+          const nxt = band[i + 1];
+          if (dur >= 0 && dur < THIN_MS && (band[i].lo < nxt.lo - 1e-9 || band[i].hi > nxt.hi + 1e-9)) continue;
+        }
         const top = yT(band[i].hi), bot = yT(band[i].lo);
         html += '<polygon points="' + x0 + "," + top + " " + x1 + "," + top + " " + x1 + "," + bot + " " + x0 + "," + bot +
           '" fill="#e7c8a4" fill-opacity="0.55"></polygon>';
       }
-      let pauseLabeled = false;
+      let paused = false;
       for (let i = 0; i < power.length - 1; i++) {
         const a = power[i], b = power[i + 1];
         if (!(a.v === 0 || b.v === 0)) continue;
@@ -2543,11 +2557,7 @@
         if (x0 == null || x1 == null || x1 <= x0) continue;
         html += '<rect x="' + x0 + '" y="' + T + '" width="' + (x1 - x0) + '" height="' + innerH +
           '" fill="' + tone("chart-axis") + '" fill-opacity="0.18"></rect>';
-        if (!pauseLabeled) {
-          html += '<text x="' + ((x0 + x1) / 2) + '" y="' + (T + 14) + '" fill="' + tone("chart-axis") +
-            '" font-size="11" text-anchor="middle">충전 멈춤</text>';
-          pauseLabeled = true;
-        }
+        paused = true;
       }
       if (power.length > 1) {
         html += '<polyline fill="none" stroke="' + tone("chart-charge") + '" stroke-width="1.8" points="' +
@@ -2558,9 +2568,13 @@
         const anchor = i === 0 ? "start" : i === 2 ? "end" : "middle";
         html += '<text x="' + px + '" y="' + (H - 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="' + anchor + '">' + fmtHm(new Date(ms).toISOString()) + "</text>";
       });
-      return '<svg class="bchart" viewBox="0 0 390 ' + H + '" preserveAspectRatio="xMidYMid meet">' + html + "</svg>" +
-        "<p class='chart-legend'><span><i style='background:" + tone("chart-charge") + "'></i>충전 전력</span>" +
-        "<span><i style='background:#e7c8a4'></i>배터리 온도(최저~최고)</span></p>";
+      let legend = "<p class='chart-legend'><span><i style='background:" + tone("chart-charge") + "'></i>충전 전력</span>" +
+        "<span><i style='background:#e7c8a4'></i>배터리 온도(최저~최고)</span>";
+      if (paused) {
+        legend += "<span><i style='background:" + tone("chart-axis") + ";opacity:0.18'></i>충전 멈춤</span>";
+      }
+      legend += "</p>";
+      return '<svg class="bchart" viewBox="0 0 390 ' + H + '" preserveAspectRatio="xMidYMid meet">' + html + "</svg>" + legend;
     }
     function paintChargeTemps(minC, maxC) {
       [["charge-tmin", "charge-tmin-row", minC], ["charge-tmax", "charge-tmax-row", maxC]].forEach(row => {
@@ -3089,13 +3103,13 @@
     function hourPopHtml(i, hb) {
       const t = batTimeline && batTimeline.hours ? batTimeline.hours[i] : null;
       const rows = [];
-      if (t && known(t.start_pct) && known(t.end_pct) && known(t.delta_pct)) {
-        const d = t.delta_pct;
-        const sign = d > 0 ? "+" : d < 0 ? "−" : "";
-        rows.push(["배터리", fmt(t.start_pct, 1) + "% → " + fmt(t.end_pct, 1) + "% (" + sign + fmt(Math.abs(d), 1) + "%p)"]);
-        if (known(t.kwh) && d !== 0) rows.push([d > 0 ? "충전량" : "사용량", "약 " + fmt(t.kwh, t.kwh < 0.1 ? 3 : 2) + "kWh"]);
-      } else if (t && known(t.start_pct)) {
-        rows.push(["배터리", fmt(t.start_pct, 1) + "%"]);
+      if (t && (known(t.start_pct) || known(t.end_pct))) {
+        const text = socChangeText(known(t.start_pct) ? t.start_pct : null, known(t.end_pct) ? t.end_pct : null);
+        if (text) rows.push(["배터리", text]);
+        if (known(t.delta_pct) && known(t.kwh) && t.delta_pct !== 0) {
+          const d = t.delta_pct;
+          rows.push([d > 0 ? "충전량" : "사용량", "약 " + fmt(t.kwh, t.kwh < 0.1 ? 3 : 2) + "kWh"]);
+        }
       } else if (hb && known(hb.pct)) {
         rows.push(["배터리", fmt(hb.pct, 1) + "%"]);
       }
@@ -4140,7 +4154,8 @@
     function tirePairText(beforeBar, afterBar) {
       const a = psiNum(beforeBar);
       const b = psiNum(afterBar);
-      if (b == null) return a == null ? "—" : a;
+      // One number (no after-trip value) uses the same "41.7 psi" text as the home card.
+      if (b == null) return a == null ? "—" : a + (pressureUnit === "bar" ? ' bar' : " psi");
       if (a == null) return "— → " + b;
       return a + " → " + b;
     }
