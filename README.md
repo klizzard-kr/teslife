@@ -34,6 +34,10 @@ python -m web --db signals.db
 python -m unittest discover -s tests -q
 ```
 
+## 내 차 연결하기
+
+자기 차를 붙이는 순서는 [docs/SETUP.md](docs/SETUP.md)에 있습니다.
+
 ## 라이선스
 
 MIT. Copyright 2026 klizzard-kr.
