@@ -2,142 +2,142 @@
 
 ## v1.15.0
 
-- MIT license, copyright klizzard-kr, 2026. Leaflet stays under its own BSD-2-Clause notice in `web/static/vendor/leaflet/LICENSE`.
-- The page version is v1.15.0. The README run instructions no longer name a machine, a bind address, or a screenshot.
-- PROCESS_VERSION stays 24. This release does not rewrite stored trips or charges.
+- 라이선스는 MIT입니다. 저작권 표시는 2026년입니다. Leaflet은 저장소 안의 BSD-2-Clause 고지를 그대로 둡니다.
+- 화면 버전은 v1.15.0입니다. 실행 안내에는 기기 이름, 접속 주소, 화면 캡처를 넣지 않습니다.
+- 이미 저장된 주행과 충전은 다시 만들지 않습니다.
 
 ## v1.14.11
 
-- Documentation only. `docs/DESIGN.md`, `README.md`, and `docs/DEPLOY-LOG.md` now match the code: process version 24, Naver maps and in-server OSRM, 64 telemetry signals with speed at 1 second and location at 3 seconds / 20 m (four unused motion signals excluded), short-trip distance, charge-session joining, automatic charger choice, charge place names, the `port_open_rates` webhook, the pre-discount average unit price, the monthly full charge, and the 39 psi tire warning. The server does not wake the car. No runtime code changed.
+- 문서만 지금 동작에 맞췄습니다. 지도, 서버 안의 도로 맞추기, 속도 1초와 주행 중 위치, 짧은 주행 거리, 충전을 이어서 묶기, 충전기 자동 선택, 충전 장소 이름, 충전구를 열 때의 주변 요금, 할인 전 평균 단가, 한 달의 완충, 39 psi 타이어 경고가 문서에 반영되어 있습니다. 서버는 차를 깨우지 않습니다. 실행 코드는 바꾸지 않았습니다.
 
 ## v1.14.10
 
-- The charge tab's average unit price is the sum of the paid amount and the discount, divided by billed kWh. That matches each charge's own unit price. A period with no discount is unchanged.
+- 충전 탭의 평균 단가는 낸 금액과 할인을 더한 뒤, 청구한 전력량으로 나눈 값입니다. 충전 한 건의 단가와 같습니다. 할인이 없는 기간은 이전과 같습니다.
 
 ## v1.14.9
 
-- A trip whose odometer did not move a full step uses speed samples, then the GPS path, for its distance. Longer trips still use the odometer. The source is stored on new rows. Existing trips are left as they are unless a dry-run script is applied. Under 1 km the screens and the trip-end notice show meters. A very short move says the car changed spots. Efficiency stays hidden for those short distances. PROCESS_VERSION stays 24.
+- 계기판 거리가 한 칸도 늘지 않으면 속도 기록으로 거리를 구하고, 그것도 없으면 경로로 구합니다. 더 긴 주행은 계기판을 그대로 씁니다. 새로 저장하는 주행만 거리의 출처를 남깁니다. 이미 있는 주행은 미리보기를 적용하기 전에는 바꾸지 않습니다. 1km 미만은 화면과 주행 종료 알림에서 미터로 보여 줍니다. 아주 짧은 이동은 자리를 옮겼다고 적습니다. 그 짧은 거리의 전비는 숨깁니다. 이미 저장된 다른 기록은 다시 만들지 않습니다.
 
 ## v1.14.8
 
-- Opening the charge port sends nearby public prices to the bot only. Each operator line has the speed, member price, guest price, roaming price, and distance. There is no app notice and no app push, and a missed bot reply is not pushed either. One parking session sends it once. The five-minute open-port warning is unchanged.
-- A charger that changes from waiting to charging after the port opens is stored on the charge. If none or several change, the nearest charger is kept. A few later checks cover a slow public feed. A failed lookup does not stop the charge from being recorded.
-- A pause and resume in the same parked session sends the charge-start notice once. PROCESS_VERSION stays 24.
+- 충전구를 열면 주변 공공 충전기 요금을 봇으로만 보냅니다. 줄마다 속도, 회원 요금, 비회원 요금, 로밍 요금, 거리가 있습니다. 앱 알림과 푸시는 없고, 봇이 답을 못 해도 푸시하지 않습니다. 한 번 주차하면 한 번만 보냅니다. 5분 뒤의 충전구 열림 경고는 그대로입니다.
+- 충전구를 연 뒤 대기에서 충전으로 바뀐 충전기가 있으면 그 충전 기록에 남깁니다. 없거나 여러 개면 가장 가까운 충전기를 둡니다. 공공 정보가 늦으면 조금 뒤에 몇 번 더 확인합니다. 조회가 실패해도 충전 기록은 남깁니다.
+- 같은 주차에서 충전을 멈췄다가 다시 시작해도 충전 시작 알림은 한 번만 갑니다. 이미 저장된 기록은 다시 만들지 않습니다.
 
 ## v1.14.7
 
-- An empty charge place prefers a nearby Naver result whose category is an EV charger. The trailing charger words are removed from that name. Otherwise the building name is used, then the road address. A shop inside the building is not used. Suggestions show the same shortened name without a category tag, and a building value that arrives as an object is read as its text. PROCESS_VERSION stays 24. A dry-run can list how stored places would change; it does not write unless asked.
+- 충전 장소가 비어 있으면 가까운 전기차 충전기 이름을 먼저 씁니다. 이름 끝의 충전기 꼬리말은 뺍니다. 없으면 건물 이름, 그다음은 도로명 주소입니다. 건물 안 가게 이름은 쓰지 않습니다. 제안 목록도 같은 짧은 이름이고 업종 태그는 없습니다. 건물 정보가 글이 아니어도 그 안의 글을 읽습니다. 이미 저장된 기록은 다시 만들지 않습니다. 미리보기는 이름이 어떻게 바뀔지만 보여주고, 저장은 따로 시켰을 때만 합니다.
 
 ## v1.14.6
 
-- The charge place field can ask for suggestions again. `/api/place-suggest` is a registered route, so an empty field and a typed query both return JSON. Clearing the field while it stays focused shows the empty suggestions. PROCESS_VERSION stays 24, and stored rows are not rebuilt.
+- 충전 장소 칸이 다시 제안을 받습니다. 칸이 비어 있을 때와 글을 칠 때 모두 목록이 나옵니다. 칸에 커서를 둔 채 지우면 빈 칸용 제안이 보입니다. 저장된 기록은 다시 만들지 않습니다.
 
 ## v1.14.5
 
-- A clear fast-charge signal decides DC before AC energy: FastChargerPresent true, a fast charger type, DC power of 15 kW or more, or charger voltage of 300 V or more. Wall power near 200 V with current and FastChargerPresent false stays AC. Place is not used. PROCESS_VERSION stays 24, so stored charge rows are not rebuilt.
+- 급속이 분명하면 교류 에너지보다 먼저 급속으로 정합니다. 급속 충전기가 있거나, 급속 종류가 있거나, 직류 전력이 15kW 이상이거나, 충전기 전압이 300V 이상이면 급속입니다. 벽 전력이 200V 근처이고 전류가 있으며 급속이 아니면 완속입니다. 장소는 보지 않습니다. 이미 저장된 충전은 다시 만들지 않습니다.
 
 ## v1.14.4
 
-- Each notification setting keeps its name on the left and its switch at the right end of the row. The switch stays vertically centered when the name wraps, on a narrow screen as well. A line sits under the main switch and between groups such as trips and charging. Rows inside a group have no line between them.
-- The main switch sits to the right of the 알림 heading. Turning it off grays the rows under it and leaves their saved values in place. Those rows cannot be changed until it is on again, and then each kind sends as it was saved.
-- When notifications are blocked, the hint names the settings path for the browser in use. iPhone and iPad Home Screen apps point at Settings. A Safari tab says to add the app to the Home Screen. Chrome, Safari on Mac, Edge, Firefox, and Samsung Internet each have their own path. Any other browser gets a general sentence. English uses the same choice.
-- An empty charge place field suggests places the owner saved at the same station or within 150 m, then a building name from reverse geocoding. Typing keeps the local search at five results, puts a matching saved place first, and shows the last category step beside each result. A missing key or a failed lookup adds nothing, and no stored row is rewritten.
-- A matched charger fills the station name and address only. An empty place copies a place the owner saved at the same station or within 150 m, unless that text is just the station name and address. A first visit asks Naver reverse geocoding once for the building name, then the road address, and leaves the place empty when neither is available. A shop from place search is not used. A place the owner typed, or a pin they moved, is not replaced. Older charge rows are not rewritten.
-- Trip alerts are two switches, trip start and trip end. A saved driving switch that was off turns both off. One that was on, or was never saved, leaves both on. The inbox and the bot each follow the matching switch.
+- 알림 설정은 이름이 왼쪽, 스위치가 줄 오른쪽 끝입니다. 이름이 길어져도 스위치는 세로 가운데이고, 좁은 화면도 같습니다. 큰 스위치 아래와, 주행·충전 같은 묶음 사이에 줄이 있습니다. 묶음 안의 줄 사이에는 줄이 없습니다.
+- 큰 스위치는 알림 제목 오른쪽에 있습니다. 끄면 아래 줄이 흐려지고 저장값은 그대로입니다. 다시 켜기 전에는 바꿀 수 없고, 켜면 저장해 둔 대로 각 종류가 나갑니다.
+- 알림이 막혀 있으면 지금 브라우저의 설정 경로를 알려 줍니다. 아이폰과 아이패드 홈 화면 앱은 설정 앱을 가리킵니다. 사파리 탭은 홈 화면에 추가하라고 합니다. 크롬, 맥 사파리, 엣지, 파이어폭스, 삼성 인터넷은 각자 경로가 있습니다. 그 밖은 짧은 공통 문장입니다. 영어도 같은 기준입니다.
+- 충전 장소가 비어 있으면, 같은 충전소이거나 150m 안의 저장한 장소를 제안하고 그다음 건물 이름입니다. 글을 치면 근처 검색은 다섯 개이고, 맞는 저장 장소가 먼저이며, 각 결과 옆에 마지막 분류가 보입니다. 키가 없거나 조회가 실패하면 더하지 않고, 저장된 기록은 고치지 않습니다.
+- 맞춰진 충전기는 충전소 이름과 주소만 채웁니다. 장소가 비어 있으면 같은 충전소이거나 150m 안의 저장 장소를 가져옵니다. 그 글이 충전소 이름과 주소뿐이면 가져오지 않습니다. 처음 방문하면 건물 이름을 한 번 묻고, 없으면 도로명 주소, 둘 다 없으면 비워 둡니다. 가게 이름은 쓰지 않습니다. 직접 친 장소나 옮긴 핀은 바꾸지 않습니다. 예전 충전은 다시 쓰지 않습니다.
+- 주행 알림은 시작과 종료, 두 스위치입니다. 예전 주행 스위치가 꺼져 있으면 둘 다 꺼집니다. 켜져 있었거나 저장된 적이 없으면 둘 다 켜집니다. 받은 알림과 봇은 각 스위치를 따릅니다.
 
 ## v1.14.3
 
-- A charge pause joins only the next session, and only inside the last 3 hours, while the charge port's last signal is still open and the car stayed put. The port is sent only when it changes. A close signal, a trip, speed, drive gear, a move over 100 m, or five minutes with no signal starts a new session, including on a full rebuild. The end is the moment charging stopped. An existing row keeps its end and kind unless it is that next session. Older charges are not merged or deleted.
-- An energy counter that resets is summed from the rise before the reset and the rise after it.
-- Wall power near 200 V with charge current and FastChargerPresent false is AC, so a wall session is not stored as DC.
-- The charge detail clock is the full start-to-end span. The time next to energy and cost leaves out pauses. A zero-power stretch on the chart is shaded and labeled.
-- Mark all read applies to the open inbox tab. A bot-written trip-end notice still shows battery, range, and tire pressure in the trip detail order. Its title and summary stay as written, and the stored row is not rewritten.
+- 충전이 잠깐 멈춘 뒤 이어지는 건, 최근 3시간 안의 다음 구간만 한 번으로 묶습니다. 충전구가 아직 열려 있고 차가 그대로일 때입니다. 충전구 신호는 바뀔 때만 옵니다. 닫힘, 주행, 속도, 주행 기어, 100m를 넘는 이동, 5분 동안 신호가 없으면 새 충전입니다. 처음부터 다시 계산해도 같습니다. 끝 시각은 충전이 멈춘 때입니다. 이미 있는 기록은 그 다음 구간이 아니면 끝과 종류를 유지합니다. 더 오래된 충전은 합치거나 지우지 않습니다.
+- 적산이 0으로 돌아가면, 돌아가기 전과 그 뒤를 더합니다.
+- 벽 전력이 200V 근처이고 충전 전류가 있으며 급속이 아니면 완속입니다. 벽 충전이 급속으로 남지 않습니다.
+- 충전 상세의 시계는 시작부터 끝까지입니다. 에너지와 금액 옆 시간은 멈춘 구간을 뺍니다. 그래프에서 전력이 0인 구간은 색을 칠하고 이름을 붙입니다.
+- 모두 읽음은 지금 연 알림 탭에만 적용됩니다. 봇이 적은 주행 종료 알림도 상세에서 배터리, 주행가능거리, 공기압을 주행 상세와 같은 순서로 보여 줍니다. 제목과 요약은 적힌 그대로이고, 저장된 내용은 고치지 않습니다.
 
 ## v1.14.2
 
-- A service notice list line and the default push say the days and the action for that item. Stored rows stay as they are, and the detail popup is unchanged.
-- A trip-end detail adds battery, remaining range, and the four tire pressures from signals stored at the end of the trip. The list summary names the distance and, when stored, the battery and range. A missing value is left out, and the bot webhook receives the same numbers.
-- A tire warning, on the home card and in the cold-pressure alert, starts only when the printed psi is under 39.0. The 42 psi label stays where it is only information. The warning names 39 psi, or that value in bar when the display unit is bar.
-- Trip and charge notice details use the same labels and order as those detail screens. Distance, battery, and range come first on a finished trip. Tire pressures stay last. Stored notice rows are not rewritten.
-- A parked-open notice names the part, such as the charge port, and a vehicle alert uses a short Korean sentence. Unknown alerts name the category and leave the code out of the summary. The bot can still address a stored id that contains Korean or `|`. Display does not rewrite the row.
-- A notice summary does not repeat its title. The title stays a short topic, and the summary is a longer sentence with the value, the cause, or what to do. A missing number is not invented.
-- An open charge port after parking waits five minutes. A cable or a charge in that time cancels the notice, including the bot webhook. A port that stays open with no cable is sent once. Stored notices are not rewritten.
+- 정비 알림 목록과 기본 푸시는 그 항목의 남은 날과 할 일을 말합니다. 저장된 내용과 상세 창은 그대로입니다.
+- 주행 종료 상세에 배터리, 남은 주행거리, 네 바퀴 공기압이 더해집니다. 주행이 끝날 때 저장된 값입니다. 목록 요약은 거리와, 있으면 배터리와 주행거리를 적습니다. 없는 값은 빼고, 봇에도 같은 숫자를 보냅니다.
+- 홈과 냉간 공기압 알림은 화면에 찍힌 psi가 39.0보다 낮을 때만 경고합니다. 42 psi는 안내로만 남습니다. 경고는 39 psi이고, 표시 단위가 bar이면 그 값을 bar로 적습니다.
+- 주행과 충전 알림 상세는 각 상세 화면과 같은 이름과 순서입니다. 끝난 주행은 거리, 배터리, 주행거리가 먼저이고 공기압은 맨 뒤입니다. 저장된 알림은 다시 쓰지 않습니다.
+- 주차 후 열림 알림은 충전구처럼 어느 부분이 열렸는지 적습니다. 차량 경고는 짧은 한국어 문장입니다. 모르는 경고는 종류만 적고 요약에는 코드를 넣지 않습니다. 보여주는 것만 바꾸고 저장된 내용은 고치지 않습니다.
+- 알림 요약은 제목을 반복하지 않습니다. 제목은 짧은 주제이고, 요약은 값이나 원인, 할 일이 있는 문장입니다. 없는 숫자는 만들지 않습니다.
+- 주차 후 충전구가 열려 있으면 5분을 기다립니다. 그 안에 케이블이 연결되거나 충전이 시작되면 알림을 취소하고 봇에도 보내지 않습니다. 케이블 없이 계속 열려 있으면 한 번만 보냅니다. 저장된 알림은 다시 쓰지 않습니다.
 
 ## v1.14.1
 
-- A deleted service or full-charge notice stays dismissed until its due date, status, or month changes. The id is kept in `notice_dismissed`. Other tables are not changed.
-- Those notices are stamped when they are first created. The due date is a detail row, `기한 9월 19일`. Overdue copy says `N일 지났어요`; time left says `N일 남았어요`.
-- The separate full-charge notice is replaced by a monthly 배터리 완충 service item. A charge that ends at 99.5% or more sets that item's last date. Existing consumable, ledger, and charge rows are not rewritten.
-- The home `psi` control switches the displayed unit to bar. Stored pressures stay as they are. The choice is remembered in the browser and in `pressure_unit` settings, and a new push uses that unit.
-- Bot notice ids may end with `/`, which service notices use. Other unsafe ids are still rejected.
+- 지운 정비 알림과 완충 알림은 기한, 상태, 달이 바뀔 때까지 다시 뜨지 않습니다. 다른 기록은 바꾸지 않습니다.
+- 그 알림은 처음 만들 때 시각을 남깁니다. 기한은 날짜로 보이고, 지났으면 며칠 지났는지, 남았으면 며칠 남았는지 적습니다.
+- 따로 있던 완충 알림은 매달의 배터리 완충 정비 항목으로 바뀌었습니다. 99.5% 이상으로 끝난 충전이 그 항목의 마지막 날짜가 됩니다. 기존 소모품, 차계부, 충전 기록은 다시 쓰지 않습니다.
+- 홈의 psi 버튼은 표시 단위를 bar로 바꿉니다. 저장된 공기압은 그대로입니다. 선택은 브라우저와 설정에 남고, 새 푸시도 그 단위를 씁니다.
+- 정비 알림 번호는 끝에 슬래시가 있어도 됩니다. 그 밖의 안전하지 않은 번호는 여전히 거절합니다.
 
 ## v1.14.0
 
-- A notice without a detail popup has a trash button on the row. A trip or charge notice is deleted from the trash button beside the detail close button. Both stay aligned with the time on the title line.
-- Under the current tab, Delete all asks once, then removes only that tab. Mark all read marks only that tab. One trash press does not ask.
-- Deletes remove `notifications` rows, including rows merged into them. A deleted pending notice is not pushed later. Trips, charges, the ledger, service items, and the alert log stay.
+- 상세 창이 없는 알림은 줄에 휴지통이 있습니다. 주행과 충전 알림은 상세를 닫는 옆의 휴지통으로 지웁니다. 둘 다 제목 줄의 시각과 맞습니다.
+- 지금 탭에서 모두 삭제는 한 번 묻고 그 탭만 지웁니다. 모두 읽음도 그 탭만입니다. 휴지통 한 번은 묻지 않습니다.
+- 삭제는 알림만 지웁니다. 그 알림에 합쳐 둔 줄도 함께 없어집니다. 기다리던 알림은 지운 뒤 푸시하지 않습니다. 주행, 충전, 차계부, 정비 항목, 알림 기록은 남습니다.
 
 ## v1.13.1
 
-- The outbound bot webhook adds `Authorization: Bearer` when `BOT_NOTIFY_WEBHOOK_KEY` is set. The HMAC signature and `BOT_PUSH_TOKEN` on `/api/bot/notify` stay as they are. A missing key still posts with the signature only.
+- 봇으로 보내는 알림은 비밀 키가 있으면 인증 헤더를 붙입니다. 서명과 받는 쪽 확인은 그대로입니다. 키가 없으면 서명만 붙여 보냅니다.
 
 ## v1.13.0
 
-- When `BOT_NOTIFY_WEBHOOK_URL` and `BOT_PUSH_TOKEN` are both set, a new notice is stored as pending and POSTed as signed JSON (`id`, `kind`, `event_ts`, `values`). The signature is `X-Teslife-Signature: sha256=<hmac-sha256 of the raw body>`, keyed by `BOT_PUSH_TOKEN`. Coordinates and the VIN are left out. A place is only the neighborhood and road.
-- `POST /api/bot/notify` with `Authorization: Bearer` can `send` (store the bot's title and summary, then push), `skip` (keep it in the list), `merge` (fold it into another row without deleting either), or `create` a bot notice. `GET /api/bot/notify/pending` lists what is still waiting.
-- A pending notice that is still waiting after 10 minutes is pushed with the existing sentence. An empty webhook URL keeps the previous immediate push.
+- 봇 주소와 토큰이 둘 다 있으면, 새 알림을 대기 상태로 저장한 뒤 서명한 JSON을 보냅니다. 번호, 종류, 시각, 값이 들어갑니다. 좌표와 차대번호는 빼고, 장소는 동네와 도로만 적습니다.
+- 봇이 인증한 뒤 알림을 보내거나, 목록에만 두거나, 다른 알림에 합치거나, 새로 만들 수 있습니다. 아직 대기 중인 목록도 볼 수 있습니다.
+- 10분이 지나도 대기 중이면 기존 문장으로 푸시합니다. 봇 주소가 비어 있으면 예전처럼 바로 푸시합니다.
 
 ## v1.12.2
 
-- The custom map +/− buttons are gone. Trip, charge, and place maps use the map's own zoom control again (`zoomControl: true`).
+- 따로 만들던 지도 +/- 버튼은 없습니다. 주행, 충전, 장소 지도는 지도가 기본으로 주는 확대와 축소를 씁니다.
 
 ## v1.12.1
 
-- The charge-location count sits inside the same circle marker, centered. The separate number marker is gone.
+- 충전 장소의 개수는 같은 원 안의 가운데에 있습니다. 따로 있던 숫자 표시는 없습니다.
 
 ## v1.12.0
 
-- Release notes keep a line between versions only. Each item says, in one short line, what got better.
-- The inbox drops the unread background. A new notice is bold in the title, the time sits on that line, and the line under it is a short summary. Old notices are shown as sentences without rewriting stored rows. The time is when the event happened. A push uses the same title and summary and opens that notice.
-- The home tire warning compares the psi printed on the tiles with the recommended psi. A colder stored reading does not warn by itself.
-- Charge-place search saves the name and the place coordinates together and reloads nearby stations. The count on a charge dot is centered, and the Naver zoom control is a small pair of buttons.
-- The charge temperature band is a light step only where samples exist. Start and end percents under the battery bar are gone.
+- 릴리스 노트는 버전 사이에만 줄을 둡니다. 각 항목은 무엇이 나아졌는지 짧은 한 줄입니다.
+- 받은 알림에서 안 읽음 배경을 뺐습니다. 새 알림은 제목이 굵고, 시각은 그 줄에 있으며, 아래는 짧은 요약입니다. 예전 알림도 문장으로 보여 주고 저장된 내용은 고치지 않습니다. 시각은 일이 일어난 때입니다. 푸시도 같은 제목과 요약이고 그 알림을 엽니다.
+- 홈의 타이어 경고는 칸에 찍힌 값과 권장 값을 비교합니다. 더 차갑게 저장돼 있다는 이유만으로 경고하지 않습니다.
+- 충전 장소 검색은 이름과 위치를 함께 저장하고 근처 충전소를 다시 불러옵니다. 충전 점의 개수는 가운데에 있고, 네이버 확대와 축소는 작은 버튼 두 개입니다.
+- 충전 온도 띠는 기록이 있는 곳만 옅게 그립니다. 배터리 막대 아래의 시작과 끝 퍼센트는 없습니다.
 
 ## v1.11.0
 
-- The map uses Naver Dynamic Map when `NAVER_MAPS_CLIENT_ID` is set. Trip routes and charge places stay. With no key, the page keeps the OpenStreetMap map.
-- Reverse geocoding uses Naver and falls back to Nominatim. A 시·군 name from that lookup can select the charger catalog. Lookups are cached and retried.
-- The charge place field searches Naver through the server. The 시·군 name is added to the query. Results are the nearest five titles. A typed place is kept when the station changes. A clear button empties the field.
-- The version label opens release notes. The newest version is expanded.
-- `python -m process.send_telemetry` prints the VehicleSpeed 1-second delta and does not post it unless `--send` is passed. This release does not send it.
+- 네이버 지도 키가 있으면 네이버 동적 지도를 씁니다. 주행 경로와 충전 장소는 그대로입니다. 키가 없으면 오픈스트리트맵을 유지합니다.
+- 주소 찾기는 네이버를 먼저 쓰고, 실패하면 오픈스트리트맵으로 넘어갑니다. 그 결과의 시·군 이름으로 충전기 목록을 고를 수 있습니다. 결과는 저장하고, 실패하면 다시 시도합니다.
+- 충전 장소 칸은 서버를 통해 네이버를 검색합니다. 검색어에 시·군 이름을 붙입니다. 결과는 가까운 제목 다섯 개입니다. 충전소를 바꿔도 직접 친 장소는 남습니다. 지우면 칸이 비워집니다.
+- 버전 글자를 누르면 릴리스 노트가 열리고, 가장 최신 버전이 펼쳐져 있습니다.
+- 속도 간격을 1초로 바꾸는 미리보기는 출력만 합니다. 보내라고 하지 않으면 전송하지 않습니다. 이 버전에서는 보내지 않았습니다.
 
 ## v1.10.0
 
-- Notification titles are sentences. The list is left-aligned, unread rows are bold on a light background, and the sheet keeps one height and scrolls inside. Tapping a row shows one value per line from the stored details.
-- Settings groups alerts into 주행, 충전, 보안, and 차량. Tire pressure is its own switch. Charge start sits with charging.
-- The charge energy graph uses one temperature scale. The band between the low and high reading is held until the next sample.
-- Public charger catalogs are requested by 시·군 (`zscode`) from the offline boundary file `process/data/sigungu.json`. Pages continue until the catalog is finished. A failed page is retried. JSON is read from the outer object (`resultCode`, `totalCount`, `items.item`) and from `response.body`. A positive total with an empty list does not mark the region done. A finished 시·군 that this parser has not marked, or whose saved chargers are under half of `total_count`, is fetched once. The status API is not used for this.
-- Parked 시·군 catalogs refresh once each day. Driving into a new 시·군 fetches it then. A 시·군 response is stored in full, not only within 1 km of the car. Opening the charge port fetches again when nothing is stored within 300 m of the port. Charge-end matching uses the catalog already stored.
-- A charge the owner saved (`source` user) is not rematched. The edit list shows stations within 300 m. Automatic matching stays within 100 m.
+- 알림 제목은 문장입니다. 목록은 왼쪽 정렬이고, 안 읽은 줄은 옅은 배경에 굵은 글씨입니다. 창 높이는 하나이고 안에서 스크롤합니다. 줄을 누르면 저장된 내용을 한 줄에 하나씩 보여 줍니다.
+- 설정은 알림을 주행, 충전, 보안, 차량으로 묶습니다. 공기압은 따로 스위치가 있습니다. 충전 시작은 충전 묶음에 있습니다.
+- 충전 에너지 그래프의 온도 눈금은 하나입니다. 최저와 최고 사이는 다음 기록까지 유지됩니다.
+- 공공 충전기 목록은 시·군 단위로, 들어 있는 경계 자료로 요청합니다. 목록이 끝날 때까지 다음 쪽을 받고, 실패한 쪽은 다시 시도합니다. 총개수는 있는데 목록이 비어 있으면 그 지역을 끝난 것으로 보지 않습니다. 아직 확인하지 않았거나 저장된 수가 총개수의 절반보다 적은 시·군은 한 번 더 받습니다. 이 작업에는 충전기 상태 조회를 쓰지 않습니다.
+- 주차 중인 시·군 목록은 하루에 한 번 새로 받습니다. 주행 중 새 시·군에 들어가면 그때 받습니다. 응답은 그 시·군 전체를 저장합니다. 충전구를 열 때 300m 안에 저장된 것이 없으면 다시 받습니다. 충전이 끝날 때의 맞추기는 이미 저장된 목록을 씁니다.
+- 직접 고른 충전기는 다시 맞추지 않습니다. 수정 목록은 300m 안을 보여 줍니다. 자동 맞추기는 100m 안입니다.
 
 ## v1.9.0
 
-- Charge detail from the ledger opens a session that crosses midnight.
-- Plug Link charges with an empty payment choice become 회원. The update does not add or remove rows.
-- A shorter catalog station name is stored as the longer name already saved for that vehicle, and an empty operator is filled from that station. A payment choice or station name already saved is left as it is.
-- The 보유 카드 setting is gone. A new charge defaults to 비회원, then the last choice for that operator.
-- Opening the charge port names the nearby operator and this car's rate. A roaming price is included only when it is cheaper.
-- A push opens its detail and marks that row read. The title is the short title; the body is one line. The inbox list truncates that line. The popup is one value per row.
-- A webhook failure still writes the inbox row and sends the app push.
-- Low tires, a slow leak, and tire-set alerts get a push and an inbox row.
-- Charge complete, a service item, and the end of a trip include the figures named in the release notes.
-- The settings icon is a gear with a hole. The inbox dot sits on top of the title so read and unread titles share a left edge.
-- Inbox tabs are 주행, 충전, 보안, and 차량, each with its unread count. Rows use the event time.
-- Trip and charge energy details list battery minimum and maximum temperature on their own rows. A fan that is off shows 꺼짐. Fan strength uses the step, not the trip maximum.
-- Average and maximum charging power, and the power graph, sit in 에너지 상세. The charger section keeps the rated output.
-- Tire changes are one 타이어 교체 screen. The set on the car can be registered on its own. Mount dates and odometers can be edited. A new or edited mount cannot overlap an existing interval, including one still on the car.
-- Tire prices do not create, change, or delete 차계부 rows.
-- The home status tiles are 배터리, 주행가능거리, 소프트웨어, and 현재 주행거리. The software tile shows the current version and ↑ when a newer one is waiting.
-- A software update is announced once per version, in the 차량 tab. A whitespace-only update version is not an update. An install percent is ignored when the download is 0 or no update is available.
+- 차계부에서 연 충전 상세는 자정을 넘긴 같은 충전을 보여 줍니다.
+- 결제 방식이 비어 있던 Plug Link 충전은 회원으로 둡니다. 줄을 더하거나 지우지는 않습니다.
+- 목록의 짧은 충전소 이름은, 그 차에 이미 저장해 둔 더 긴 이름으로 바꿉니다. 사업자가 비어 있으면 그 충전소의 사업자를 채웁니다. 이미 저장한 결제 방식이나 충전소 이름은 그대로입니다.
+- 보유 카드 설정은 없습니다. 새 충전은 비회원으로 시작하고, 그다음은 그 사업자의 마지막 선택입니다.
+- 충전구를 열면 주변 사업자와 이 차의 요금을 알려 줍니다. 로밍 요금은 더 쌀 때만 넣습니다.
+- 푸시를 누르면 그 상세가 열리고 그 줄이 읽음이 됩니다. 제목은 짧게, 본문은 한 줄입니다. 알림 목록은 그 줄을 잘라 보여 주고, 팝업은 한 줄에 하나씩입니다.
+- 바깥 알림 전송이 실패해도 알림 목록은 남고 앱 푸시는 갑니다.
+- 공기압이 낮거나, 천천히 새거나, 타이어 세트 알림은 푸시와 알림 목록에 남습니다.
+- 충전 완료, 정비, 주행 종료 알림에는 그때 안내한 수치가 들어갑니다.
+- 설정 아이콘은 구멍이 있는 톱니입니다. 알림 점은 제목 위에 있어, 읽은 제목과 안 읽은 제목의 왼쪽이 같습니다.
+- 알림 탭은 주행, 충전, 보안, 차량이고 각각 안 읽은 개수가 있습니다. 줄의 시각은 일이 일어난 때입니다.
+- 주행과 충전 에너지 상세는 배터리 최저 온도와 최고 온도를 각자 줄로 보여 줍니다. 팬이 꺼져 있으면 꺼짐이라고 적습니다. 팬 세기는 그 단계이고, 주행 중의 최대가 아닙니다.
+- 평균 충전 전력, 최대 충전 전력, 전력 그래프는 에너지 상세에 있습니다. 충전기 칸은 정격 출력을 유지합니다.
+- 타이어 교체는 타이어 교체 화면 하나입니다. 지금 달린 세트만 따로 등록할 수 있습니다. 장착 날짜와 주행거리를 고칠 수 있습니다. 새 장착이나 수정은 이미 있는 구간과 겹치면 안 됩니다.
+- 타이어 가격은 차계부 줄을 만들거나 고치거나 지우지 않습니다.
+- 홈 상태 칸은 배터리, 주행가능거리, 소프트웨어, 현재 주행거리입니다. 소프트웨어 칸은 현재 버전을 보여주고, 더 새 버전이 대기 중이면 위쪽 화살표를 붙입니다.
+- 소프트웨어 업데이트는 버전마다 한 번, 차량 탭에 알립니다. 공백만 있는 버전은 업데이트가 아닙니다. 받을 업데이트가 없거나 다운로드가 0이면 설치 퍼센트는 무시합니다.
 
-The app does not add "from teslife" to a push title. A browser or the phone may still show the site name beside it.
+푸시 제목 앞에 앱 이름을 붙이지 않습니다. 브라우저나 전화가 사이트 이름을 옆에 보여줄 수는 있습니다.
