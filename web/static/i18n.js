@@ -41,6 +41,7 @@
     "감시 모드": "Sentry Mode",
     "감시": "Sentry",
     "타이어 공기압": "Tire pressure",
+    "주행 전 → 후": "Before → after",
     "앞 좌측": "Front left",
     "앞 우측": "Front right",
     "뒤 좌측": "Rear left",
