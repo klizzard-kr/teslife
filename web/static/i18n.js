@@ -23,6 +23,7 @@
     "차량 상태": "Vehicle",
     "배터리": "Battery",
     "배터리 온도(최저~최고)": "Battery temperature (low–high)",
+    "충전 멈춤": "Charging paused",
     "공기압": "Tire pressure",
     "공기압 단위": "Tire pressure unit",
     "소프트웨어 업데이트": "Software update",

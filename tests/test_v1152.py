@@ -29,7 +29,7 @@ def _button(html: str) -> str:
 
 class TireDisplayTests(unittest.TestCase):
     def test_chips_keep_the_saved_unit(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.15.2"', HTML)
+        self.assertIn('const APP_VERSION = "v1.15.3"', HTML)
         self.assertIn('id="pressure-unit" class="unit-tag tire-unit"', HTML)
         self.assertLess(CHANGELOG.index("## v1.15.2"), CHANGELOG.index("## v1.15.1"))
         chip = HTML.split("button.unit-tag.tire-unit {", 1)[1].split("}", 1)[0]
@@ -71,19 +71,19 @@ class TireDisplayTests(unittest.TestCase):
         self.assertEqual(fr, "42.1")
         self.assertNotIn("주행 전 → 후", got["none"])
         self.assertNotIn("→", got["none"])
-        self.assertIn(">" + fl + "<", got["none"])
-        self.assertIn(">" + fr + "<", got["none"])
+        self.assertIn(">" + fl + " psi<", got["none"])
+        self.assertIn(">" + fr + " psi<", got["none"])
         self.assertEqual(_button(got["none"]), "<button type='button' class='unit-tag tire-unit' aria-label='공기압 단위'>psi")
         self.assertLess(got["mixed"].index("주행 전 → 후"), got["mixed"].index("<button"))
         self.assertNotIn("주행 전", _button(got["mixed"]))
-        self.assertIn(">" + fr + "<", got["mixed"])
+        self.assertIn(">" + fr + " psi<", got["mixed"])
         self.assertIn(">" + fl + " → " + fr + "<", got["mixed"])
         self.assertIn(">" + fr + " → " + _psi(2.91) + "<", got["both"])
         self.assertEqual(got["empty"], "")
         self.assertEqual(got["onlyAfter"], "— → " + fr)
         self.assertNotIn("주행 전 → 후", got["bars"])
-        self.assertIn(">2.87<", got["bars"])
-        self.assertIn(">2.90<", got["bars"])
+        self.assertIn(">2.87 bar<", got["bars"])
+        self.assertIn(">2.90 bar<", got["bars"])
         self.assertTrue(_button(got["bars"]).endswith(">bar"))
 
 

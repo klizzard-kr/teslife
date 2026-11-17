@@ -483,12 +483,63 @@ def sentry_alarms(conn, vid: str, lo: str | None = None, hi: str | None = None,
     return out
 
 
+def _charge_spans(conn, vid: str, d0: datetime, d1: datetime, end: datetime) -> list[Span]:
+    """Finished charges overlapping the day, plus a charge still running on today."""
+    spans: list[Span] = []
+    for s, e in _rows(
+        conn,
+        "SELECT start_ts, end_ts FROM charges WHERE vehicle_id = ? AND end_ts > ? AND start_ts < ?",
+        (vid, format_ts(d0), format_ts(d1)),
+    ):
+        if s and e:
+            spans.append((parse_ts(s), parse_ts(e)))
+    if end < d1:
+        from process import open_charge_start
+        from web import _recent_events
+
+        ev = _recent_events(conn, vid, ("DetailedChargeState", "ChargeState"), end)
+        if ev is not None:
+            started = open_charge_start(ev)
+            if started is not None:
+                spans.append((started, end))
+    return spans
+
+
+def _hour_bounds(
+    level: list[tuple[datetime, float]], a: datetime, b: datetime, charging: bool,
+    gap: timedelta = AWAKE_GAP,
+) -> tuple[tuple[datetime, float], tuple[datetime, float]] | None:
+    """Start and end battery samples for [a, b).
+
+    Normally the start is the last sample before a, and the end is the last
+    sample before b, so one hour's end is the next hour's start. A charge,
+    or a gap longer than `gap` with no sample, keeps the first and last
+    sample inside the hour. An hour with no sample stays empty.
+    """
+    inside = [(t, v) for t, v in level if a <= t < b]
+    if not inside:
+        return None
+    prev = None
+    for t, v in level:
+        if t < a:
+            prev = (t, v)
+        else:
+            break
+    stale = prev is None or (a - prev[0]) > gap
+    if charging or stale:
+        return inside[0], inside[-1]
+    return prev, inside[-1]
+
+
 def _hours(conn, vid: str, d0: datetime, end: datetime, lanes, cover: list[Span]) -> list[dict[str, Any]]:
     lo, hi = format_ts(d0), format_ts(d0 + timedelta(days=1))
+    # Keep the sample from before midnight. The old filter dropped it, so hour 0
+    # could not start from the last value before 00:00.
     level = [(t, _as_float(v)) for t, v in _series(conn, vid, "BatteryLevel", lo, hi)]
-    level = [(t, v) for t, v in level if v is not None and t >= d0]
+    level = sorted(((t, v) for t, v in level if v is not None), key=lambda p: p[0])
     er = [(t, _as_float(v)) for t, v in _series(conn, vid, "EnergyRemaining", lo, hi)]
     er = [(t, v) for t, v in er if v is not None]
+    charges = _charge_spans(conn, vid, d0, d0 + timedelta(days=1), end)
     out = []
     for h in range(24):
         a, b = d0 + timedelta(hours=h), d0 + timedelta(hours=h + 1)
@@ -505,16 +556,18 @@ def _hours(conn, vid: str, d0: datetime, end: datetime, lanes, cover: list[Span]
         states.sort(key=lambda x: x["start_ts"])
         awake = sum(_sec(max(c, a), min(d, b)) for c, d in cover if min(d, b) > max(c, a))
         row: dict[str, Any] = {"hour": h, "states": states, "awake_min": round(awake / 60.0, 1)}
-        pts = [(t, v) for t, v in level if a <= t < b]
-        if pts:
-            row.update(start_pct=round(pts[0][1], 1), start_ts=format_ts(pts[0][0]),
-                       end_pct=round(pts[-1][1], 1), end_ts=format_ts(pts[-1][0]))
-            if len(pts) > 1:
-                delta = pts[-1][1] - pts[0][1]
+        charging = any(s < b and e > a for s, e in charges)
+        bounds = _hour_bounds(level, a, b, charging)
+        if bounds:
+            start, stop = bounds
+            row.update(start_pct=round(start[1], 1), start_ts=format_ts(start[0]),
+                       end_pct=round(stop[1], 1), end_ts=format_ts(stop[0]))
+            if start[0] != stop[0]:
+                delta = stop[1] - start[1]
                 row["delta_pct"] = round(delta, 2)
-                ref = [v for t, v in er if t <= pts[-1][0]]
-                if ref and pts[-1][1] > 0 and abs(delta) > 0:
-                    row["kwh"] = round(abs(delta) * ref[-1] / pts[-1][1], 2)
+                ref = [v for t, v in er if t <= stop[0]]
+                if ref and stop[1] > 0 and abs(delta) > 0:
+                    row["kwh"] = round(abs(delta) * ref[-1] / stop[1], 2)
                     row["kwh_estimated"] = True
         out.append(row)
     return out
