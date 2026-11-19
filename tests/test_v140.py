@@ -108,7 +108,7 @@ class DeleteTests(unittest.TestCase):
 
 class PageTests(unittest.TestCase):
     def test_trash_buttons_and_tab_actions(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.3"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.4"', HTML)
         self.assertIn("알림 삭제: 보안과 차량 알림은 줄의 휴지통으로 지울 수 있어요", HTML)
         self.assertIn("이 탭의 알림을 모두 지울까요?", HTML)
         self.assertIn('id="notice-delete"', HTML)

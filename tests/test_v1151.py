@@ -117,7 +117,7 @@ class BatteryLineTests(unittest.TestCase):
 
 class TireUnitTests(unittest.TestCase):
     def test_trip_label_toggles_the_saved_unit(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.3"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.4"', HTML)
         self.assertIn("BAR_PER_PSI = 0.0689476", HTML)
         self.assertIn('class=\'unit-tag tire-unit\'', HTML)
         self.assertIn("주행 전 → 후", HTML)

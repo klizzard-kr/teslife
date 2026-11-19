@@ -2034,8 +2034,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.3"; // display constant only
+    const APP_VERSION = "v1.16.4"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.4", features: ["공조 그래프: 네 탭 모두 오른쪽 끝까지 채워요", "공조: 바람 세기는 0·2·4·6·8·10, 시트는 0·1·2·3을 그림 안에 붙여요"], fixes: [] },
       { version: "1.16.3", features: ["그래프: 오른쪽 눈금이 없는 그림은 오른쪽 끝까지 채워요"], fixes: [] },
       { version: "1.16.2", features: ["홈: 배터리 끝의 0은 빼요", "공조: 꺼진 탭은 흐리고 누를 수 없어요", "그래프: 세로 선 아래 시각 글자는 빼요"], fixes: ["공조: 공조가 꺼져 있으면 팬 1을 그리지 않아요", "공조: 왼쪽 온도 눈금이 시각에 가리지 않아요"] },
       { version: "1.16.1", features: ["에너지 상세: 온도 그래프와 배터리 온도는 에너지 상세 안에 있어요", "그래프: 누르면 그 시각(시:분:초)도 함께 보여요", "공조: 탭은 실내·실외, A/C·팬, 시트·핸들, 유리·와이퍼예요", "공조: 팬과 시트는 단계 선이고, 마지막 값은 끝까지 이어져요"], fixes: [] },
@@ -2985,16 +2986,15 @@
       return top + ih - ((v - scale.min) / span) * ih;
     }
     function fanAxisMax(model) {
-      let m = FAN_AXIS;
-      (model.fan || []).forEach(seg => seg.forEach(p => { if (p.v > m) m = Math.ceil(p.v); }));
-      return m;
+      return FAN_AXIS;
     }
     function heatAxisMax(model) {
-      let m = HEAT_AXIS;
-      const look = (segs) => (segs || []).forEach(seg => seg.forEach(p => { if (p.v > m) m = Math.ceil(p.v); }));
-      SEATS.forEach(seat => { look(model.heat[seat.key]); look(model.cool[seat.key]); });
-      look(model.wheel);
-      return m;
+      return HEAT_AXIS;
+    }
+    function levelTicks(tab) {
+      if (tab === "fan") return [0, 2, 4, 6, 8, 10];
+      if (tab === "seats") return [0, 1, 2, 3];
+      return [];
     }
     function hasRight(tab) { return tab === "fan" || tab === "seats"; }
     function rightMax(tab, model) { return tab === "seats" ? heatAxisMax(model) : fanAxisMax(model); }
@@ -3042,7 +3042,7 @@
     function climateSvg(model, fromTab, toTab, u) {
       const bars = CLIM_BARS.filter(row => model.bars[row[0]]);
       const barStrip = bars.length ? 4 + bars.length * 10 : 0;
-      const W = 390, L = 40, R = 44, T = 12, lineH = 176;
+      const W = 390, L = 40, R = 16, T = 12, lineH = 176;
       const H = T + lineH + barStrip + 36;
       const innerW = W - L - R, innerH = lineH;
       const t0 = model.t0, t1 = model.t1;
@@ -3062,13 +3062,12 @@
           "' font-size='11' text-anchor='end'>" + fmt(v, 0) + "°C</text>";
       });
       const seen = {};
-      const fromMax = hasRight(fromTab) ? rightMax(fromTab, model) : -1;
-      const toMax = hasRight(toTab) ? rightMax(toTab, model) : -1;
-      for (let v = 0; v <= Math.max(fromMax, toMax); v++) seen[v] = true;
+      levelTicks(fromTab).forEach(v => { seen[v] = true; });
+      levelTicks(toTab).forEach(v => { seen[v] = true; });
       Object.keys(seen).forEach(key => {
         const v = Number(key);
-        const fromOn = v <= fromMax;
-        const toOn = v <= toMax;
+        const fromOn = levelTicks(fromTab).indexOf(v) >= 0;
+        const toOn = levelTicks(toTab).indexOf(v) >= 0;
         const yOf = (tab) => yOn(v, {min: 0, max: rightMax(tab, model)}, T, innerH);
         const y0 = fromOn ? yOf(fromTab) : yOf(toTab);
         const y1 = toOn ? yOf(toTab) : yOf(fromTab);
@@ -3077,8 +3076,9 @@
         const y = y0 + (y1 - y0) * u;
         html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
           "' stroke='" + tone("chart-grid") + "' opacity='" + (op * 0.28).toFixed(3) + "'></line>";
-        html += "<text x='" + (L + innerW + 4) + "' y='" + (y + 3) + "' fill='" + fill +
-          "' font-size='10' opacity='" + op.toFixed(3) + "'>" + v + "</text>";
+        const labelY = y < T + 12 ? y + 11 : y - 2;
+        html += "<text x='" + (L + innerW - 4) + "' y='" + labelY + "' fill='" + fill +
+          "' font-size='10' text-anchor='end' opacity='" + (op * 0.75).toFixed(3) + "'>" + v + "</text>";
       });
       const yLevel = (tab, v) => yOn(v, {min: 0, max: rightMax(hasRight(tab) ? tab : (hasRight(fromTab) ? fromTab : toTab), model)}, T, innerH);
       const paintFill = (pts, color, op, fromS, toS) => {

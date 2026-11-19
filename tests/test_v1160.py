@@ -225,7 +225,7 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.3"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.4"', HTML)
         tabs = _fn("climateTabs")
         self.assertIn('["cabin", "실내·실외", cabinOn]', tabs)
         self.assertIn('["fan", "A/C·팬", fanOn]', tabs)
@@ -254,9 +254,16 @@ class PageGraphTests(unittest.TestCase):
         self.assertNotIn('"바람 세기 " + levelWord', rows)
         self.assertIn('group("자리"', legend)
         svg = _fn("climateSvg")
-        self.assertIn("const W = 390, L = 40, R = 44", svg)
+        self.assertIn("const W = 390, L = 40, R = 16", svg)
+        self.assertNotIn("R = 44", svg)
         self.assertNotIn("L = 104", svg)
-        self.assertIn("innerW + 4", svg)
+        self.assertIn("L + innerW - 4", svg)
+        self.assertIn("text-anchor='end'", svg)
+        self.assertNotIn("innerW + 4", svg)
+        self.assertIn("return [0, 2, 4, 6, 8, 10]", _fn("levelTicks"))
+        self.assertIn("return [0, 1, 2, 3]", _fn("levelTicks"))
+        self.assertIn("return FAN_AXIS", _fn("fanAxisMax"))
+        self.assertIn("return HEAT_AXIS", _fn("heatAxisMax"))
         self.assertIn("barStrip + 36", svg)
         self.assertIn("STEP_FILL", svg)
         self.assertNotIn("끄", svg)
@@ -284,6 +291,43 @@ class PageGraphTests(unittest.TestCase):
         self.assertIn("#ef8a6b", HTML)
         self.assertIn("#6ba8ef", HTML)
         self.assertNotIn("배터리 온도(최저~최고)", HTML.split("function svgChargeBand", 1)[1].split("function paintChargeTemps", 1)[0])
+
+    def test_level_labels_stay_inside_the_shared_right_edge(self) -> None:
+        start = HTML.index("    const SEATS = [")
+        chunk = HTML[start:HTML.index("    function climateLegend")]
+        src = (
+            "function tone(){ return '#8aa0b5'; }\n"
+            + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks")
+            + _fn("decimate") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg")
+            + chunk
+            + "const t0 = Date.parse('2026-11-15T11:40:00Z');\n"
+            + "const t1 = Date.parse('2026-11-15T11:58:00Z');\n"
+            + "const model = {t0:t0, t1:t1,\n"
+            + "  inside:[[{t:t0,v:22},{t:t1,v:23}]], outside:[], setDriver:[], setPass:[],\n"
+            + "  fan:[[{t:t0,v:11},{t:t1,v:6}]], wheel:[],\n"
+            + "  heat:{seat_left:[[{t:t0,v:2},{t:t1,v:3}]]}, cool:{}, auto:[], ac:[], bars:{}};\n"
+            + "function labels(html){\n"
+            + "  const out=[]; const re=/font-size='10' text-anchor='end' opacity='([^']+)'>([^<]+)/g; let m;\n"
+            + "  while((m=re.exec(html))) out.push({op:Number(m[1]), text:m[2]});\n"
+            + "  return out.filter(t => t.op > 0.5).map(t => t.text);\n"
+            + "}\n"
+            + "function plot(html){ return Number(html.match(/data-plot='([^']+)'/)[1]); }\n"
+            + "const cabin=climateSvg(model,'cabin','cabin',1);\n"
+            + "const fan=climateSvg(model,'fan','fan',1);\n"
+            + "const seats=climateSvg(model,'seats','seats',1);\n"
+            + "const glass=climateSvg(model,'glass','glass',1);\n"
+            + "process.stdout.write(JSON.stringify({\n"
+            + "  plot:[plot(cabin),plot(fan),plot(seats),plot(glass)],\n"
+            + "  fan:labels(fan), seats:labels(seats), cabin:labels(cabin),\n"
+            + "  high: fan.indexOf(',-')\n"
+            + "}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["plot"], [334, 334, 334, 334])
+        self.assertEqual(got["fan"], ["0", "2", "4", "6", "8", "10"])
+        self.assertEqual(got["seats"], ["0", "1", "2", "3"])
+        self.assertEqual(got["cabin"], [])
+        self.assertGreater(got["high"], 0)
 
     def test_crosshair_reads_real_samples_and_skips_a_gap(self) -> None:
         src = (
