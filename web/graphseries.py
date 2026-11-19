@@ -70,6 +70,47 @@ def series_segments(
     return segments(points)
 
 
+def flat_average(runs: list[list[Point]], end: datetime | None = None) -> float | None:
+    """Time-weighted mean. Each report holds flat until the next one."""
+    dedup: list[Point] = []
+    for ts, value in sorted(p for run in runs for p in run):
+        if dedup and dedup[-1][0] == ts:
+            dedup[-1] = (ts, value)
+        else:
+            dedup.append((ts, value))
+    if not dedup:
+        return None
+    if len(dedup) == 1:
+        return dedup[0][1]
+    weighted = 0.0
+    covered = 0.0
+    for i, (ts, value) in enumerate(dedup):
+        if i + 1 < len(dedup):
+            nxt = dedup[i + 1][0]
+        elif end is not None:
+            nxt = end
+        else:
+            continue
+        span = (nxt - ts).total_seconds()
+        if span <= 0:
+            continue
+        weighted += value * span
+        covered += span
+    if covered <= 0:
+        return dedup[-1][1]
+    return weighted / covered
+
+
+def series_low(runs: list[list[Point]]) -> float | None:
+    vals = [value for run in runs for _ts, value in run]
+    return min(vals) if vals else None
+
+
+def series_high(runs: list[list[Point]]) -> float | None:
+    vals = [value for run in runs for _ts, value in run]
+    return max(vals) if vals else None
+
+
 def level_spans(
     samples: list[tuple[datetime, Any]],
     start: datetime,
@@ -353,6 +394,8 @@ def build_climate(
         "auto": _flag_points(samples("HvacAutoMode"), start, prior("HvacAutoMode")),
         "ac": _flag_points(samples("HvacACEnabled"), start, prior("HvacACEnabled")),
         "bars": bars,
+        "avg_inside": flat_average(inside, end),
+        "avg_outside": flat_average(outside, end),
     }
 
 
@@ -368,11 +411,16 @@ def build_battery(
             _nums(series.get(name) or [], start), start, _prior_num(priors.get(name), start), end,
         )
 
+    mins = one("ModuleTempMin")
+    maxs = one("ModuleTempMax")
     heater = level_spans(
         series.get("BatteryHeaterOn") or [], start, end, priors.get("BatteryHeaterOn"),
         lambda value: 1.0 if _on_flag(value) else 0.0,
     )
-    return {"min": one("ModuleTempMin"), "max": one("ModuleTempMax"), "heater": heater}
+    return {
+        "min": mins, "max": maxs, "heater": heater,
+        "low": series_low(mins), "high": series_high(maxs),
+    }
 
 
 def charge_axis_top(rated: float | None, observed: float | None) -> float:

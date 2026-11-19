@@ -3252,7 +3252,9 @@
       const model = climateModel(data);
       const tabs = climateTabs(model);
       if (!tabs.length || !isFinite(model.t0) || !isFinite(model.t1)) { slot.innerHTML = ""; return; }
-      slot.innerHTML = "<div class='detail-block'><div class='clim-tabs' role='tablist'>" +
+      slot.innerHTML = "<div class='detail-block'>" +
+        tempSummary([["평균 실내 온도", data.avg_inside], ["평균 실외 온도", data.avg_outside]]) +
+        "<div class='clim-tabs' role='tablist'>" +
         tabs.map((t, i) => "<button type='button' data-clim='" + t[0] + "'" + (i ? "" : " class='on'") +
           " role='tab' aria-selected='" + (i ? "false" : "true") + "'>" + t[1] + "</button>").join("") +
         "</div><div class='curve-box clim-plot'></div><p class='chart-legend clim-legend'></p></div>";
@@ -3289,6 +3291,12 @@
       bindCrosshair(plot, (ms) => climateRows(model, tab, ms));
       paint(tab, tab, 1);
     }
+    function tempSummary(rows) {
+      const html = (rows || []).filter(row => row[1] != null && isFinite(Number(row[1]))).map(row =>
+        "<div class='kv-row'><span>" + row[0] + "</span><span>" + fmt(row[1], 1) + " °C</span></div>"
+      ).join("");
+      return html ? "<div class='kv'>" + html + "</div>" : "";
+    }
     function batteryRows(model, ms) {
       const rows = [];
       const hi = seriesValueAt(model.max, ms, "line");
@@ -3301,7 +3309,7 @@
     }
     function svgBatteryTemp(model) {
       const W = 390, H = 180, L = 40, R = 48, T = 16, B = 36;
-      const innerW = W - L - R, innerH = H - T - B - 12;
+      const innerW = W - L - R, innerH = H - T - B;
       const vals = [];
       model.min.forEach(seg => seg.forEach(p => vals.push(p.v)));
       model.max.forEach(seg => seg.forEach(p => vals.push(p.v)));
@@ -3312,6 +3320,12 @@
       const t0 = model.t0, t1 = model.t1;
       const xOf = (t) => L + (t1 === t0 ? innerW / 2 : ((t - t0) / (t1 - t0)) * innerW);
       let html = "";
+      (model.heater || []).forEach(span => {
+        const x0 = xOf(span.t0), x1 = xOf(span.t1);
+        if (x0 == null || x1 == null || x1 <= x0) return;
+        html += "<rect x='" + x0 + "' y='" + T + "' width='" + (x1 - x0) + "' height='" + innerH +
+          "' fill='#e39a4a' fill-opacity='0.16'></rect>";
+      });
       [scale.min, (scale.min + scale.max) / 2, scale.max].forEach(v => {
         const y = yOn(v, scale, T, innerH);
         html += "<text x='" + (L - 4) + "' y='" + (y + 4) + "' fill='" + tone("chart-axis") + "' font-size='11' text-anchor='end'>" + fmt(v, 0) + "°C</text>";
@@ -3336,12 +3350,6 @@
       };
       drawLine(model.max, "#ef8a6b");
       drawLine(model.min, "#6ba8ef");
-      const laneY = T + innerH + 4;
-      (model.heater || []).forEach(span => {
-        const x0 = xOf(span.t0), x1 = xOf(span.t1);
-        if (x0 == null || x1 == null || x1 <= x0) return;
-        html += "<rect x='" + x0 + "' y='" + laneY + "' width='" + (x1 - x0) + "' height='8' rx='2' fill='#e39a4a'></rect>";
-      });
       [t0, (t0 + t1) / 2, t1].forEach((ms, i) => {
         const px = xOf(ms);
         const anchor = i === 0 ? "start" : i === 2 ? "end" : "middle";
@@ -3350,7 +3358,9 @@
       html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
       html += crossLine(T, innerH);
       let legend = "<p class='chart-legend'><span><i style='background:#ef8a6b'></i>최고</span><span><i style='background:#6ba8ef'></i>최저</span>";
-      if (model.heater && model.heater.length) legend += "<span><i style='background:#e39a4a'></i>배터리 히터</span>";
+      if (model.heater && model.heater.length) {
+        legend += "<span><i style='background:#e39a4a;opacity:0.4'></i>배터리 히터</span>";
+      }
       legend += "</p>";
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH) + legend;
     }
@@ -3363,7 +3373,9 @@
         t0: Date.parse(s.start), t1: Date.parse(s.end)
       })).filter(s => isFinite(s.t0) && isFinite(s.t1) && s.t1 > s.t0);
       const model = {min: min, max: max, heater: heater, t0: Date.parse(startTs), t1: Date.parse(endTs)};
-      slot.innerHTML = "<div class='detail-block'><div class='card-head'><strong>배터리 온도</strong></div><div class='curve-box batt-plot'></div></div>";
+      slot.innerHTML = "<div class='detail-block'><div class='card-head'><strong>배터리 온도</strong></div>" +
+        tempSummary([["최저 배터리 온도", battery && battery.low], ["최고 배터리 온도", battery && battery.high]]) +
+        "<div class='curve-box batt-plot'></div></div>";
       const plot = slot.querySelector(".batt-plot");
       plot.innerHTML = svgBatteryTemp(model);
       bindCrosshair(plot, (ms) => batteryRows(model, ms));

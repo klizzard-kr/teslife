@@ -736,6 +736,8 @@ def _pack_battery(built: dict[str, Any]) -> dict[str, Any]:
             {"start": format_ts(a), "end": format_ts(b), "level": level}
             for a, b, level in built["heater"]
         ],
+        "low": None if built.get("low") is None else round(float(built["low"]), 1),
+        "high": None if built.get("high") is None else round(float(built["high"]), 1),
     }
 
 
@@ -909,6 +911,8 @@ def trip_climate(conn: sqlite3.Connection, vehicle_id: str, start_ts: str) -> di
         "auto": [{"ts": format_ts(t), "v": v} for t, v in climate["auto"]],
         "ac": [{"ts": format_ts(t), "v": v} for t, v in climate["ac"]],
         "bars": bars,
+        "avg_inside": None if climate["avg_inside"] is None else round(float(climate["avg_inside"]), 1),
+        "avg_outside": None if climate["avg_outside"] is None else round(float(climate["avg_outside"]), 1),
         "battery": _pack_battery(battery),
     }
 

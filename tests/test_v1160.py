@@ -14,6 +14,7 @@ from web.graphseries import (
     build_battery,
     build_climate,
     charge_axis_top,
+    flat_average,
     series_segments,
 )
 from web.notice_view import format_soc_change
@@ -145,6 +146,11 @@ class ClimateSeriesTests(unittest.TestCase):
         self.assertEqual(built["auto"][-1][1], 0.0)
         self.assertEqual(built["ac"][-1][1], 1.0)
 
+    def test_cabin_average_holds_the_last_report(self) -> None:
+        built = self._built({"InsideTemp": [(at(0), 10.0), (at(600), 20.0)]}, {})
+        self.assertAlmostEqual(built["avg_inside"], (10 * 600 + 20 * (26 * 60 - 600)) / (26 * 60))
+        self.assertIsNone(built["avg_outside"])
+
 
 class BatterySeriesTests(unittest.TestCase):
     def test_min_above_max_is_kept(self) -> None:
@@ -158,6 +164,15 @@ class BatterySeriesTests(unittest.TestCase):
         self.assertEqual(built["max"][0][0][1], 16.0)
         self.assertGreater(built["min"][0][0][1], built["max"][0][0][1])
         self.assertEqual(built["heater"], [(at(30), at(200), 1.0)])
+        self.assertEqual(built["low"], 17.0)
+        self.assertEqual(built["high"], 16.5)
+
+    def test_flat_average_holds_each_report(self) -> None:
+        end = at(40)
+        runs = [[(T0, 10.0), (at(10), 20.0), (end, 20.0)]]
+        self.assertAlmostEqual(flat_average(runs, end), 17.5)
+        self.assertEqual(flat_average([[(T0, 19.5), (at(100), 19.5)]], at(100)), 19.5)
+        self.assertIsNone(flat_average([], at(10)))
 
     def test_no_temperature_samples_leave_the_lines_empty(self) -> None:
         built = build_battery({"BatteryHeaterOn": [(at(0), True)]}, {}, T0, at(60))
@@ -231,7 +246,14 @@ class PageGraphTests(unittest.TestCase):
         self.assertIn("polyline fill='none'", svg)
         self.assertIn("cross-xlabel", HTML)
         self.assertIn('label: "시각"', HTML)
-        self.assertIn("배터리 히터", HTML)
+        self.assertIn("평균 실내 온도", HTML)
+        self.assertIn("평균 실외 온도", HTML)
+        self.assertIn("최저 배터리 온도", HTML)
+        self.assertIn("최고 배터리 온도", HTML)
+        batt = _fn("svgBatteryTemp")
+        self.assertIn("fill-opacity='0.16'", batt)
+        self.assertNotIn("laneY", batt)
+        self.assertIn("opacity:0.4", batt)
         self.assertNotIn('oneRow("히터"', HTML)
         self.assertIn("시트·열선", HTML)
         self.assertIn("function seriesValueAt(", HTML)
