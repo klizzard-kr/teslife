@@ -714,22 +714,6 @@ def _downsample(points: list[Any], limit: int = 400) -> list[Any]:
     return [points[int(i * step)] for i in range(limit)] + [points[-1]]
 
 
-def _stream_continuous(conn: sqlite3.Connection, vehicle_id: str, start: datetime) -> bool:
-    """True when some signal arrived on both sides of `start` within the awake gap."""
-    from .graphseries import streaming_across
-
-    stamp = format_ts(start)
-    before = conn.execute(
-        "SELECT MAX(ts) FROM signals WHERE vehicle_id = ? AND ts < ?", (vehicle_id, stamp),
-    ).fetchone()
-    after = conn.execute(
-        "SELECT MIN(ts) FROM signals WHERE vehicle_id = ? AND ts >= ?", (vehicle_id, stamp),
-    ).fetchone()
-    left = parse_ts(before[0]) if before and before[0] else None
-    right = parse_ts(after[0]) if after and after[0] else None
-    return streaming_across(left, right)
-
-
 def _window_parts(ev: Any, name: str, start: datetime, end: datetime):
     samples = [(ts, value) for ts, value in ev.series(name, start, end)]
     hit = ev.at_ts(name, start - timedelta(microseconds=1))
@@ -821,7 +805,7 @@ def trip_power(conn: sqlite3.Connection, vehicle_id: str, start_ts: str) -> dict
         if volts is not None and amps is not None:
             kw = volts * amps / 1000.0
             prior = (when, -kw if flipped else kw)
-    segs = series_segments(samples, s, prior, _stream_continuous(conn, vehicle_id, s))
+    segs = series_segments(samples, s, prior)
     flat = [point for seg in segs for point in seg]
     pts = [{"ts": format_ts(t), "kw": round(p, 2)} for t, p in flat]
     return {
@@ -846,7 +830,7 @@ def trip_speed(conn: sqlite3.Connection, vehicle_id: str, start_ts: str) -> dict
         speed = _as_float(hit[1])
         if speed is not None:
             prior = (hit[0], speed)
-    segs = series_segments(samples, s, prior, _stream_continuous(conn, vehicle_id, s))
+    segs = series_segments(samples, s, prior)
     flat = [point for seg in segs for point in seg]
     pts = [{"ts": format_ts(t), "kph": round(v, 1)} for t, v in flat]
     from process.speed_events import event_details
@@ -903,9 +887,8 @@ def trip_climate(conn: sqlite3.Connection, vehicle_id: str, start_ts: str) -> di
             priors[name] = prior
     _alias_series(series, priors, "RearDefrostEnabled", "HvacRearDefrost")
     _alias_series(series, priors, "WiperHeatEnabled", "HvacWiperHeat")
-    continuous = _stream_continuous(conn, vehicle_id, start)
-    climate = build_climate(series, priors, start, end, continuous)
-    battery = build_battery(series, priors, start, end, continuous)
+    climate = build_climate(series, priors, start, end)
+    battery = build_battery(series, priors, start, end)
     bars = {
         key: [
             {"start": format_ts(a), "end": format_ts(b), "level": level}
@@ -1191,8 +1174,7 @@ def charge_detail_curve(conn: sqlite3.Connection, vehicle_id: str, start_ts: str
             a_num = _as_float(ev.at("ChargeAmps", when))
             if v_num is not None and a_num is not None:
                 prior_kw = (when, round(v_num * a_num / 1000.0, 3))
-    continuous = _stream_continuous(conn, vehicle_id, start)
-    segs = series_segments(samples, start, prior_kw, continuous)
+    segs = series_segments(samples, start, prior_kw)
     observed_vals = [p for seg in segs for _t, p in seg]
     observed = max(observed_vals) if observed_vals else None
     rated = _rated_kw(conn, vehicle_id, row[0])
@@ -1214,7 +1196,7 @@ def charge_detail_curve(conn: sqlite3.Connection, vehicle_id: str, start_ts: str
         "rated_kw": rated, "axis_kw": charge_axis_top(rated, observed),
         "battery_temp_min": min(tmin) if tmin else None,
         "battery_temp_max": max(tmax) if tmax else None,
-        "battery": _pack_battery(build_battery(series, priors, start, end, continuous)),
+        "battery": _pack_battery(build_battery(series, priors, start, end)),
     }
 
 

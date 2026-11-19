@@ -1,85 +1,55 @@
 """Shape the lines drawn on a trip or charge detail graph.
 
-A sampled line (temperature, power, speed, fan) starts at the window with the
-last value from before it only when telemetry was still streaming across that
-boundary. The same line is not drawn across a hole longer than STREAM_GAP:
-those records are missing, or the car was asleep. A level such as a seat
-heater holds until the next report.
-
-STREAM_GAP matches the awake gap used for the day view (15 minutes).
+Every line starts at the window with the last value received before it.
+While the car sleeps nothing arrives, and the first report after it wakes is
+already the current value, so that earlier report is still current at the
+start. Inside the window, received values stay connected. A temperature line
+is the straight segments between those reports. A level such as a seat heater
+holds until the next report.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Callable
-
-STREAM_GAP = timedelta(minutes=15)
 
 Point = tuple[datetime, float]
 Span = tuple[datetime, datetime]
-
-
-def streaming_across(
-    before: datetime | None, after: datetime | None, gap: timedelta = STREAM_GAP,
-) -> bool:
-    """True when a sample before the boundary and one at or after it are within `gap`."""
-    if before is None or after is None or after < before:
-        return False
-    return (after - before) <= gap
 
 
 def with_start_value(
     samples: list[Point],
     start: datetime,
     prior: Point | None,
-    continuous: bool,
-    gap: timedelta = STREAM_GAP,
 ) -> list[Point]:
-    """Prepend `start` with the previous value when the stream crossed `start`.
-
-    No prepend when the car was asleep, when this signal's own previous report
-    is already a hole, or when a sample already sits on the boundary.
-    """
+    """Put the last value from before `start` on the start, then the reports inside."""
     ordered = sorted((ts, value) for ts, value in samples if ts >= start)
-    if prior is None or not continuous:
-        return ordered
-    if start - prior[0] > gap:
+    if prior is None or prior[0] >= start:
         return ordered
     if ordered and ordered[0][0] <= start:
-        return ordered
-    if ordered and ordered[0][0] - prior[0] > gap:
         return ordered
     return [(start, prior[1]), *ordered]
 
 
-def segments(points: list[Point], gap: timedelta = STREAM_GAP) -> list[list[Point]]:
-    """Split where two reports are more than `gap` apart. Order is kept."""
-    out: list[list[Point]] = []
+def segments(points: list[Point]) -> list[list[Point]]:
+    """One run of reports in time order. A repeated timestamp keeps the later value."""
     cur: list[Point] = []
     for ts, value in points:
         if cur and ts < cur[-1][0]:
             continue
-        if cur and ts - cur[-1][0] > gap:
-            out.append(cur)
-            cur = []
         if cur and ts == cur[-1][0]:
             cur[-1] = (ts, value)
             continue
         cur.append((ts, value))
-    if cur:
-        out.append(cur)
-    return out
+    return [cur] if cur else []
 
 
 def series_segments(
     samples: list[Point],
     start: datetime,
     prior: Point | None,
-    continuous: bool,
-    gap: timedelta = STREAM_GAP,
 ) -> list[list[Point]]:
-    return segments(with_start_value(samples, start, prior, continuous, gap), gap)
+    return segments(with_start_value(samples, start, prior))
 
 
 def level_spans(
@@ -87,9 +57,7 @@ def level_spans(
     start: datetime,
     end: datetime,
     prior: tuple[datetime, Any] | None,
-    continuous: bool,
     level_of: Callable[[Any], float | None],
-    gap: timedelta = STREAM_GAP,
 ) -> list[tuple[datetime, datetime, float]]:
     """Hold each non-zero level until the next report, including across a long quiet stretch.
 
@@ -106,7 +74,7 @@ def level_spans(
         level = level_of(prior[1])
         if level is not None and prior[0] < start:
             prior_point = (prior[0], level)
-    pts = with_start_value(numeric, start, prior_point, continuous, gap)
+    pts = with_start_value(numeric, start, prior_point)
     spans: list[tuple[datetime, datetime, float]] = []
     for i, (ts, level) in enumerate(pts):
         if level == 0:
@@ -164,25 +132,22 @@ def _flag_points(
     samples: list[tuple[datetime, Any]],
     start: datetime,
     prior: tuple[datetime, Any] | None,
-    continuous: bool,
 ) -> list[Point]:
     numeric = [(ts, 1.0 if _on_flag(value) else 0.0) for ts, value in samples if start <= ts]
     prior_point = None
     if prior is not None and prior[0] < start:
         prior_point = (prior[0], 1.0 if _on_flag(prior[1]) else 0.0)
-    return with_start_value(numeric, start, prior_point, continuous)
+    return with_start_value(numeric, start, prior_point)
 
 
-def _held(points: list[Point], t: datetime, gap: timedelta = STREAM_GAP) -> float | None:
+def _held(points: list[Point], t: datetime) -> float | None:
     last: Point | None = None
     for ts, value in points:
         if ts <= t:
             last = (ts, value)
         else:
             break
-    if last is None or t - last[0] > gap:
-        return None
-    return last[1]
+    return None if last is None else last[1]
 
 
 def setpoint_segments(
@@ -190,10 +155,8 @@ def setpoint_segments(
     prior: tuple[datetime, Any] | None,
     on_spans: list[Span],
     start: datetime,
-    continuous: bool,
-    gap: timedelta = STREAM_GAP,
 ) -> list[list[Point]]:
-    """Set-temperature samples, kept only while HVAC is on, still split on holes."""
+    """Set-temperature samples, kept only while HVAC is on."""
     numeric = []
     for ts, value in samples:
         number = _number(value)
@@ -205,7 +168,7 @@ def setpoint_segments(
         number = _number(prior[1])
         if number is not None:
             prior_point = (prior[0], number)
-    pts = with_start_value(numeric, start, prior_point, continuous, gap)
+    pts = with_start_value(numeric, start, prior_point)
     out: list[list[Point]] = []
     for a, b in on_spans:
         if b <= a:
@@ -220,17 +183,13 @@ def setpoint_segments(
                 break
             inside.append((ts, value))
         chunk: list[Point] = []
-        if held is not None and (not inside or inside[0][0] - held[0] <= gap):
+        if held is not None:
             chunk.append((a, held[1]))
-        for ts, value in inside:
-            if chunk and ts - chunk[-1][0] > gap:
-                out.extend(segments(chunk, gap))
-                chunk = []
-            chunk.append((ts, value))
-        if chunk and b > chunk[-1][0] and b - chunk[-1][0] <= gap:
+        chunk.extend(inside)
+        if chunk and b > chunk[-1][0]:
             chunk.append((b, chunk[-1][1]))
         if chunk:
-            out.extend(segments(chunk, gap))
+            out.extend(segments(chunk))
     return out
 
 
@@ -241,8 +200,8 @@ def _differs(driver: list[list[Point]], passenger: list[list[Point]], tol: float
     flat_d = [p for seg in driver for p in seg]
     flat_p = [p for seg in passenger for p in seg]
     for ts in times:
-        left = _held(flat_d, ts, gap=STREAM_GAP)
-        right = _held(flat_p, ts, gap=STREAM_GAP)
+        left = _held(flat_d, ts)
+        right = _held(flat_p, ts)
         if left is None or right is None:
             continue
         if abs(left - right) > tol:
@@ -289,7 +248,6 @@ def build_climate(
     priors: dict[str, tuple[datetime, Any]],
     start: datetime,
     end: datetime,
-    continuous: bool,
 ) -> dict[str, Any]:
     """Climate graph series for one trip. Values are not clamped."""
     def samples(name: str) -> list[tuple[datetime, Any]]:
@@ -299,27 +257,27 @@ def build_climate(
         return priors.get(name)
 
     fan_name = "HvacFanSpeed" if samples("HvacFanSpeed") or prior("HvacFanSpeed") else "HvacFanStatus"
-    inside = series_segments(_nums(samples("InsideTemp"), start), start, _prior_num(prior("InsideTemp"), start), continuous)
-    outside = series_segments(_nums(samples("OutsideTemp"), start), start, _prior_num(prior("OutsideTemp"), start), continuous)
+    inside = series_segments(_nums(samples("InsideTemp"), start), start, _prior_num(prior("InsideTemp"), start))
+    outside = series_segments(_nums(samples("OutsideTemp"), start), start, _prior_num(prior("OutsideTemp"), start))
     hvac = level_spans(
-        samples("HvacPower"), start, end, prior("HvacPower"), continuous,
+        samples("HvacPower"), start, end, prior("HvacPower"),
         lambda value: 1.0 if _hvac_setpoint_on(value) else 0.0,
     )
     on_spans = [(a, b) for a, b, _level in hvac]
-    driver = setpoint_segments(samples("HvacLeftTemperatureRequest"), prior("HvacLeftTemperatureRequest"), on_spans, start, continuous)
-    passenger = setpoint_segments(samples("HvacRightTemperatureRequest"), prior("HvacRightTemperatureRequest"), on_spans, start, continuous)
+    driver = setpoint_segments(samples("HvacLeftTemperatureRequest"), prior("HvacLeftTemperatureRequest"), on_spans, start)
+    passenger = setpoint_segments(samples("HvacRightTemperatureRequest"), prior("HvacRightTemperatureRequest"), on_spans, start)
     if not _differs(driver, passenger):
         passenger = []
-    fan = series_segments(_nums(samples(fan_name), start), start, _prior_num(prior(fan_name), start), continuous)
+    fan = series_segments(_nums(samples(fan_name), start), start, _prior_num(prior(fan_name), start))
     bars: dict[str, list[tuple[datetime, datetime, float]]] = {}
     for key, name, kind in BAR_KEYS:
         if kind == "flag":
             spans = level_spans(
-                samples(name), start, end, prior(name), continuous,
+                samples(name), start, end, prior(name),
                 lambda value: 1.0 if _on_flag(value) else 0.0,
             )
         else:
-            spans = level_spans(samples(name), start, end, prior(name), continuous, _number)
+            spans = level_spans(samples(name), start, end, prior(name), _number)
         if spans:
             bars[key] = spans
     return {
@@ -328,8 +286,8 @@ def build_climate(
         "set_driver": driver,
         "set_passenger": passenger,
         "fan": fan,
-        "auto": _flag_points(samples("HvacAutoMode"), start, prior("HvacAutoMode"), continuous),
-        "ac": _flag_points(samples("HvacACEnabled"), start, prior("HvacACEnabled"), continuous),
+        "auto": _flag_points(samples("HvacAutoMode"), start, prior("HvacAutoMode")),
+        "ac": _flag_points(samples("HvacACEnabled"), start, prior("HvacACEnabled")),
         "bars": bars,
     }
 
@@ -339,16 +297,15 @@ def build_battery(
     priors: dict[str, tuple[datetime, Any]],
     start: datetime,
     end: datetime,
-    continuous: bool,
 ) -> dict[str, Any]:
     """Battery min and max stay independent. A sample with min above max is kept."""
     def one(name: str) -> list[list[Point]]:
         return series_segments(
-            _nums(series.get(name) or [], start), start, _prior_num(priors.get(name), start), continuous,
+            _nums(series.get(name) or [], start), start, _prior_num(priors.get(name), start),
         )
 
     heater = level_spans(
-        series.get("BatteryHeaterOn") or [], start, end, priors.get("BatteryHeaterOn"), continuous,
+        series.get("BatteryHeaterOn") or [], start, end, priors.get("BatteryHeaterOn"),
         lambda value: 1.0 if _on_flag(value) else 0.0,
     )
     return {"min": one("ModuleTempMin"), "max": one("ModuleTempMax"), "heater": heater}
@@ -367,6 +324,6 @@ def charge_axis_top(rated: float | None, observed: float | None) -> float:
     return obs if obs > 0 else 1.0
 
 
-def flag_at(points: list[Point], t: datetime, gap: timedelta = STREAM_GAP) -> bool:
-    held = _held(points, t, gap)
+def flag_at(points: list[Point], t: datetime) -> bool:
+    held = _held(points, t)
     return held is not None and held >= 0.5

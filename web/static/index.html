@@ -2547,13 +2547,12 @@
       }).filter(p => isFinite(p.t) && isFinite(p.v)));
     }
     function flagAt(points, t) {
-      const gap = 15 * 60 * 1000;
       let last = null;
       for (let i = 0; i < points.length; i++) {
         if (points[i].t <= t) last = points[i];
         else break;
       }
-      if (!last || t - last.t > gap) return false;
+      if (!last) return false;
       return last.v >= 0.5;
     }
     function hideCross(box) {
@@ -2767,10 +2766,9 @@
         sp.forEach((p, i) => {
           const x1 = x(p.ts), y1 = yT(p.v);
           const next = sp[i + 1];
-          const gap = next ? (Date.parse(next.ts) - Date.parse(p.ts)) : 0;
           if (!hold) hold = x1 + "," + y1;
           else hold += " " + x1 + "," + y1;
-          if (next && gap > 0 && gap <= 20 * 60 * 1000) hold += " " + x(next.ts) + "," + y1;
+          if (next) hold += " " + x(next.ts) + "," + y1;
           else {
             html += '<polyline fill="none" stroke="' + series.color + '" stroke-width="1.4" points="' + hold + '"></polyline>';
             html += '<circle cx="' + x1 + '" cy="' + y1 + '" r="2.2" fill="' + series.color + '"></circle>';

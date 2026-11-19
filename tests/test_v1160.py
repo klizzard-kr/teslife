@@ -15,7 +15,6 @@ from web.graphseries import (
     build_climate,
     charge_axis_top,
     series_segments,
-    streaming_across,
 )
 from web.notice_view import format_soc_change
 
@@ -29,51 +28,38 @@ def at(seconds: float) -> datetime:
 
 
 class StreamFillTests(unittest.TestCase):
-    def test_continuous_stream_fills_the_opening_gap(self) -> None:
-        self.assertTrue(streaming_across(at(-8), at(2)))
+    def test_start_uses_the_last_value_from_before(self) -> None:
         segs = series_segments(
             [(at(10), 21.0), (at(20), 21.4)],
             T0,
             (at(-8), 20.6),
-            continuous=True,
         )
         self.assertEqual(segs, [[(T0, 20.6), (at(10), 21.0), (at(20), 21.4)]])
 
-    def test_asleep_car_starts_at_the_first_waking_value(self) -> None:
-        self.assertFalse(streaming_across(at(-3 * 3600), at(300)))
+    def test_an_old_value_still_fills_the_start(self) -> None:
         segs = series_segments(
             [(at(300), 18.0), (at(310), 18.2)],
             T0,
             (at(-3 * 3600), 14.0),
-            continuous=False,
         )
-        self.assertEqual(segs[0][0], (at(300), 18.0))
-        self.assertNotIn(14.0, [v for _t, v in segs[0]])
+        self.assertEqual(segs, [[(T0, 14.0), (at(300), 18.0), (at(310), 18.2)]])
 
-    def test_a_hole_longer_than_the_awake_gap_is_a_break(self) -> None:
+    def test_a_long_quiet_stretch_stays_one_line(self) -> None:
         segs = series_segments(
             [(at(0), 10.0), (at(20 * 60), 12.0)],
             T0,
             None,
-            continuous=True,
         )
-        self.assertEqual(len(segs), 2)
-        self.assertEqual(segs[0], [(at(0), 10.0)])
-        self.assertEqual(segs[1], [(at(20 * 60), 12.0)])
+        self.assertEqual(segs, [[(at(0), 10.0), (at(20 * 60), 12.0)]])
 
-    def test_stale_signal_is_not_bridged_even_if_other_telemetry_is_awake(self) -> None:
-        segs = series_segments(
-            [(at(10), 19.0)],
-            T0,
-            (at(-20 * 60), 10.0),
-            continuous=True,
-        )
+    def test_no_prior_starts_at_the_first_report(self) -> None:
+        segs = series_segments([(at(10), 19.0)], T0, None)
         self.assertEqual(segs, [[(at(10), 19.0)]])
 
 
 class ClimateSeriesTests(unittest.TestCase):
-    def _built(self, series, priors, continuous=True):
-        return build_climate(series, priors, T0, at(26 * 60), continuous)
+    def _built(self, series, priors):
+        return build_climate(series, priors, T0, at(26 * 60))
 
     def test_setpoint_is_only_while_hvac_is_on_and_passenger_hides_when_equal(self) -> None:
         series = {
@@ -131,14 +117,14 @@ class BatterySeriesTests(unittest.TestCase):
             "ModuleTempMax": [(at(0), 16.0), (at(600), 16.5)],
             "BatteryHeaterOn": [(at(30), True), (at(200), False)],
         }
-        built = build_battery(series, {}, T0, at(900), True)
+        built = build_battery(series, {}, T0, at(900))
         self.assertEqual(built["min"][0][0][1], 17.0)
         self.assertEqual(built["max"][0][0][1], 16.0)
         self.assertGreater(built["min"][0][0][1], built["max"][0][0][1])
         self.assertEqual(built["heater"], [(at(30), at(200), 1.0)])
 
     def test_no_temperature_samples_leave_the_lines_empty(self) -> None:
-        built = build_battery({"BatteryHeaterOn": [(at(0), True)]}, {}, T0, at(60), True)
+        built = build_battery({"BatteryHeaterOn": [(at(0), True)]}, {}, T0, at(60))
         self.assertEqual(built["min"], [])
         self.assertEqual(built["max"], [])
 
