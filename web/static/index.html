@@ -3021,7 +3021,7 @@
       return out;
     }
     function seriesOp(tab, key) {
-      if (key === "inside") return tab === "cabin" ? 1 : 0;
+      if (key === "inside") return tab === "cabin" ? 1 : 0.22;
       if (tab === "cabin" && (key === "outside" || key === "setDriver" || key === "setPass")) return 1;
       if (tab === "fan" && key === "fan") return 1;
       if (tab === "seats" && (key === "heat" || key === "cool" || key === "wheel")) return 1;
@@ -3052,15 +3052,14 @@
       const blend = (a, b) => a + (b - a) * u;
       const opOf = (key) => blend(seriesOp(fromTab, key), seriesOp(toTab, key));
       let html = "";
-      const tempOp = blend(fromTab === "cabin" ? 1 : 0, toTab === "cabin" ? 1 : 0);
       const fill = tone("chart-axis");
       const hasTemp = model.inside.length || model.outside.length || model.setDriver.length || model.setPass.length;
-      if (hasTemp && tempOp > 0.04) niceTicks(temps.min, temps.max).forEach(v => {
+      if (hasTemp) niceTicks(temps.min, temps.max).forEach(v => {
         const y = yOn(v, temps, T, innerH);
         html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
-          "' stroke='" + tone("chart-grid") + "' opacity='" + (tempOp * 0.8).toFixed(3) + "'></line>";
+          "' stroke='" + tone("chart-grid") + "' opacity='0.35'></line>";
         html += "<text x='" + (L - 4) + "' y='" + (y + 4) + "' fill='" + fill +
-          "' font-size='11' text-anchor='end' opacity='" + tempOp.toFixed(3) + "'>" + fmt(v, 0) + "°C</text>";
+          "' font-size='11' text-anchor='end'>" + fmt(v, 0) + "°C</text>";
       });
       const seen = {};
       const fromMax = hasRight(fromTab) ? rightMax(fromTab, model) : -1;
@@ -3078,8 +3077,8 @@
         const y = y0 + (y1 - y0) * u;
         html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
           "' stroke='" + tone("chart-grid") + "' opacity='" + (op * 0.28).toFixed(3) + "'></line>";
-        html += "<text x='" + (L - 4) + "' y='" + (y + 3) + "' fill='" + fill +
-          "' font-size='10' text-anchor='end' opacity='" + op.toFixed(3) + "'>" + v + "</text>";
+        html += "<text x='" + (L + innerW + 4) + "' y='" + (y + 3) + "' fill='" + fill +
+          "' font-size='10' opacity='" + op.toFixed(3) + "'>" + v + "</text>";
       });
       const yLevel = (tab, v) => yOn(v, {min: 0, max: rightMax(hasRight(tab) ? tab : (hasRight(fromTab) ? fromTab : toTab), model)}, T, innerH);
       const paintFill = (pts, color, op, fromS, toS) => {
@@ -3182,8 +3181,10 @@
         (dash ? "color:" + color : "background:" + color) + "'></i>" + label + "</span>";
       const group = (label, body) => "<span class='leg-group'><em>" + label + "</em>" + body + "</span>";
       const join = (parts) => parts.filter(Boolean).join("<span class='leg-sep' aria-hidden='true'></span>");
+      const inside = model.inside.length ? bit("#9aa6b2", "실내") : "";
       if (tab === "fan") {
         return join([
+          inside,
           group("바람 세기", bit("#6ba8ef", "오토") + bit("#6ba8ef", "수동", true)),
           group("색", bit("#2ec4b6", "에어컨 켬") + bit("#6ba8ef", "에어컨 끔"))
         ]);
@@ -3195,11 +3196,11 @@
         if (used.some(seat => model.cool[seat.key])) colors.push(bit(COOL_COLOR, "통풍"));
         if (model.wheel.length) colors.push(bit(WHEEL_COLOR, "핸들 열선"));
         const styles = used.map(seat => bit("#8aa0b5", seat.label, !!seat.dash)).join("");
-        return join([colors.length ? group("색", colors.join("")) : "", styles ? group("자리", styles) : ""]);
+        return join([inside, colors.length ? group("색", colors.join("")) : "", styles ? group("자리", styles) : ""]);
       }
       if (tab === "glass") {
         const bits = CLIM_BARS.filter(row => model.bars[row[0]]).map(row => bit(row[2], row[1]));
-        return join(bits);
+        return join([inside].concat(bits));
       }
       const parts = [];
       if (model.inside.length) parts.push(bit("#d5dee8", "실내"));
@@ -3217,8 +3218,8 @@
         if (v == null) return;
         rows.push({label: label, text: kind === "level" ? levelWord(v) : fmt(v, 1) + "°C"});
       };
+      if (model.inside.length) add("실내", model.inside, "line", "°C");
       if (tab === "cabin") {
-        if (model.inside.length) add("실내", model.inside, "line", "°C");
         add("실외", model.outside, "line", "°C");
         add("설정 온도", model.setDriver, "step", "°C");
         add("조수석 설정", model.setPass, "step", "°C");
