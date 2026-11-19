@@ -15,6 +15,7 @@ from web.graphseries import (
     build_climate,
     charge_axis_top,
     flat_average,
+    gate_fan,
     series_segments,
 )
 from web.notice_view import format_soc_change
@@ -151,6 +152,18 @@ class ClimateSeriesTests(unittest.TestCase):
         self.assertAlmostEqual(built["avg_inside"], (10 * 600 + 20 * (26 * 60 - 600)) / (26 * 60))
         self.assertIsNone(built["avg_outside"])
 
+    def test_fan_stays_zero_while_hvac_is_off(self) -> None:
+        built = self._built({
+            "HvacPower": [(at(0), "Off")],
+            "HvacFanSpeed": [(at(0), 1), (at(60), 1)],
+            "HvacAutoMode": [(at(0), "Off")],
+            "HvacACEnabled": [(at(0), False)],
+        }, {"HvacPower": (at(-9000), "Off"), "HvacFanSpeed": (at(-8000), 1)})
+        vals = [v for seg in built["fan"] for _t, v in seg]
+        self.assertTrue(vals)
+        self.assertTrue(all(v == 0.0 for v in vals))
+        self.assertFalse(built["set_driver"])
+
 
 class BatterySeriesTests(unittest.TestCase):
     def test_min_above_max_is_kept(self) -> None:
@@ -212,31 +225,39 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.1"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.2"', HTML)
         tabs = _fn("climateTabs")
-        self.assertIn('["cabin", "실내·실외"]', tabs)
-        self.assertIn('["fan", "A/C·팬"]', tabs)
-        self.assertIn('["seats", "시트·핸들"]', tabs)
-        self.assertIn('["glass", "유리·와이퍼"]', tabs)
+        self.assertIn('["cabin", "실내·실외", cabinOn]', tabs)
+        self.assertIn('["fan", "A/C·팬", fanOn]', tabs)
+        self.assertIn('["seats", "시트·핸들", seatOn]', tabs)
+        self.assertIn('["glass", "유리·와이퍼", glassOn]', tabs)
+        self.assertIn("aria-disabled", _fn("mountClimate"))
         self.assertNotIn("<strong>공조</strong>", _fn("mountClimate"))
         i18n = (ROOT / "web" / "static" / "i18n.js").read_text(encoding="utf-8")
         self.assertIn('"온도": "Temp"', i18n)
         self.assertIn('"시트·핸들": "Seats and wheel"', i18n)
         self.assertIn('"유리·와이퍼": "Glass and wipers"', i18n)
+        self.assertIn('"A/C 켬": "A/C on"', i18n)
         self.assertIn('"성에 제거": "Defrost"', i18n)
         fan = _fn("fanPieces")
-        self.assertIn('auto ? "" : "5 4"', fan)
+        self.assertIn('active && !auto ? "5 4"', fan)
+        self.assertIn("FAN_ON", fan)
+        self.assertIn("FAN_OFF", fan)
         legend = _fn("climateLegend")
-        self.assertIn('group("바람 세기"', legend)
-        self.assertIn('"바람 세기 " + levelWord(v)', _fn("climateRows"))
-        self.assertIn('label: "바람 세기"', _fn("climateRows"))
-        self.assertIn('group("색"', legend)
-        self.assertIn("에어컨 끔", legend)
+        self.assertNotIn('group("바람 세기"', legend)
+        self.assertIn("A/C 켬", legend)
+        self.assertIn("A/C 끔", legend)
+        self.assertIn('mark("line"', legend)
+        self.assertIn('mark("hollow"', legend)
+        rows = _fn("climateRows")
+        self.assertIn('label: "바람 세기"', rows)
+        self.assertNotIn('"바람 세기 " + levelWord', rows)
         self.assertIn('group("자리"', legend)
         svg = _fn("climateSvg")
         self.assertIn("const W = 390, L = 40, R = 44", svg)
         self.assertNotIn("L = 104", svg)
         self.assertIn("innerW + 4", svg)
+        self.assertIn("barStrip + 36", svg)
         self.assertIn("STEP_FILL", svg)
         self.assertNotIn("끄", svg)
         self.assertIn('return tab === "cabin" ? 1 : 0.22;', _fn("seriesOp"))
@@ -244,13 +265,15 @@ class PageGraphTests(unittest.TestCase):
         self.assertNotIn("paintFill", temp)
         self.assertNotIn("polygon", temp)
         self.assertIn("polyline fill='none'", svg)
-        self.assertIn("cross-xlabel", HTML)
+        self.assertNotIn("cross-xlabel", HTML)
         self.assertIn('label: "시각"', HTML)
         self.assertIn("평균 실내 온도", HTML)
         self.assertIn("평균 실외 온도", HTML)
         self.assertIn("최저 배터리 온도", HTML)
         self.assertIn("최고 배터리 온도", HTML)
         batt = _fn("svgBatteryTemp")
+        self.assertIn("const W = 390, H = 180, L = 40, R = 44", batt)
+        self.assertNotIn("fmt(last.v", batt)
         self.assertIn("fill-opacity='0.16'", batt)
         self.assertNotIn("laneY", batt)
         self.assertIn("opacity:0.4", batt)

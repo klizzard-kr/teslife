@@ -273,6 +273,8 @@
     "뒷좌석 오른쪽 열선": "Rear right heat",
     "에어컨 켬": "A/C on",
     "에어컨 끔": "A/C off",
+    "A/C 켬": "A/C on",
+    "A/C 끔": "A/C off",
     "오토": "Auto",
     "수동": "Manual",
     "선": "Line",

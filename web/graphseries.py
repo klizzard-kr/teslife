@@ -58,6 +58,57 @@ def hold_through(points: list[Point], start: datetime, end: datetime) -> list[Po
     return points
 
 
+def gate_fan(
+    samples: list[Point],
+    prior: Point | None,
+    on_spans: list[Span],
+    start: datetime,
+    end: datetime,
+    power_known: bool,
+) -> list[list[Point]]:
+    """Fan speed counts only while HvacPower is On or Precondition.
+
+    A speed reported while the climate is off is ignored, including the value
+    carried in from before the window. With no HvacPower at all, the raw speed
+    is kept. The drawn level is 0 for the whole window when power stays off.
+    """
+    if not power_known:
+        return series_segments(samples, start, prior, end)
+
+    def on_at(ts: datetime) -> bool:
+        return any(a <= ts < b for a, b in on_spans)
+
+    on_at_start = on_at(start)
+    held = float(prior[1]) if on_at_start and prior is not None else 0.0
+    pts: list[Point] = [(start, held if on_at_start else 0.0)]
+    if not on_at_start:
+        held = 0.0
+    events: list[tuple[datetime, int, float]] = []
+    for ts, value in samples:
+        if start <= ts <= end:
+            events.append((ts, 1, float(value)))
+    for a, b in on_spans:
+        if start <= a <= end:
+            events.append((a, 0, 1.0))
+        if start < b <= end:
+            events.append((b, 2, 0.0))
+    events.sort()
+    hvac_on = on_at_start
+    for ts, kind, value in events:
+        if kind == 0:
+            hvac_on = True
+            pts.append((ts, held))
+        elif kind == 2:
+            hvac_on = False
+            pts.append((ts, 0.0))
+        elif hvac_on:
+            held = value
+            pts.append((ts, value))
+    if not pts or pts[-1][0] < end:
+        pts.append((end, held if hvac_on else 0.0))
+    return segments(pts)
+
+
 def series_segments(
     samples: list[Point],
     start: datetime,
@@ -344,7 +395,15 @@ def build_climate(
     passenger = setpoint_segments(samples("HvacRightTemperatureRequest"), prior("HvacRightTemperatureRequest"), on_spans, start)
     if not _differs(driver, passenger):
         passenger = []
-    fan = series_segments(_nums(samples(fan_name), start), start, _prior_num(prior(fan_name), start), end)
+    power_known = bool(samples("HvacPower") or prior("HvacPower"))
+    fan = gate_fan(
+        _nums(samples(fan_name), start),
+        _prior_num(prior(fan_name), start),
+        on_spans,
+        start,
+        end,
+        power_known,
+    )
 
     def level_series(name: str, level_of: Callable[[Any], float | None]) -> list[list[Point]]:
         numeric: list[Point] = []

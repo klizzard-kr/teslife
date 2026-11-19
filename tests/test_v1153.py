@@ -27,9 +27,11 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.1"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.2"', HTML)
+        self.assertLess(CHANGELOG.index("## v1.16.2"), CHANGELOG.index("## v1.16.1"))
         self.assertLess(CHANGELOG.index("## v1.16.1"), CHANGELOG.index("## v1.16.0"))
         self.assertLess(CHANGELOG.index("## v1.16.0"), CHANGELOG.index("## v1.15.3"))
+        self.assertLess(HTML.index('version: "1.16.2"'), HTML.index('version: "1.16.1"'))
         self.assertLess(HTML.index('version: "1.16.1"'), HTML.index('version: "1.16.0"'))
         self.assertLess(CHANGELOG.index("## v1.15.3"), CHANGELOG.index("## v1.15.2"))
         self.assertLess(HTML.index('version: "1.15.3"'), HTML.index('version: "1.15.2"'))
@@ -46,7 +48,7 @@ class TireUnitOnSingleValueTests(unittest.TestCase):
         src = (
             "let pressureUnit = 'psi'; const PSI_PER_BAR = 14.5038;\n"
             "function carTopSvg(){ return ''; }\n"
-            + _fn("fmtFromBar") + _fn("psiNum") + _fn("tirePairText") + _fn("tireCompareHtml")
+            + _fn("fmtTrim") + _fn("fmtFromBar") + _fn("psiNum") + _fn("tirePairText") + _fn("tireCompareHtml")
             + "const before = {fl:2.875, fr:2.88, rl:2.87, rr:2.90};\n"
             "const out = {\n"
             "  home: fmtFromBar(2.875),\n"

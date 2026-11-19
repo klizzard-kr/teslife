@@ -179,7 +179,7 @@ class ActionCopyTests(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def test_version(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.1"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.2"', HTML)
         self.assertIn("주행 알림: 상세에 배터리, 주행가능거리, 공기압을 보여요", HTML)
         self.assertIn("알림 상세: 중요한 항목을 주행·충전 상세와 같은 순서로 보여요", HTML)
         self.assertIn("공기압 경고: 39 psi보다 낮을 때만 알려요", HTML)

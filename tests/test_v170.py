@@ -45,7 +45,7 @@ class FormatTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("node"), "node not installed")
     def test_screen_fmt_matches(self) -> None:
-        src = _fn("fmt") + "process.stdout.write([fmt(292,1),fmt(307.2,1),fmt(10,2)].join(','));"
+        src = _fn("fmtTrim") + _fn("fmt") + "process.stdout.write([fmt(292,1),fmt(307.2,1),fmt(10,2)].join(','));"
         out = subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True)
         self.assertEqual(out.stdout, "292,307.2,10")
 
