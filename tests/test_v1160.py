@@ -56,6 +56,22 @@ class StreamFillTests(unittest.TestCase):
         segs = series_segments([(at(10), 19.0)], T0, None)
         self.assertEqual(segs, [[(at(10), 19.0)]])
 
+    def test_one_value_is_flat_across_the_window(self) -> None:
+        segs = series_segments([(at(10), 19.0)], T0, None, at(100))
+        self.assertEqual(segs, [[(T0, 19.0), (at(100), 19.0)]])
+
+    def test_the_last_value_holds_flat_to_the_end(self) -> None:
+        segs = series_segments(
+            [(at(10), 21.0), (at(20), 21.4)],
+            T0,
+            (at(-8), 20.6),
+            at(100),
+        )
+        self.assertEqual(
+            segs,
+            [[(T0, 20.6), (at(10), 21.0), (at(20), 21.4), (at(100), 21.4)]],
+        )
+
 
 class ClimateSeriesTests(unittest.TestCase):
     def _built(self, series, priors):
@@ -92,10 +108,29 @@ class ClimateSeriesTests(unittest.TestCase):
             "HvacSteeringWheelHeatLevel": [(at(30), 1), (at(200), 0)],
         }
         built = self._built(series, {})
-        self.assertIn("seat_left", built["bars"])
-        self.assertNotIn("seat_right", built["bars"])
-        self.assertEqual(built["bars"]["seat_left"], [(at(60), at(400), 2.0)])
-        self.assertIn("wheel", built["bars"])
+        self.assertIn("seat_left", built["heat"])
+        self.assertNotIn("seat_right", built["heat"])
+        self.assertNotIn("seat_left", built["bars"])
+        vals = [v for seg in built["heat"]["seat_left"] for _t, v in seg]
+        self.assertEqual(vals[:3], [0.0, 2.0, 0.0])
+        self.assertEqual(vals[-1], 0.0)
+        self.assertEqual(built["heat"]["seat_left"][0][-1][0], at(26 * 60))
+        wheel = [v for seg in built["wheel"] for _t, v in seg]
+        self.assertIn(1.0, wheel)
+        self.assertEqual(wheel[-1], 0.0)
+
+    def test_seat_cooling_is_a_level_line(self) -> None:
+        built = self._built({"SeatHeaterLeft": [(at(10), -3), (at(40), -1), (at(80), 0)]}, {})
+        self.assertNotIn("seat_left", built["heat"])
+        self.assertNotIn("cool_seat_left", built["bars"])
+        vals = [v for seg in built["cool"]["seat_left"] for _t, v in seg]
+        self.assertEqual(vals[0], 3.0)
+        self.assertIn(1.0, vals)
+        self.assertEqual(vals[-1], 0.0)
+
+    def test_one_inside_reading_spans_the_trip(self) -> None:
+        built = self._built({}, {"InsideTemp": (at(-5), 19.5)})
+        self.assertEqual(built["inside"], [[(T0, 19.5), (at(26 * 60), 19.5)]])
 
     def test_fan_auto_and_ac_flags_follow_the_samples(self) -> None:
         series = {
@@ -104,7 +139,8 @@ class ClimateSeriesTests(unittest.TestCase):
             "HvacACEnabled": [(at(120), True)],
         }
         built = self._built(series, {})
-        self.assertEqual([v for seg in built["fan"] for _t, v in seg], [3.0, 6.0, 0.0])
+        self.assertEqual([v for seg in built["fan"] for _t, v in seg], [3.0, 6.0, 0.0, 0.0])
+        self.assertEqual(built["fan"][0][-1][0], at(26 * 60))
         self.assertEqual(built["auto"][0][1], 1.0)
         self.assertEqual(built["auto"][-1][1], 0.0)
         self.assertEqual(built["ac"][-1][1], 1.0)
@@ -162,8 +198,33 @@ def _fn(name: str) -> str:
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
         self.assertIn('const APP_VERSION = "v1.16.1"', HTML)
-        self.assertIn("data-clim='cabin' class='on' role='tab' aria-selected='true'>온도</button>", HTML)
-        self.assertIn('"온도": "Temp"', (ROOT / "web" / "static" / "i18n.js").read_text(encoding="utf-8"))
+        tabs = _fn("climateTabs")
+        self.assertIn('["cabin", "실내·실외"]', tabs)
+        self.assertIn('["fan", "A/C·팬"]', tabs)
+        self.assertIn('["seats", "시트·핸들"]', tabs)
+        self.assertIn('["glass", "유리·와이퍼"]', tabs)
+        self.assertNotIn("<strong>공조</strong>", _fn("mountClimate"))
+        i18n = (ROOT / "web" / "static" / "i18n.js").read_text(encoding="utf-8")
+        self.assertIn('"온도": "Temp"', i18n)
+        self.assertIn('"시트·핸들": "Seats and wheel"', i18n)
+        self.assertIn('"유리·와이퍼": "Glass and wipers"', i18n)
+        self.assertIn('"성에 제거": "Defrost"', i18n)
+        fan = _fn("fanPieces")
+        self.assertIn('auto ? "" : "5 4"', fan)
+        legend = _fn("climateLegend")
+        self.assertIn('group("바람 세기"', legend)
+        self.assertIn('"바람 세기 " + levelWord(v)', _fn("climateRows"))
+        self.assertIn('label: "바람 세기"', _fn("climateRows"))
+        self.assertIn('group("색"', legend)
+        self.assertIn("에어컨 끔", legend)
+        self.assertIn('group("자리"', legend)
+        svg = _fn("climateSvg")
+        self.assertIn("const W = 390, L = 40, R = 44", svg)
+        self.assertNotIn("L = 104", svg)
+        self.assertNotIn("innerW + 4", svg)
+        self.assertIn("STEP_FILL", svg)
+        self.assertNotIn("끄", svg)
+        self.assertIn('return tab === "cabin" ? 1 : 0;', _fn("seriesOp"))
         self.assertIn("cross-xlabel", HTML)
         self.assertIn('label: "시각"', HTML)
         self.assertIn("배터리 히터", HTML)

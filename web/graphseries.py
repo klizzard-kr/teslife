@@ -3,9 +3,11 @@
 Every line starts at the window with the last value received before it.
 While the car sleeps nothing arrives, and the first report after it wakes is
 already the current value, so that earlier report is still current at the
-start. Inside the window, received values stay connected. A temperature line
-is the straight segments between those reports. A level such as a seat heater
-holds until the next report.
+start. A value that only arrives when it changes is then held flat until the
+window ends, so one report is a flat line across the whole trip or charge.
+Inside the window, received values stay connected. A temperature line is the
+straight segments between those reports. A level such as fan speed or a seat
+heater holds until the next report.
 """
 
 from __future__ import annotations
@@ -44,12 +46,28 @@ def segments(points: list[Point]) -> list[list[Point]]:
     return [cur] if cur else []
 
 
+def hold_through(points: list[Point], start: datetime, end: datetime) -> list[Point]:
+    """Hold the last value flat until `end`. One value covers the whole window."""
+    if not points or end <= start:
+        return points
+    if len(points) == 1:
+        value = points[0][1]
+        return [(start, value), (end, value)]
+    if points[-1][0] < end:
+        return [*points, (end, points[-1][1])]
+    return points
+
+
 def series_segments(
     samples: list[Point],
     start: datetime,
     prior: Point | None,
+    end: datetime | None = None,
 ) -> list[list[Point]]:
-    return segments(with_start_value(samples, start, prior))
+    points = with_start_value(samples, start, prior)
+    if end is not None:
+        points = hold_through(points, start, end)
+    return segments(points)
 
 
 def level_spans(
@@ -230,17 +248,34 @@ def _prior_num(prior: tuple[datetime, Any] | None, start: datetime) -> Point | N
     return (prior[0], number)
 
 
-BAR_KEYS = (
-    ("seat_left", "SeatHeaterLeft", "level"),
-    ("seat_right", "SeatHeaterRight", "level"),
-    ("seat_rear_left", "SeatHeaterRearLeft", "level"),
-    ("seat_rear_center", "SeatHeaterRearCenter", "level"),
-    ("seat_rear_right", "SeatHeaterRearRight", "level"),
-    ("wheel", "HvacSteeringWheelHeatLevel", "level"),
-    ("defrost", "DefrostMode", "flag"),
-    ("rear_defrost", "RearDefrostEnabled", "flag"),
-    ("wiper_heat", "WiperHeatEnabled", "flag"),
+# SeatHeater* is 0 off, 1–3 heat. A negative value is ventilation at that
+# magnitude (also 1–3). The steering-wheel heater is 0–3 and does not cool.
+SEAT_KEYS = (
+    ("seat_left", "SeatHeaterLeft"),
+    ("seat_right", "SeatHeaterRight"),
+    ("seat_rear_left", "SeatHeaterRearLeft"),
+    ("seat_rear_center", "SeatHeaterRearCenter"),
+    ("seat_rear_right", "SeatHeaterRearRight"),
 )
+FLAG_BARS = (
+    ("defrost", "DefrostMode"),
+    ("rear_defrost", "RearDefrostEnabled"),
+    ("wiper_heat", "WiperHeatEnabled"),
+)
+
+
+def _heat_level(value: Any) -> float | None:
+    number = _number(value)
+    if number is None:
+        return None
+    return 0.0 if number < 0 else number
+
+
+def _cool_level(value: Any) -> float | None:
+    number = _number(value)
+    if number is None:
+        return None
+    return abs(number) if number < 0 else 0.0
 
 
 def build_climate(
@@ -257,8 +292,8 @@ def build_climate(
         return priors.get(name)
 
     fan_name = "HvacFanSpeed" if samples("HvacFanSpeed") or prior("HvacFanSpeed") else "HvacFanStatus"
-    inside = series_segments(_nums(samples("InsideTemp"), start), start, _prior_num(prior("InsideTemp"), start))
-    outside = series_segments(_nums(samples("OutsideTemp"), start), start, _prior_num(prior("OutsideTemp"), start))
+    inside = series_segments(_nums(samples("InsideTemp"), start), start, _prior_num(prior("InsideTemp"), start), end)
+    outside = series_segments(_nums(samples("OutsideTemp"), start), start, _prior_num(prior("OutsideTemp"), start), end)
     hvac = level_spans(
         samples("HvacPower"), start, end, prior("HvacPower"),
         lambda value: 1.0 if _hvac_setpoint_on(value) else 0.0,
@@ -268,16 +303,42 @@ def build_climate(
     passenger = setpoint_segments(samples("HvacRightTemperatureRequest"), prior("HvacRightTemperatureRequest"), on_spans, start)
     if not _differs(driver, passenger):
         passenger = []
-    fan = series_segments(_nums(samples(fan_name), start), start, _prior_num(prior(fan_name), start))
+    fan = series_segments(_nums(samples(fan_name), start), start, _prior_num(prior(fan_name), start), end)
+
+    def level_series(name: str, level_of: Callable[[Any], float | None]) -> list[list[Point]]:
+        numeric: list[Point] = []
+        for ts, value in samples(name):
+            level = level_of(value)
+            if level is None or ts < start:
+                continue
+            numeric.append((ts, level))
+        prior_point = None
+        earlier = prior(name)
+        if earlier is not None and earlier[0] < start:
+            level = level_of(earlier[1])
+            if level is not None:
+                prior_point = (earlier[0], level)
+        segs = series_segments(numeric, start, prior_point, end)
+        if any(value > 0 for seg in segs for _ts, value in seg):
+            return segs
+        return []
+
+    heat: dict[str, list[list[Point]]] = {}
+    cool: dict[str, list[list[Point]]] = {}
+    for key, name in SEAT_KEYS:
+        heated = level_series(name, _heat_level)
+        cooled = level_series(name, _cool_level)
+        if heated:
+            heat[key] = heated
+        if cooled:
+            cool[key] = cooled
+    wheel = level_series("HvacSteeringWheelHeatLevel", _heat_level)
     bars: dict[str, list[tuple[datetime, datetime, float]]] = {}
-    for key, name, kind in BAR_KEYS:
-        if kind == "flag":
-            spans = level_spans(
-                samples(name), start, end, prior(name),
-                lambda value: 1.0 if _on_flag(value) else 0.0,
-            )
-        else:
-            spans = level_spans(samples(name), start, end, prior(name), _number)
+    for key, name in FLAG_BARS:
+        spans = level_spans(
+            samples(name), start, end, prior(name),
+            lambda value: 1.0 if _on_flag(value) else 0.0,
+        )
         if spans:
             bars[key] = spans
     return {
@@ -286,6 +347,9 @@ def build_climate(
         "set_driver": driver,
         "set_passenger": passenger,
         "fan": fan,
+        "heat": heat,
+        "cool": cool,
+        "wheel": wheel,
         "auto": _flag_points(samples("HvacAutoMode"), start, prior("HvacAutoMode")),
         "ac": _flag_points(samples("HvacACEnabled"), start, prior("HvacACEnabled")),
         "bars": bars,
@@ -301,7 +365,7 @@ def build_battery(
     """Battery min and max stay independent. A sample with min above max is kept."""
     def one(name: str) -> list[list[Point]]:
         return series_segments(
-            _nums(series.get(name) or [], start), start, _prior_num(priors.get(name), start),
+            _nums(series.get(name) or [], start), start, _prior_num(priors.get(name), start), end,
         )
 
     heater = level_spans(

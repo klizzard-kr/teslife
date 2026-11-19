@@ -580,6 +580,10 @@
     .chart-legend { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
     .chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
     .chart-legend i.dash { background: transparent; border-top: 2px dashed currentColor; height: 0; border-radius: 0; }
+    .clim-legend { align-items: center; }
+    .clim-legend .leg-group { display: inline-flex; align-items: center; gap: 8px; }
+    .clim-legend .leg-group em { font-style: normal; }
+    .clim-legend .leg-sep { width: 1px; align-self: stretch; min-height: 12px; background: var(--line); }
     .clim-tabs { display: flex; gap: 6px; margin: 8px 0 4px; }
     .clim-tabs button {
       border: 1px solid var(--line); background: transparent; color: var(--muted);
@@ -2024,7 +2028,7 @@
     }
     const APP_VERSION = "v1.16.1"; // display constant only
     const RELEASE_NOTES = [
-      { version: "1.16.1", features: ["에너지 상세: 공조 그래프와 배터리 온도는 에너지 상세 안에 있어요", "그래프: 누르면 그 시각(시:분:초)도 함께 보여요", "공조: 첫 탭 이름은 온도예요"], fixes: [] },
+      { version: "1.16.1", features: ["에너지 상세: 온도 그래프와 배터리 온도는 에너지 상세 안에 있어요", "그래프: 누르면 그 시각(시:분:초)도 함께 보여요", "공조: 탭은 실내·실외, A/C·팬, 시트·핸들, 유리·와이퍼예요", "공조: 팬과 시트는 단계 선이고, 마지막 값은 끝까지 이어져요"], fixes: [] },
       { version: "1.16.0", features: ["공조: 주행 상세는 실내, 팬, 시트·열선 탭이 있는 그래프 하나예요", "배터리 온도: 주행과 충전 상세에 최고·최저 선과 배터리 히터 막대가 따로 있어요", "그래프: 누르면 그 시각의 값이 따라와요"], fixes: ["충전 그래프: 맨 위 눈금은 충전기 정격이고, 배터리 온도 띠는 빠졌어요", "숫자: 상세와 홈 배터리는 소수 둘째 자리예요"] },
       { version: "1.15.3", features: ["공기압: 주행 상세에서 값 하나만 보일 때 숫자 뒤에 psi나 bar를 붙여요", "충전 그래프: 멈춘 구간은 범례의 충전 멈춤으로 봐요"], fixes: ["배터리: 시간별 말풍선은 시작과 끝만 보여주고, 정각 값이 이어져요", "충전 그래프: 온도 띠 시작의 짧은 세로 막대를 빼요"] },
       { version: "1.15.2", features: ["공기압 단위: 홈과 주행 상세의 단위가 작은 둥근 버튼이에요"], fixes: ["공기압: 주행 후 값이 없으면 주행 전 값만 보여요", "알림 스위치: 알림 받기를 끄면 아래 스위치는 체크 없이 회색이에요"] },
@@ -2899,11 +2903,36 @@
     }
 
 
-    const CLIM_BARS = [
-      ["seat_left", "운전석 시트"], ["seat_right", "조수석 시트"],
-      ["seat_rear_left", "뒷좌석 왼쪽"], ["seat_rear_center", "뒷좌석 가운데"], ["seat_rear_right", "뒷좌석 오른쪽"],
-      ["wheel", "핸들 열선"], ["defrost", "앞유리 성에 제거"], ["rear_defrost", "뒷유리 열선"], ["wiper_heat", "와이퍼 열선"]
+    const SEATS = [
+      {key: "seat_left", label: "운전석", dash: ""},
+      {key: "seat_right", label: "조수석", dash: "5 4"},
+      {key: "seat_rear_left", label: "뒷좌석 왼쪽", dash: "2 3"},
+      {key: "seat_rear_center", label: "뒷좌석 가운데", dash: "6 3 2 3"},
+      {key: "seat_rear_right", label: "뒷좌석 오른쪽", dash: "9 3"}
     ];
+    const HEAT_COLOR = "#e39a4a";
+    const COOL_COLOR = "#6ba8ef";
+    const WHEEL_COLOR = "#c45c26";
+    const CLIM_BARS = [
+      ["defrost", "성에 제거", "#d4a24a"],
+      ["rear_defrost", "뒷유리 열선", "#c9844a"],
+      ["wiper_heat", "와이퍼 열선", "#8aa0b5"]
+    ];
+    const STEP_FILL = 0.15;
+    const FAN_AXIS = 10;
+    const HEAT_AXIS = 3;
+    function coverWindow(seg, t0, t1) {
+      if (!seg || !seg.length) return [];
+      if (!isFinite(t0) || !isFinite(t1) || !(t1 > t0)) return seg.slice();
+      if (seg.length === 1) return [{t: t0, v: seg[0].v}, {t: t1, v: seg[0].v}];
+      const out = seg.slice();
+      if (out[out.length - 1].t < t1) out.push({t: t1, v: out[out.length - 1].v});
+      return out;
+    }
+    function usedSegs(raw) {
+      const segs = parseSegs(raw || []);
+      return segs.some(seg => seg.some(p => p.v > 0)) ? segs : [];
+    }
     function climateModel(data) {
       const bars = {};
       Object.keys(data.bars || {}).forEach(key => {
@@ -2912,16 +2941,35 @@
         })).filter(s => isFinite(s.t0) && isFinite(s.t1) && s.level);
         if (spans.length) bars[key] = spans;
       });
+      const heat = {};
+      const cool = {};
+      SEATS.forEach(seat => {
+        const heated = usedSegs((data.heat || {})[seat.key]);
+        const cooled = usedSegs((data.cool || {})[seat.key]);
+        if (heated.length) heat[seat.key] = heated;
+        if (cooled.length) cool[seat.key] = cooled;
+      });
       const auto = parseSegs([data.auto || []]);
       const ac = parseSegs([data.ac || []]);
       const model = {
         t0: Date.parse(data.start_ts), t1: Date.parse(data.end_ts),
         inside: parseSegs(data.inside), outside: parseSegs(data.outside),
         setDriver: parseSegs(data.set_driver), setPass: parseSegs(data.set_passenger),
-        fan: parseSegs(data.fan), auto: auto[0] || [], ac: ac[0] || [], bars: bars
+        fan: parseSegs(data.fan), wheel: usedSegs(data.wheel),
+        heat: heat, cool: cool, auto: auto[0] || [], ac: ac[0] || [], bars: bars
       };
-      model.any = model.inside.length || model.outside.length || model.setDriver.length || model.fan.length || Object.keys(bars).length;
+      model.any = model.inside.length || model.outside.length || model.setDriver.length || model.fan.length ||
+        model.wheel.length || Object.keys(heat).length || Object.keys(cool).length || Object.keys(bars).length;
       return model;
+    }
+    function climateTabs(model) {
+      const tabs = [];
+      if (model.inside.length || model.outside.length || model.setDriver.length) tabs.push(["cabin", "실내·실외"]);
+      if ((model.fan || []).some(seg => seg.some(p => p.v > 0))) tabs.push(["fan", "A/C·팬"]);
+      const seatOn = SEATS.some(seat => model.heat[seat.key] || model.cool[seat.key]) || model.wheel.length;
+      if (seatOn) tabs.push(["seats", "시트·핸들"]);
+      if (CLIM_BARS.some(row => model.bars[row[0]])) tabs.push(["glass", "유리·와이퍼"]);
+      return tabs;
     }
     function tempScale(model) {
       const vals = [];
@@ -2938,105 +2986,47 @@
       const span = (scale.max - scale.min) || 1;
       return top + ih - ((v - scale.min) / span) * ih;
     }
+    function fanAxisMax(model) {
+      let m = FAN_AXIS;
+      (model.fan || []).forEach(seg => seg.forEach(p => { if (p.v > m) m = Math.ceil(p.v); }));
+      return m;
+    }
+    function heatAxisMax(model) {
+      let m = HEAT_AXIS;
+      const look = (segs) => (segs || []).forEach(seg => seg.forEach(p => { if (p.v > m) m = Math.ceil(p.v); }));
+      SEATS.forEach(seat => { look(model.heat[seat.key]); look(model.cool[seat.key]); });
+      look(model.wheel);
+      return m;
+    }
+    function hasRight(tab) { return tab === "fan" || tab === "seats"; }
+    function rightMax(tab, model) { return tab === "seats" ? heatAxisMax(model) : fanAxisMax(model); }
     function fanPieces(model) {
       const out = [];
       let n = 0;
       (model.fan || []).forEach(seg => {
-        for (let i = 0; i < seg.length - 1; i++) {
-          const a = seg[i];
-          const b = seg[i + 1];
+        const drawn = coverWindow(seg, model.t0, model.t1);
+        for (let i = 0; i < drawn.length - 1; i++) {
+          const a = drawn[i];
+          const b = drawn[i + 1];
+          const auto = flagAt(model.auto, a.t);
           out.push({
             key: "fan" + (n++),
             color: flagAt(model.ac, a.t) ? "#2ec4b6" : "#6ba8ef",
-            dash: flagAt(model.auto, a.t) ? "5 4" : "",
-            pts: [a, {t: b.t, v: a.v}, b]
+            dash: auto ? "" : "5 4",
+            hold: [a, {t: b.t, v: a.v}],
+            step: [a, {t: b.t, v: a.v}, b]
           });
         }
       });
       return out;
     }
-    function climOpacity(tab, key) {
-      if (tab === "cabin") {
-        if (key === "inside" || key === "outside" || key === "setDriver" || key === "setPass") return 1;
-        return 0;
-      }
-      if (tab === "fan") {
-        if (key === "inside") return 0.28;
-        if (key === "fan") return 1;
-        return 0;
-      }
-      if (key === "inside") return 0.22;
-      if (key === "bars") return 1;
+    function seriesOp(tab, key) {
+      if (key === "inside") return tab === "cabin" ? 1 : 0;
+      if (tab === "cabin" && (key === "outside" || key === "setDriver" || key === "setPass")) return 1;
+      if (tab === "fan" && key === "fan") return 1;
+      if (tab === "seats" && (key === "heat" || key === "cool" || key === "wheel")) return 1;
+      if (tab === "glass" && key === "bars") return 1;
       return 0;
-    }
-    function polyPoints(pts, xOf, scale, top, ih) {
-      return pts.map(p => {
-        const x = xOf(p.t);
-        return (x == null ? 0 : x) + "," + yOn(p.v, scale, top, ih);
-      }).join(" ");
-    }
-    function climateSvg(model, fromTab, toTab, u) {
-      const W = 390, H = 210, L = 104, R = 32, T = 12, B = 22;
-      const innerW = W - L - R, innerH = H - T - B;
-      const t0 = model.t0, t1 = model.t1;
-      const xOf = (t) => L + (t1 === t0 ? innerW / 2 : ((t - t0) / (t1 - t0)) * innerW);
-      const temps = tempScale(model);
-      const fanScale = {min: 0, max: 10};
-      const scaleFor = (tab, key) => key === "fan" ? fanScale : temps;
-      const lines = [
-        {key: "inside", color: "#d5dee8", width: 1.8, dash: "", segs: model.inside, mode: "line"},
-        {key: "outside", color: "#9aa6b2", width: 1.4, dash: "", segs: model.outside, mode: "line"},
-        {key: "setDriver", color: "#f2a3c7", width: 1.8, dash: "", segs: model.setDriver, mode: "step"},
-        {key: "setPass", color: "#f2a3c7", width: 1.5, dash: "4 3", segs: model.setPass, mode: "step"}
-      ];
-      let html = "";
-      if (fromTab === toTab) {
-        html += climAxis(toTab, model, temps, L, innerW, T, innerH, xOf, 1);
-      } else {
-        html += climAxis(fromTab, model, temps, L, innerW, T, innerH, xOf, 1 - u);
-        html += climAxis(toTab, model, temps, L, innerW, T, innerH, xOf, u);
-      }
-      lines.forEach(series => {
-        const op0 = climOpacity(fromTab, series.key);
-        const op1 = climOpacity(toTab, series.key);
-        const op = op0 + (op1 - op0) * u;
-        if (op < 0.02 || !series.segs.length) return;
-        series.segs.forEach(seg => {
-          const drawn = decimate(seg, 180);
-          if (drawn.length < 2) return;
-          const stepped = series.mode === "step" ? stepPts(drawn) : drawn;
-          const y0 = stepped.map(p => yOn(p.v, scaleFor(fromTab, series.key), T, innerH));
-          const y1 = stepped.map(p => yOn(p.v, scaleFor(toTab, series.key), T, innerH));
-          const pts = stepped.map((p, i) => {
-            const x = xOf(p.t);
-            const y = y0[i] + (y1[i] - y0[i]) * u;
-            return (x == null ? 0 : x) + "," + y;
-          }).join(" ");
-          const dash = series.dash ? " stroke-dasharray='" + series.dash + "'" : "";
-          html += "<polyline fill='none' stroke='" + series.color + "' stroke-width='" + series.width +
-            "' stroke-opacity='" + op.toFixed(3) + "'" + dash + " points='" + pts + "'></polyline>";
-        });
-      });
-      fanPieces(model).forEach(piece => {
-        const op = (climOpacity(fromTab, "fan") + (climOpacity(toTab, "fan") - climOpacity(fromTab, "fan")) * u);
-        if (op < 0.02) return;
-        const y0 = piece.pts.map(p => yOn(p.v, fanScale, T, innerH));
-        const y1 = y0;
-        const pts = piece.pts.map((p, i) => (xOf(p.t) || 0) + "," + (y0[i] + (y1[i] - y0[i]) * u)).join(" ");
-        const dash = piece.dash ? " stroke-dasharray='" + piece.dash + "'" : "";
-        html += "<polyline fill='none' stroke='" + piece.color + "' stroke-width='1.8' stroke-opacity='" +
-          op.toFixed(3) + "'" + dash + " points='" + pts + "'></polyline>";
-      });
-      const barOp = climOpacity(fromTab, "bars") + (climOpacity(toTab, "bars") - climOpacity(fromTab, "bars")) * u;
-      if (barOp > 0.02) html += climBars(model, xOf, L, innerW, T, innerH, barOp);
-      [t0, (t0 + t1) / 2, t1].forEach((ms, i) => {
-        const px = xOf(ms);
-        const anchor = i === 0 ? "start" : i === 2 ? "end" : "middle";
-        html += "<text x='" + px + "' y='" + (H - 4) + "' fill='" + tone("chart-axis") + "' font-size='11' text-anchor='" + anchor + "'>" + fmtHm(new Date(ms).toISOString()) + "</text>";
-      });
-      html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
-      html += crossLine(T, innerH);
-      return chartSvg(html, H, t0, t1, L, innerW, T, innerH);
     }
     function stepPts(drawn) {
       const out = [];
@@ -3046,97 +3036,189 @@
       });
       return out;
     }
-    function climAxis(tab, model, temps, L, innerW, T, innerH, xOf, opacity) {
-      if (opacity < 0.04) return "";
-      let html = "";
-      const fill = tone("chart-axis");
-      if (tab === "fan") {
-        [[10, "10"], [5, "5"], [0, "끄"]].forEach(row => {
-          const y = yOn(row[0], {min: 0, max: 10}, T, innerH);
-          html += "<text x='" + (L + innerW + 4) + "' y='" + (y + 4) + "' fill='" + fill + "' font-size='11' opacity='" + opacity.toFixed(3) + "'>" + row[1] + "</text>";
-        });
-        return html;
-      }
-      if (tab === "seats") {
-        const rows = CLIM_BARS.filter(row => model.bars[row[0]]);
-        rows.forEach((row, i) => {
-          const y = T + (i + 0.5) * (innerH / Math.max(1, rows.length));
-          html += "<text x='" + (L - 6) + "' y='" + (y + 3) + "' fill='" + fill + "' font-size='10' text-anchor='end' opacity='" + opacity.toFixed(3) + "'>" + row[1] + "</text>";
-        });
-        return html;
-      }
-      const ticks = niceTicks(temps.min, temps.max);
-      ticks.forEach(v => {
-        const y = yOn(v, temps, T, innerH);
-        html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y + "' stroke='" + tone("chart-grid") + "' opacity='" + (opacity * 0.8).toFixed(3) + "'></line>";
-        html += "<text x='" + (L - 4) + "' y='" + (y + 4) + "' fill='" + fill + "' font-size='11' text-anchor='end' opacity='" + opacity.toFixed(3) + "'>" + fmt(v, 0) + "°C</text>";
-      });
-      return html;
+    function levelWord(v) {
+      if (!isFinite(v) || Math.abs(v) < 0.5) return "끔";
+      return String(Math.round(v));
     }
-    function climBars(model, xOf, L, innerW, T, innerH, opacity) {
-      const rows = CLIM_BARS.filter(row => model.bars[row[0]]);
-      if (!rows.length) return "";
-      const rh = innerH / rows.length;
+    function climateSvg(model, fromTab, toTab, u) {
+      const bars = CLIM_BARS.filter(row => model.bars[row[0]]);
+      const barStrip = bars.length ? 4 + bars.length * 10 : 0;
+      const W = 390, L = 40, R = 44, T = 12, lineH = 176;
+      const H = T + lineH + barStrip + 22;
+      const innerW = W - L - R, innerH = lineH;
+      const t0 = model.t0, t1 = model.t1;
+      const xOf = (t) => L + (t1 === t0 ? innerW / 2 : ((t - t0) / (t1 - t0)) * innerW);
+      const temps = tempScale(model);
+      const blend = (a, b) => a + (b - a) * u;
+      const opOf = (key) => blend(seriesOp(fromTab, key), seriesOp(toTab, key));
       let html = "";
-      rows.forEach((row, i) => {
-        const y = T + i * rh + rh * 0.22;
-        const h = Math.max(4, rh * 0.56);
-        model.bars[row[0]].forEach(span => {
-          const x0 = xOf(span.t0), x1 = xOf(span.t1);
-          if (x0 == null || x1 == null || x1 <= x0) return;
-          const cool = span.level < 0;
-          const strength = Math.min(1, Math.abs(span.level) / 3);
-          const op = (0.45 + 0.55 * (strength || 1)) * opacity;
-          html += "<rect x='" + x0 + "' y='" + y + "' width='" + (x1 - x0) + "' height='" + h +
-            "' rx='2' fill='" + (cool ? "#6ba8ef" : "#e39a4a") + "' fill-opacity='" + op.toFixed(3) + "'></rect>";
+      const tempOp = blend(fromTab === "cabin" ? 1 : 0, toTab === "cabin" ? 1 : 0);
+      const fill = tone("chart-axis");
+      const hasTemp = model.inside.length || model.outside.length || model.setDriver.length || model.setPass.length;
+      if (hasTemp && tempOp > 0.04) niceTicks(temps.min, temps.max).forEach(v => {
+        const y = yOn(v, temps, T, innerH);
+        html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
+          "' stroke='" + tone("chart-grid") + "' opacity='" + (tempOp * 0.8).toFixed(3) + "'></line>";
+        html += "<text x='" + (L - 4) + "' y='" + (y + 4) + "' fill='" + fill +
+          "' font-size='11' text-anchor='end' opacity='" + tempOp.toFixed(3) + "'>" + fmt(v, 0) + "°C</text>";
+      });
+      const seen = {};
+      const fromMax = hasRight(fromTab) ? rightMax(fromTab, model) : -1;
+      const toMax = hasRight(toTab) ? rightMax(toTab, model) : -1;
+      for (let v = 0; v <= Math.max(fromMax, toMax); v++) seen[v] = true;
+      Object.keys(seen).forEach(key => {
+        const v = Number(key);
+        const fromOn = v <= fromMax;
+        const toOn = v <= toMax;
+        const yOf = (tab) => yOn(v, {min: 0, max: rightMax(tab, model)}, T, innerH);
+        const y0 = fromOn ? yOf(fromTab) : yOf(toTab);
+        const y1 = toOn ? yOf(toTab) : yOf(fromTab);
+        const op = blend(fromOn ? 1 : 0, toOn ? 1 : 0);
+        if (op < 0.04) return;
+        const y = y0 + (y1 - y0) * u;
+        html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
+          "' stroke='" + tone("chart-grid") + "' opacity='" + (op * 0.28).toFixed(3) + "'></line>";
+        html += "<text x='" + (L - 4) + "' y='" + (y + 3) + "' fill='" + fill +
+          "' font-size='10' text-anchor='end' opacity='" + op.toFixed(3) + "'>" + v + "</text>";
+      });
+      const yLevel = (tab, v) => yOn(v, {min: 0, max: rightMax(hasRight(tab) ? tab : (hasRight(fromTab) ? fromTab : toTab), model)}, T, innerH);
+      const paintFill = (pts, color, op, fromS, toS) => {
+        if (op < 0.02 || pts.length < 2) return;
+        const yb = blend(yLevel(fromS, 0), yLevel(toS, 0));
+        const top = pts.map(p => {
+          const y = blend(yLevel(fromS, p.v), yLevel(toS, p.v));
+          return (xOf(p.t) || 0) + "," + y;
+        }).join(" ");
+        const x0 = xOf(pts[0].t) || 0;
+        const x1 = xOf(pts[pts.length - 1].t) || 0;
+        html += "<polygon points='" + top + " " + x1 + "," + yb + " " + x0 + "," + yb +
+          "' fill='" + color + "' fill-opacity='" + (STEP_FILL * op).toFixed(3) + "'></polygon>";
+      };
+      const paintLine = (pts, color, width, dash, op, yAt) => {
+        if (op < 0.02 || pts.length < 2) return;
+        const points = pts.map(p => (xOf(p.t) || 0) + "," + yAt(p)).join(" ");
+        const dashAttr = dash ? " stroke-dasharray='" + dash + "'" : "";
+        html += "<polyline fill='none' stroke='" + color + "' stroke-width='" + width +
+          "' stroke-opacity='" + op.toFixed(3) + "'" + dashAttr + " points='" + points + "'></polyline>";
+      };
+      const fromS = hasRight(fromTab) ? fromTab : (hasRight(toTab) ? toTab : "fan");
+      const toS = hasRight(toTab) ? toTab : fromS;
+      fanPieces(model).forEach(piece => paintFill(piece.hold, piece.color, opOf("fan"), fromS, toS));
+      const levelOp = (kind) => opOf(kind);
+      SEATS.forEach(seat => {
+        (model.heat[seat.key] || []).forEach(seg => {
+          paintFill(stepPts(decimate(coverWindow(seg, t0, t1), 180)), HEAT_COLOR, levelOp("heat"), fromS, toS);
+        });
+        (model.cool[seat.key] || []).forEach(seg => {
+          paintFill(stepPts(decimate(coverWindow(seg, t0, t1), 180)), COOL_COLOR, levelOp("cool"), fromS, toS);
         });
       });
-      return html;
+      (model.wheel || []).forEach(seg => {
+        paintFill(stepPts(decimate(coverWindow(seg, t0, t1), 180)), WHEEL_COLOR, levelOp("wheel"), fromS, toS);
+      });
+      const lines = [
+        {key: "inside", color: "#d5dee8", width: 1.6, dash: "", segs: model.inside, mode: "line"},
+        {key: "outside", color: "#9aa6b2", width: 1.4, dash: "", segs: model.outside, mode: "line"},
+        {key: "setDriver", color: "#f2a3c7", width: 1.8, dash: "", segs: model.setDriver, mode: "step"},
+        {key: "setPass", color: "#f2a3c7", width: 1.5, dash: "4 3", segs: model.setPass, mode: "step"}
+      ];
+      lines.forEach(series => {
+        const op = opOf(series.key);
+        if (op < 0.02) return;
+        series.segs.forEach(seg => {
+          const base = series.key === "setDriver" || series.key === "setPass" ? seg : coverWindow(seg, t0, t1);
+          const drawn = decimate(base, 180);
+          if (drawn.length < 2) return;
+          const stepped = series.mode === "step" ? stepPts(drawn) : drawn;
+          const yAt = (p) => {
+            const y0 = yOn(p.v, temps, T, innerH);
+            return y0;
+          };
+          paintLine(stepped, series.color, series.width, series.dash, op, yAt);
+        });
+      });
+      fanPieces(model).forEach(piece => {
+        const op = opOf("fan");
+        const yAt = (p) => blend(yLevel(fromS, p.v), yLevel(toS, p.v));
+        paintLine(piece.step, piece.color, 1.8, piece.dash, op, yAt);
+      });
+      SEATS.forEach(seat => {
+        (model.heat[seat.key] || []).forEach(seg => {
+          const stepped = stepPts(decimate(coverWindow(seg, t0, t1), 180));
+          paintLine(stepped, HEAT_COLOR, 1.8, seat.dash, opOf("heat"), p => blend(yLevel(fromS, p.v), yLevel(toS, p.v)));
+        });
+        (model.cool[seat.key] || []).forEach(seg => {
+          const stepped = stepPts(decimate(coverWindow(seg, t0, t1), 180));
+          paintLine(stepped, COOL_COLOR, 1.8, seat.dash, opOf("cool"), p => blend(yLevel(fromS, p.v), yLevel(toS, p.v)));
+        });
+      });
+      (model.wheel || []).forEach(seg => {
+        const stepped = stepPts(decimate(coverWindow(seg, t0, t1), 180));
+        paintLine(stepped, WHEEL_COLOR, 2.2, "", opOf("wheel"), p => blend(yLevel(fromS, p.v), yLevel(toS, p.v)));
+      });
+      const barOp = opOf("bars");
+      if (barOp > 0.02) {
+        bars.forEach((row, i) => {
+          const y = T + innerH + 4 + i * 10;
+          model.bars[row[0]].forEach(span => {
+            const x0 = xOf(span.t0), x1 = xOf(span.t1);
+            if (x0 == null || x1 == null || x1 <= x0) return;
+            html += "<rect x='" + x0 + "' y='" + y + "' width='" + (x1 - x0) + "' height='7' rx='2' fill='" +
+              row[2] + "' fill-opacity='" + barOp.toFixed(3) + "'></rect>";
+          });
+        });
+      }
+      [t0, (t0 + t1) / 2, t1].forEach((ms, i) => {
+        const px = xOf(ms);
+        const anchor = i === 0 ? "start" : i === 2 ? "end" : "middle";
+        html += "<text x='" + px + "' y='" + (H - 4) + "' fill='" + fill + "' font-size='11' text-anchor='" + anchor + "'>" + fmtHm(new Date(ms).toISOString()) + "</text>";
+      });
+      html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
+      html += crossLine(T, innerH);
+      return chartSvg(html, H, t0, t1, L, innerW, T, innerH);
     }
     function climateLegend(model, tab) {
       const bit = (color, label, dash) => "<span><i" + (dash ? " class='dash'" : "") + " style='" +
         (dash ? "color:" + color : "background:" + color) + "'></i>" + label + "</span>";
+      const group = (label, body) => "<span class='leg-group'><em>" + label + "</em>" + body + "</span>";
+      const join = (parts) => parts.filter(Boolean).join("<span class='leg-sep' aria-hidden='true'></span>");
       if (tab === "fan") {
-        let html = "";
-        if (model.inside.length) html += bit("#9aa6b2", "실내");
-        html += bit("#6ba8ef", "팬");
-        html += bit("#2ec4b6", "에어컨 켬");
-        html += bit("#6ba8ef", "오토", true);
-        return html;
+        return join([
+          group("바람 세기", bit("#6ba8ef", "오토") + bit("#6ba8ef", "수동", true)),
+          group("색", bit("#2ec4b6", "에어컨 켬") + bit("#6ba8ef", "에어컨 끔"))
+        ]);
       }
       if (tab === "seats") {
-        let html = "";
-        if (model.inside.length) html += bit("#9aa6b2", "실내");
-        html += bit("#e39a4a", "열선");
-        html += bit("#6ba8ef", "통풍");
-        html += "<span>진할수록 높은 단계</span>";
-        return html;
+        const used = SEATS.filter(seat => model.heat[seat.key] || model.cool[seat.key]);
+        const colors = [];
+        if (used.some(seat => model.heat[seat.key])) colors.push(bit(HEAT_COLOR, "열선"));
+        if (used.some(seat => model.cool[seat.key])) colors.push(bit(COOL_COLOR, "통풍"));
+        if (model.wheel.length) colors.push(bit(WHEEL_COLOR, "핸들 열선"));
+        const styles = used.map(seat => bit("#8aa0b5", seat.label, !!seat.dash)).join("");
+        return join([colors.length ? group("색", colors.join("")) : "", styles ? group("자리", styles) : ""]);
       }
-      let html = "";
-      if (model.inside.length) html += bit("#d5dee8", "실내");
-      if (model.outside.length) html += bit("#9aa6b2", "실외");
-      if (model.setDriver.length) html += bit("#f2a3c7", "설정 온도");
-      if (model.setPass.length) html += bit("#f2a3c7", "조수석 설정", true);
-      return html;
-    }
-    function levelText(level) {
-      const n = Number(level);
-      if (!isFinite(n) || n === 0) return null;
-      if (n < 0) return "통풍 " + Math.abs(n);
-      return "열선 " + n;
+      if (tab === "glass") {
+        const bits = CLIM_BARS.filter(row => model.bars[row[0]]).map(row => bit(row[2], row[1]));
+        return join(bits);
+      }
+      const parts = [];
+      if (model.inside.length) parts.push(bit("#d5dee8", "실내"));
+      if (model.outside.length) parts.push(bit("#9aa6b2", "실외"));
+      if (model.setDriver.length && model.setPass.length) {
+        parts.push(group("설정 온도", bit("#f2a3c7", "운전석") + bit("#f2a3c7", "조수석", true)));
+      } else if (model.setDriver.length) parts.push(bit("#f2a3c7", "설정 온도"));
+      return join(parts);
     }
     function climateRows(model, tab, ms) {
       const rows = [];
-      const add = (label, segs, mode, unit) => {
+      const add = (label, segs, mode, kind) => {
         if (!segs || !segs.length) return;
         const v = seriesValueAt(segs, ms, mode);
         if (v == null) return;
-        rows.push({label: label, text: (mode === "line" || unit === "°C") ? fmt(v, 1) + "°C" : fmt(v, v % 1 ? 1 : 0)});
+        rows.push({label: label, text: kind === "level" ? levelWord(v) : fmt(v, 1) + "°C"});
       };
-      if (tab !== "seats") {
-        if (tab === "cabin" || model.inside.length) add("실내", model.inside, "line", "°C");
-      } else if (model.inside.length) add("실내", model.inside, "line", "°C");
       if (tab === "cabin") {
+        if (model.inside.length) add("실내", model.inside, "line", "°C");
         add("실외", model.outside, "line", "°C");
         add("설정 온도", model.setDriver, "step", "°C");
         add("조수석 설정", model.setPass, "step", "°C");
@@ -3144,35 +3226,38 @@
       if (tab === "fan") {
         const v = seriesValueAt(model.fan, ms, "step");
         if (v != null) {
-          let text = fmt(v, v % 1 ? 1 : 0);
+          let text = "바람 세기 " + levelWord(v);
           if (flagAt(model.auto, ms)) text += " · 오토";
           if (flagAt(model.ac, ms)) text += " · 에어컨";
-          rows.push({label: "팬", text: text});
+          rows.push({label: "바람 세기", text: text});
         }
       }
       if (tab === "seats") {
+        SEATS.forEach(seat => {
+          if (model.heat[seat.key]) add(seat.label + " 열선", model.heat[seat.key], "step", "level");
+          if (model.cool[seat.key]) add(seat.label + " 통풍", model.cool[seat.key], "step", "level");
+        });
+        if (model.wheel.length) add("핸들 열선", model.wheel, "step", "level");
+      }
+      if (tab === "glass") {
         CLIM_BARS.forEach(row => {
-          const spans = model.bars[row[0]] || [];
-          const hit = spans.find(s => ms >= s.t0 && ms < s.t1);
-          if (!hit) return;
-          const text = levelText(hit.level) || "켜짐";
-          rows.push({label: row[1], text: text});
+          const hit = (model.bars[row[0]] || []).find(s => ms >= s.t0 && ms < s.t1);
+          if (hit) rows.push({label: row[1], text: "켜짐"});
         });
       }
       return rows;
     }
     function mountClimate(slot, data) {
       const model = climateModel(data);
-      if (!model.any || !isFinite(model.t0) || !isFinite(model.t1)) { slot.innerHTML = ""; return; }
-      slot.innerHTML = "<div class='detail-block'><div class='card-head'><strong>공조</strong></div>" +
-        "<div class='clim-tabs' role='tablist'>" +
-        "<button type='button' data-clim='cabin' class='on' role='tab' aria-selected='true'>온도</button>" +
-        "<button type='button' data-clim='fan' role='tab' aria-selected='false'>팬</button>" +
-        "<button type='button' data-clim='seats' role='tab' aria-selected='false'>시트·열선</button></div>" +
-        "<div class='curve-box clim-plot'></div><p class='chart-legend clim-legend'></p></div>";
+      const tabs = climateTabs(model);
+      if (!tabs.length || !isFinite(model.t0) || !isFinite(model.t1)) { slot.innerHTML = ""; return; }
+      slot.innerHTML = "<div class='detail-block'><div class='clim-tabs' role='tablist'>" +
+        tabs.map((t, i) => "<button type='button' data-clim='" + t[0] + "'" + (i ? "" : " class='on'") +
+          " role='tab' aria-selected='" + (i ? "false" : "true") + "'>" + t[1] + "</button>").join("") +
+        "</div><div class='curve-box clim-plot'></div><p class='chart-legend clim-legend'></p></div>";
       const plot = slot.querySelector(".clim-plot");
       const legend = slot.querySelector(".clim-legend");
-      let tab = "cabin";
+      let tab = tabs[0][0];
       let frame = 0;
       const paint = (from, to, blend) => {
         plot.innerHTML = climateSvg(model, from, to, blend);
@@ -3201,7 +3286,7 @@
       };
       slot.querySelectorAll("[data-clim]").forEach(btn => btn.addEventListener("click", () => go(btn.getAttribute("data-clim"))));
       bindCrosshair(plot, (ms) => climateRows(model, tab, ms));
-      paint("cabin", "cabin", 1);
+      paint(tab, tab, 1);
     }
     function batteryRows(model, ms) {
       const rows = [];
@@ -3233,7 +3318,7 @@
       const drawLine = (segs, color) => {
         let last = null;
         segs.forEach(seg => {
-          const drawn = decimate(seg, 180);
+          const drawn = decimate(coverWindow(seg, model.t0, model.t1), 180);
           if (drawn.length < 2) {
             if (drawn.length === 1) last = drawn[0];
             return;
