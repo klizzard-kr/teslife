@@ -48,7 +48,7 @@ class KwhPerPctTest(unittest.TestCase):
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PopupTextTest(unittest.TestCase):
     def run_js(self, expr: str, timeline: dict | None) -> str:
-        src = ("const fmt=(v,d)=>Number(v).toFixed(d);" "const known=v=>v!==null&&v!==undefined&&v!=='';"
+        src = (_fn("fmtTrim") + _fn("fmt") + "const known=v=>v!==null&&v!==undefined&&v!=='';"
                f"let batTimeline={json.dumps(timeline)};" + _fn("tlSpan") + _fn("tlKwh") + _fn("tlBattShare") + _fn("tlKwhPct") + _fn("modeSumLine") +
                f"process.stdout.write({expr});")
         return subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout
@@ -56,7 +56,7 @@ class PopupTextTest(unittest.TestCase):
     def test_converted_pct(self) -> None:
         """: one 약 in front for every bar 사용량: '약 X kWh (Y%)'."""
         self.assertEqual(self.run_js("tlKwhPct(0.48)", {"kwh_per_pct": 0.6}), "약 0.48 kWh (0.8%)")
-        self.assertEqual(self.run_js("tlKwhPct(12)", {"kwh_per_pct": 0.6}), "약 12.00 kWh (20%)")
+        self.assertEqual(self.run_js("tlKwhPct(12)", {"kwh_per_pct": 0.6}), "약 12 kWh (20%)")
         self.assertEqual(self.run_js("tlKwhPct(0.027)", {"kwh_per_pct": 0.6266}), "약 0.027 kWh (0.1% 미만)")
         self.assertEqual(self.run_js("tlKwhPct(1.15)", {"kwh_per_pct": 0.7667}), "약 1.15 kWh (1.5%)")
 
@@ -69,13 +69,13 @@ class PopupTextTest(unittest.TestCase):
             self.assertEqual(out.count("약"), 1, out)
 
     def test_mode_sum_line(self) -> None:
-        """Header is '4시간 6분 · 1.20 kWh (1.5%)': no 총/사용량, share like the bars, 약 only when estimated."""
+        """Header is '4시간 6분 · 1.2 kWh (1.5%)': no 총/사용량, share like the bars, 약 only when estimated."""
         self.assertEqual(self.run_js("modeSumLine(246, 1.2, false)", {"kwh_per_pct": 0.8}),
-                         "4시간 6분 · 1.20 kWh (1.5%)")
+                         "4시간 6분 · 1.2 kWh (1.5%)")
         self.assertEqual(self.run_js("modeSumLine(246, 1.2, true)", {"kwh_per_pct": 0.8}),
-                         "4시간 6분 · 약 1.20 kWh (1.5%)")
+                         "4시간 6분 · 약 1.2 kWh (1.5%)")
         self.assertEqual(self.run_js("modeSumLine(246, 1.2, false)", {"kwh_per_pct": None}),
-                         "4시간 6분 · 1.20 kWh")
+                         "4시간 6분 · 1.2 kWh")
         self.assertEqual(self.run_js("modeSumLine(90, null, false)", {"kwh_per_pct": 0.8}), "1시간 30분")
         for expr in ("modeSumLine(246, 1.2, false)", "modeSumLine(246, 1.2, true)"):
             out = self.run_js(expr, {"kwh_per_pct": 0.8})
@@ -85,10 +85,10 @@ class PopupTextTest(unittest.TestCase):
     def test_drive_share_has_no_yak(self) -> None:
         """Drive usage keeps the measured kWh and appends the same battery share, without 약."""
         self.assertEqual(self.run_js("tlKwh(1.2, false) + tlBattShare(1.2)", {"kwh_per_pct": 0.8}),
-                         "1.20 kWh (1.5%)")
+                         "1.2 kWh (1.5%)")
         self.assertEqual(self.run_js("tlKwh(1.2, false) + tlBattShare(1.2)", {"kwh_per_pct": None}),
-                         "1.20 kWh")
-        self.assertEqual(self.run_js("tlKwh(1.2, false) + tlBattShare(1.2)", None), "1.20 kWh")
+                         "1.2 kWh")
+        self.assertEqual(self.run_js("tlKwh(1.2, false) + tlBattShare(1.2)", None), "1.2 kWh")
         self.assertEqual(self.run_js("tlKwh(0.027, false) + tlBattShare(0.027)", {"kwh_per_pct": 0.6266}),
                          "0.027 kWh (0.1% 미만)")
 

@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from ledger import new_id, parse_date, require_non_negative
+from web.formatnum import format_number
 
 KINDS = ("summer", "winter", "all_season")
 KIND_KO = {"summer": "여름용", "winter": "겨울용", "all_season": "사계절"}
@@ -300,16 +301,16 @@ def set_status(conn, vid, s: dict[str, Any], current_odo: float | None,
     alerts = []
     if tread_min is not None:
         if tread_min <= TREAD_LEGAL_MM + 1e-9:
-            text = (f"Tread about {tread_min:.1f} mm · at the 1.6 mm legal limit, replace now" if en else
-                    f"홈 깊이 약 {tread_min:.1f} mm · 법정 한계(1.6 mm)라 바로 교체")
+            text = (f"Tread about {format_number(tread_min, 1)} mm · at the 1.6 mm legal limit, replace now" if en else
+                    f"홈 깊이 약 {format_number(tread_min, 1)} mm · 법정 한계(1.6 mm)라 바로 교체")
             alerts.append({"code": "tread", "level": "overdue", "text": text})
         elif s["kind"] == "winter" and tread_min <= TREAD_WINTER_MM + 1e-9:
-            text = (f"Tread about {tread_min:.1f} mm · winter tires lose snow grip from 4 mm" if en else
-                    f"홈 깊이 약 {tread_min:.1f} mm · 겨울용은 4 mm부터 눈길 성능이 떨어져요")
+            text = (f"Tread about {format_number(tread_min, 1)} mm · winter tires lose snow grip from 4 mm" if en else
+                    f"홈 깊이 약 {format_number(tread_min, 1)} mm · 겨울용은 4 mm부터 눈길 성능이 떨어져요")
             alerts.append({"code": "tread", "level": "soon", "text": text})
         elif tread_min <= TREAD_CHECK_MM + 1e-9:
-            text = (f"Tread about {tread_min:.1f} mm · 3 mm or less, plan a replacement" if en else
-                    f"홈 깊이 약 {tread_min:.1f} mm · 3 mm 이하라 교체를 준비할 때예요")
+            text = (f"Tread about {format_number(tread_min, 1)} mm · 3 mm or less, plan a replacement" if en else
+                    f"홈 깊이 약 {format_number(tread_min, 1)} mm · 3 mm 이하라 교체를 준비할 때예요")
             alerts.append({"code": "tread", "level": "soon", "text": text})
     wk = s.get("warranty_km")
     if wk and km_total >= WARRANTY_RATIO * float(wk):

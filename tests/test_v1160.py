@@ -209,11 +209,11 @@ class ChargeAxisTests(unittest.TestCase):
 
 class SocDisplayTests(unittest.TestCase):
     def test_detail_battery_uses_two_decimals_and_equal_shown_values_collapse(self) -> None:
-        self.assertEqual(format_soc_change(64.6, 63.4), "64.60% → 63.40%")
-        self.assertEqual(format_soc_change(65.0, 63.4), "65.00% → 63.40%")
-        self.assertEqual(format_soc_change(65.004, 65.001), "65.00%")
+        self.assertEqual(format_soc_change(64.6, 63.4), "64.6% → 63.4%")
+        self.assertEqual(format_soc_change(65.0, 63.4), "65% → 63.4%")
+        self.assertEqual(format_soc_change(65.004, 65.001), "65%")
         self.assertEqual(format_soc_change(80.04, 79.96), "80.04% → 79.96%")
-        self.assertEqual(format_soc_change(64.6, 64.6), "64.60%")
+        self.assertEqual(format_soc_change(64.6, 64.6), "64.6%")
         self.assertNotIn("%p", format_soc_change(64.6, 63.4))
 
 
@@ -225,7 +225,7 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.2"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.3"', HTML)
         tabs = _fn("climateTabs")
         self.assertIn('["cabin", "실내·실외", cabinOn]', tabs)
         self.assertIn('["fan", "A/C·팬", fanOn]', tabs)
@@ -272,7 +272,7 @@ class PageGraphTests(unittest.TestCase):
         self.assertIn("최저 배터리 온도", HTML)
         self.assertIn("최고 배터리 온도", HTML)
         batt = _fn("svgBatteryTemp")
-        self.assertIn("const W = 390, H = 180, L = 40, R = 44", batt)
+        self.assertIn("const W = 390, H = 180, L = 40, R = 16", batt)
         self.assertNotIn("fmt(last.v", batt)
         self.assertIn("fill-opacity='0.16'", batt)
         self.assertNotIn("laneY", batt)
@@ -314,9 +314,9 @@ class PageGraphTests(unittest.TestCase):
             + "process.stdout.write(JSON.stringify(out));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertIn("64.60% → 63.40%", got[0])
+        self.assertIn("64.6% → 63.4%", got[0])
         self.assertIn("soc-delta down", got[0])
-        self.assertIn(">65.00%<", got[1])
+        self.assertIn(">65%<", got[1])
         self.assertNotIn("soc-delta", got[1])
         self.assertIn("80.04% → 79.96%", got[2])
         self.assertIn("soc-delta down", got[2])

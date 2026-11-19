@@ -10,6 +10,8 @@ import math
 import re
 from datetime import datetime, timedelta, timezone
 
+from web.formatnum import format_number
+
 KST = timezone(timedelta(hours=9))
 WHEEL_LABELS = ("앞 왼쪽", "앞 오른쪽", "뒤 왼쪽", "뒤 오른쪽")
 # Trip detail, then the alert-only rows. Tires stay last, as on the request.
@@ -343,7 +345,7 @@ def _km_text(value: str | float | int) -> str:
     if isinstance(value, str):
         return value
     if isinstance(value, float) and not value.is_integer():
-        return f"{value:.1f}".rstrip("0").rstrip(".")
+        return format_number(value, 1)
     if isinstance(value, float):
         return str(int(value))
     return str(value)
@@ -473,7 +475,7 @@ def _kw_text(text: str) -> str:
     found = re.search(r"(\d+(?:\.\d+)?)\s*kW(?!h)", text, re.I)
     if not found:
         return ""
-    return f"{float(found.group(1)):.1f}"
+    return format_number(float(found.group(1)), 1)
 
 
 def charge_start_summary(body: str, details: list | None = None) -> str:
@@ -808,10 +810,7 @@ def _full_rows(details: list | None, body: str) -> list[list[str]]:
 
 def format_soc(value: float) -> str:
     """Home battery text: one decimal, trailing zeros removed, then %."""
-    text = f"{float(value):.1f}"
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text + "%"
+    return format_number(float(value), 1) + "%"
 
 
 def _soc_hundredths(value: float) -> int:
@@ -820,9 +819,11 @@ def _soc_hundredths(value: float) -> int:
 
 
 def _soc_hundredths_text(hundredths: int) -> str:
+    """Two stored hundredths, then the same trailing-zero rule as format_number."""
     sign = "-" if hundredths < 0 else ""
     whole, frac = divmod(abs(int(hundredths)), 100)
-    return f"{sign}{whole}.{frac:02d}"
+    text = f"{sign}{whole}.{frac:02d}"
+    return text.rstrip("0").rstrip(".")
 
 
 def format_soc_change(start: float | None, end: float | None) -> str | None:

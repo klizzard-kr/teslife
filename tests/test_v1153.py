@@ -27,10 +27,12 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.2"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.3"', HTML)
+        self.assertLess(CHANGELOG.index("## v1.16.3"), CHANGELOG.index("## v1.16.2"))
         self.assertLess(CHANGELOG.index("## v1.16.2"), CHANGELOG.index("## v1.16.1"))
         self.assertLess(CHANGELOG.index("## v1.16.1"), CHANGELOG.index("## v1.16.0"))
         self.assertLess(CHANGELOG.index("## v1.16.0"), CHANGELOG.index("## v1.15.3"))
+        self.assertLess(HTML.index('version: "1.16.3"'), HTML.index('version: "1.16.2"'))
         self.assertLess(HTML.index('version: "1.16.2"'), HTML.index('version: "1.16.1"'))
         self.assertLess(HTML.index('version: "1.16.1"'), HTML.index('version: "1.16.0"'))
         self.assertLess(CHANGELOG.index("## v1.15.3"), CHANGELOG.index("## v1.15.2"))
@@ -143,27 +145,22 @@ class ChargeChartTests(unittest.TestCase):
             + body
         )
 
-    def test_pause_moves_to_the_legend(self) -> None:
+    def test_charge_power_fills_under_the_line_and_has_no_pause_mark(self) -> None:
         src = self._src(
             "const power = [\n"
             "  {ts:'2026-11-13T12:38:00Z', v:7},\n"
             "  {ts:'2026-11-13T12:50:00Z', v:0},\n"
             "  {ts:'2026-11-13T13:10:00Z', v:6}\n"
             "];\n"
-            "const steady = [{ts:'2026-11-13T12:38:00Z', v:7},{ts:'2026-11-13T13:51:00Z', v:6}];\n"
-            "const out = {\n"
-            "  pause: svgChargeBand(power, [], '2026-11-13T13:51:00Z'),\n"
-            "  run: svgChargeBand(steady, [], '2026-11-13T13:51:00Z')\n"
-            "};\n"
-            "process.stdout.write(JSON.stringify(out));"
+            "const html = svgChargeBand(power, [], '2026-11-13T13:51:00Z');\n"
+            "process.stdout.write(JSON.stringify({html: html}));"
         )
         got = _node(src)
-        self.assertNotIn(">충전 멈춤</text>", got["pause"])
-        self.assertIn(">충전 멈춤</span>", got["pause"])
-        self.assertIn("background:#8aa0b5;opacity:0.18", got["pause"])
-        self.assertIn("fill-opacity=\"0.18\"", got["pause"])
-        self.assertLess(got["pause"].index("충전 전력"), got["pause"].index("충전 멈춤"))
-        self.assertNotIn("충전 멈춤", got["run"])
+        self.assertNotIn("충전 멈춤", got["html"])
+        self.assertNotIn("fill-opacity=\"0.18\"", got["html"])
+        self.assertIn("<polygon", got["html"])
+        self.assertIn('fill-opacity="0.15"', got["html"])
+        self.assertIn("충전 전력", got["html"])
 
     def test_power_chart_has_no_temperature_band(self) -> None:
         src = self._src(
@@ -174,7 +171,8 @@ class ChargeChartTests(unittest.TestCase):
         )
         got = _node(src)
         self.assertNotIn("#e7c8a4", got["html"])
-        self.assertNotIn("<polygon", got["html"])
+        self.assertIn("<polygon", got["html"])
+        self.assertIn('fill-opacity="0.15"', got["html"])
         self.assertIn(">11<", got["html"])
         self.assertIn("충전 전력", got["html"])
 

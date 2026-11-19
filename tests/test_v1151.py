@@ -79,11 +79,11 @@ class RegenRatioTests(unittest.TestCase):
 
 class BatteryLineTests(unittest.TestCase):
     def test_one_decimal_without_delta_and_equal_is_one_number(self) -> None:
-        self.assertEqual(format_soc_change(64.6, 63.4), "64.60% → 63.40%")
-        self.assertEqual(format_soc_change(65.0, 63.4), "65.00% → 63.40%")
-        self.assertEqual(format_soc_change(65.04, 63.0), "65.04% → 63.00%")
+        self.assertEqual(format_soc_change(64.6, 63.4), "64.6% → 63.4%")
+        self.assertEqual(format_soc_change(65.0, 63.4), "65% → 63.4%")
+        self.assertEqual(format_soc_change(65.04, 63.0), "65.04% → 63%")
         self.assertEqual(format_soc_change(80.04, 79.96), "80.04% → 79.96%")
-        self.assertEqual(format_soc_change(64.6, 64.6), "64.60%")
+        self.assertEqual(format_soc_change(64.6, 64.6), "64.6%")
         self.assertNotIn("%p", format_soc_change(64.6, 63.4))
         summary = trip_end_summary(
             "10 km",
@@ -102,22 +102,22 @@ class BatteryLineTests(unittest.TestCase):
             "]; process.stdout.write(JSON.stringify(out));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertIn("64.60% → 63.40%", got[0])
+        self.assertIn("64.6% → 63.4%", got[0])
         self.assertNotIn("%p", got[0])
         self.assertIn("soc-delta down", got[0])
         self.assertIn("width:1.2%", got[0])
-        self.assertIn("65.00% → 63.40%", got[1])
+        self.assertIn("65% → 63.4%", got[1])
         self.assertNotIn("%p", got[1])
-        self.assertIn(">65.00%<", got[2])
+        self.assertIn(">65%<", got[2])
         self.assertNotIn("soc-delta", got[2])
         self.assertNotIn("→", got[2])
-        self.assertIn(">64.60%<", got[3])
+        self.assertIn(">64.6%<", got[3])
         self.assertNotIn("soc-delta", got[3])
 
 
 class TireUnitTests(unittest.TestCase):
     def test_trip_label_toggles_the_saved_unit(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.2"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.3"', HTML)
         self.assertIn("BAR_PER_PSI = 0.0689476", HTML)
         self.assertIn('class=\'unit-tag tire-unit\'', HTML)
         self.assertIn("주행 전 → 후", HTML)

@@ -203,7 +203,7 @@ class PressureTests(unittest.TestCase):
             seen.append(convert_psi_text(stored, "bar"))
             seen.append(convert_psi_text(stored, "psi"))
         self.assertEqual(seen[0], seen[2])
-        self.assertEqual(seen[0], "앞 왼쪽 2.92 bar, 권장 2.90 bar")
+        self.assertEqual(seen[0], "앞 왼쪽 2.92 bar, 권장 2.9 bar")
         self.assertEqual(seen[1], stored)
         self.assertEqual(convert_psi_text(stored, "psi"), stored)
         self.assertEqual(format_psi_number(42.4, "bar"), "2.92 bar")

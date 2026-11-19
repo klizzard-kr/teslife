@@ -1798,7 +1798,10 @@
     function formatNum(n, opts) {
       const num = Number(n);
       let use = opts;
-      if (use && num === Math.trunc(num)) use = Object.assign({}, use, { minimumFractionDigits: 0 });
+      // Grouped numbers use the same trailing-zero rule as fmtTrim: 1,057.0 -> 1,057, 1,039.6 stays.
+      if (use && (use.maximumFractionDigits != null || num === Math.trunc(num))) {
+        use = Object.assign({}, use, { minimumFractionDigits: 0 });
+      }
       if (uiLang() !== "en") {
         return use == null ? num.toLocaleString("ko-KR") : num.toLocaleString("ko-KR", use);
       }
@@ -1855,13 +1858,13 @@
       const v = Number(bar);
       if (!isFinite(v)) return String(bar);
       if (pressureUnit === "bar") return fmtTrim(v, 2) + ' bar';
-      return (v * PSI_PER_BAR).toFixed(1) + " psi";
+      return fmtTrim(v * PSI_PER_BAR, 1) + " psi";
     }
     function fmtFromPsi(psi) {
       const v = Number(psi);
       if (!isFinite(v)) return String(psi);
       if (pressureUnit === "bar") return fmtTrim(v * BAR_PER_PSI, 2) + ' bar';
-      return v.toFixed(1) + " psi";
+      return fmtTrim(v, 1) + " psi";
     }
     function convertPressureText(text) {
       return String(text == null ? "" : text).replace(/(\d+(?:\.\d+)?)\s*psi/gi, function (_, n) {
@@ -2031,8 +2034,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.2"; // display constant only
+    const APP_VERSION = "v1.16.3"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.3", features: ["그래프: 오른쪽 눈금이 없는 그림은 오른쪽 끝까지 채워요"], fixes: [] },
       { version: "1.16.2", features: ["홈: 배터리 끝의 0은 빼요", "공조: 꺼진 탭은 흐리고 누를 수 없어요", "그래프: 세로 선 아래 시각 글자는 빼요"], fixes: ["공조: 공조가 꺼져 있으면 팬 1을 그리지 않아요", "공조: 왼쪽 온도 눈금이 시각에 가리지 않아요"] },
       { version: "1.16.1", features: ["에너지 상세: 온도 그래프와 배터리 온도는 에너지 상세 안에 있어요", "그래프: 누르면 그 시각(시:분:초)도 함께 보여요", "공조: 탭은 실내·실외, A/C·팬, 시트·핸들, 유리·와이퍼예요", "공조: 팬과 시트는 단계 선이고, 마지막 값은 끝까지 이어져요"], fixes: [] },
       { version: "1.16.0", features: ["공조: 주행 상세는 실내, 팬, 시트·열선 탭이 있는 그래프 하나예요", "배터리 온도: 주행과 충전 상세에 최고·최저 선과 배터리 히터 막대가 따로 있어요", "그래프: 누르면 그 시각의 값이 따라와요"], fixes: ["충전 그래프: 맨 위 눈금은 충전기 정격이고, 배터리 온도 띠는 빠졌어요", "숫자: 상세와 홈 배터리는 소수 둘째 자리예요"] },
@@ -2125,10 +2129,7 @@
       return fmtTrim(n, digits == null ? 0 : digits);
     }
     function fmtFixed(n, digits) {
-      if (n === null || n === undefined || n === "") return "—";
-      const v = Number(n);
-      if (!isFinite(v)) return String(n);
-      return v.toFixed(digits == null ? 2 : digits);
+      return fmtTrim(n, digits == null ? 2 : digits);
     }
 
     function fmtKrw(n) {
@@ -2171,12 +2172,12 @@
     function fmtChargeDetail(live) {
       const parts = [];
       const kw = Number(latestSignal(live, ["ACChargingPower", "DCChargingPower"]));
-      if (isFinite(kw) && kw > 0) parts.push(kw.toFixed(1) + " kW");
+      if (isFinite(kw) && kw > 0) parts.push(fmt(kw, 1) + " kW");
       const amps = Number(signalValue(live, "ChargeAmps"));
       if (isFinite(amps) && amps > 0) parts.push(Math.round(amps) + " A");
       const ttf = Number(signalValue(live, "TimeToFullCharge"));
       let tail = "";
-      if (isFinite(ttf) && ttf > 0) tail = "완충까지 " + (ttf < 1 ? Math.max(1, Math.round(ttf * 60)) + "분" : ttf.toFixed(1) + "시간");
+      if (isFinite(ttf) && ttf > 0) tail = "완충까지 " + (ttf < 1 ? Math.max(1, Math.round(ttf * 60)) + "분" : fmt(ttf, 1) + "시간");
       const limit = Number(signalValue(live, "ChargeLimitSoc"));
       if (isFinite(limit) && limit > 0) tail += (tail ? " " : "") + "(한도 " + Math.round(limit) + "%)";
       if (tail) parts.push(tail);
@@ -2697,19 +2698,13 @@
         const label = pmax >= 10 && Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : fmt(v, 1);
         html += '<text x="' + (L - 4) + '" y="' + (yP(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + label + "</text>";
       });
-      let paused = false;
-      for (let i = 0; i < samples.length - 1; i++) {
-        const a = samples[i], b = samples[i + 1];
-        if (!(a.v === 0 || b.v === 0)) continue;
-        const x0 = x(a.ts), x1 = x(b.ts);
-        if (x0 == null || x1 == null || x1 <= x0) continue;
-        html += '<rect x="' + x0 + '" y="' + T + '" width="' + (x1 - x0) + '" height="' + innerH +
-          '" fill="' + tone("chart-axis") + '" fill-opacity="0.18"></rect>';
-        paused = true;
-      }
+      const y0 = yP(0);
       segs.forEach(seg => {
         const drawn = decimate((seg || []).filter(p => p.v != null && x(p.ts) != null), 240);
         if (drawn.length < 2) return;
+        const area = drawn.map(p => x(p.ts) + "," + yP(p.v)).join(" ") + " " +
+          x(drawn[drawn.length - 1].ts) + "," + y0 + " " + x(drawn[0].ts) + "," + y0;
+        html += '<polygon points="' + area + '" fill="' + tone("chart-charge") + '" fill-opacity="0.15"></polygon>';
         html += '<polyline fill="none" stroke="' + tone("chart-charge") + '" stroke-width="1.8" points="' +
           drawn.map(p => x(p.ts) + "," + yP(p.v)).join(" ") + '"></polyline>';
       });
@@ -2720,12 +2715,8 @@
       });
       html += '<rect class="cross-hit" x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="transparent"></rect>';
       html += crossLine(T, innerH);
-      let legend = "<p class='chart-legend'><span><i style='background:" + tone("chart-charge") + "'></i>충전 전력</span>";
-      if (paused) {
-        legend += "<span><i style='background:" + tone("chart-axis") + ";opacity:0.18'></i>충전 멈춤</span>";
-      }
-      legend += "</p>";
-      return chartSvg(html, H, t0, t1, L, innerW, T, innerH) + legend;
+      return chartSvg(html, H, t0, t1, L, innerW, T, innerH) +
+        "<p class='chart-legend'><span><i style='background:" + tone("chart-charge") + "'></i>충전 전력</span></p>";
     }
 
     function paintChargeTemps(minC, maxC) {
@@ -2739,7 +2730,7 @@
       });
     }
     function svgLine(points, opts) {
-      const W = 390, H = opts.h || 150, L = 40, R = 44, T = 10, B = 34;
+      const W = 390, H = opts.h || 150, L = 40, R = 16, T = 10, B = 34;
       const innerW = W - L - R, innerH = H - T - B;
       const steps = opts.steps || [];
       const segs = (opts.segments && opts.segments.length) ? opts.segments : [points];
@@ -2760,7 +2751,7 @@
       const dec = ticks.some(v => Math.abs(v - Math.round(v)) > 1e-9) ? 1 : 0;
       ticks.forEach(v => {
         html += '<line x1="' + L + '" y1="' + y(v) + '" x2="' + (W - R) + '" y2="' + y(v) + '" stroke="' + tone("chart-grid") + '"></line>';
-        html += '<text x="' + (L - 4) + '" y="' + (y(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + v.toFixed(dec) + "</text>";
+        html += '<text x="' + (L - 4) + '" y="' + (y(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + fmt(v, dec) + "</text>";
       });
       if (ymin < 0) html += '<line x1="' + L + '" y1="' + y(0) + '" x2="' + (W - R) + '" y2="' + y(0) + '" stroke="' + tone("chart-axis") + '"></line>';
       const drawn = [];
@@ -3329,7 +3320,7 @@
       return rows;
     }
     function svgBatteryTemp(model) {
-      const W = 390, H = 180, L = 40, R = 44, T = 16, B = 46;
+      const W = 390, H = 180, L = 40, R = 16, T = 16, B = 46;
       const innerW = W - L - R, innerH = H - T - B;
       const vals = [];
       model.min.forEach(seg => seg.forEach(p => vals.push(p.v)));
@@ -4482,7 +4473,7 @@
         if (d) rows.push(["걸린 시간", d]);
       }
       const meters = pathMeters(piece.pts.map(p => [p.lat, p.lon]));
-      if (meters >= 1) rows.push(["거리", meters >= 1000 ? (meters / 1000).toFixed(1) + " km" : Math.round(meters) + " m"]);
+      if (meters >= 1) rows.push(["거리", meters >= 1000 ? fmt(meters / 1000, 1) + " km" : Math.round(meters) + " m"]);
       if (piece.speeds && piece.speeds.length) {
         const avg = piece.speeds.reduce((s, v) => s + v, 0) / piece.speeds.length;
         rows.push(["평균", Math.round(avg) + " km/h"]);
@@ -4799,7 +4790,9 @@
       const n = Math.abs(hundredths);
       const whole = Math.floor(n / 100);
       const frac = n % 100;
-      return (neg ? "-" : "") + whole + "." + String(frac).padStart(2, "0");
+      let s = whole + "." + String(frac).padStart(2, "0");
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return (neg ? "-" : "") + s;
     }
     function socDetailText(start, end) {
       const a = start == null || start === "" ? null : socHundredths(start);
@@ -4845,7 +4838,7 @@
       if (bar == null || bar === "") return null;
       const v = Number(bar);
       if (!isFinite(v)) return null;
-      return pressureUnit === "bar" ? v.toFixed(2) : (v * PSI_PER_BAR).toFixed(1);
+      return pressureUnit === "bar" ? fmtTrim(v, 2) : fmtTrim(v * PSI_PER_BAR, 1);
     }
     function tirePairText(beforeBar, afterBar) {
       const a = psiNum(beforeBar);
@@ -5460,8 +5453,7 @@
     function fmtKmGrouped(n) {
       const v = Number(n);
       if (!isFinite(v)) return "";
-      const digits = Math.abs(v - Math.round(v)) < 1e-6 ? 0 : 1;
-      return formatNum(v, { minimumFractionDigits: digits, maximumFractionDigits: digits }) + " km";
+      return formatNum(v, { maximumFractionDigits: 1 }) + " km";
     }
     function catAmountText(b) {
       const miss = b.missing_amount || 0;

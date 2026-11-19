@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 import sqlite3
 
+from web.formatnum import format_number
+
 BAR_PER_PSI = 0.0689476
 PSI_PER_BAR = 14.5038
 _PSI = re.compile(r"(\d+(?:\.\d+)?)\s*psi", re.I)
@@ -47,15 +49,15 @@ def set_pressure_unit(conn: sqlite3.Connection, vehicle_id: str, unit: str) -> s
 def format_psi_number(psi: float, unit: str) -> str:
     """Format one stored psi. The caller keeps the original number."""
     if normalize_unit(unit) == "bar":
-        return f"{float(psi) * BAR_PER_PSI:.2f} bar"
-    return f"{float(psi):.1f} psi"
+        return format_number(float(psi) * BAR_PER_PSI, 2) + " bar"
+    return format_number(float(psi), 1) + " psi"
 
 
 def format_bar_number(bar: float, unit: str) -> str:
     """Format one stored bar. psi display uses the same factor as the home tiles."""
     if normalize_unit(unit) == "bar":
-        return f"{float(bar):.2f} bar"
-    return f"{float(bar) * PSI_PER_BAR:.1f} psi"
+        return format_number(float(bar), 2) + " bar"
+    return format_number(float(bar) * PSI_PER_BAR, 1) + " psi"
 
 
 def convert_psi_text(text: str, unit: str) -> str:
