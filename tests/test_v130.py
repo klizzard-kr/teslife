@@ -399,7 +399,7 @@ class HttpTests(unittest.TestCase):
 
 class PageTests(unittest.TestCase):
     def test_release_note(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.1"', HTML)
         self.assertIn("알림 웹훅: 발신 키가 있으면 그 키로 웹훅을 보내요", HTML)
         example = (ROOT / ".env.example").read_text(encoding="utf-8")
         self.assertIn("BOT_NOTIFY_WEBHOOK_KEY=", example)

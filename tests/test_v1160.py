@@ -161,7 +161,9 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.1"', HTML)
+        self.assertIn("cross-xlabel", HTML)
+        self.assertIn('label: "시각"', HTML)
         self.assertIn("배터리 히터", HTML)
         self.assertNotIn('oneRow("히터"', HTML)
         self.assertIn("시트·열선", HTML)
@@ -184,6 +186,14 @@ class PageGraphTests(unittest.TestCase):
         self.assertEqual(got["step"], 10)
         self.assertIsNone(got["gap"])
         self.assertEqual(got["late"], 30)
+
+    def test_crosshair_time_is_seoul_hms(self) -> None:
+        src = (
+            _fn("fmtSeoulTime")
+            + "process.stdout.write(fmtSeoulTime('2026-11-19T05:32:05Z'));"
+        )
+        got = subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout
+        self.assertEqual(got, "14:32:05")
 
     def test_detail_bar_uses_the_shown_hundredths(self) -> None:
         src = (
