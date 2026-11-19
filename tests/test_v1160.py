@@ -144,19 +144,17 @@ class BatterySeriesTests(unittest.TestCase):
 
 
 class ChargeAxisTests(unittest.TestCase):
-    def test_rated_output_is_the_top_when_it_is_near_the_peak(self) -> None:
+    def test_rated_output_is_always_the_top(self) -> None:
         self.assertEqual(charge_axis_top(7.0, 6.6), 7.0)
         self.assertEqual(charge_axis_top(50.0, 47.0), 50.0)
+        self.assertEqual(charge_axis_top(350.0, 80.0), 350.0)
+        self.assertEqual(charge_axis_top(7.0, 7.4), 7.0)
+        self.assertEqual(charge_axis_top(11.0, 0), 11.0)
 
     def test_missing_charger_uses_the_observed_peak(self) -> None:
         self.assertEqual(charge_axis_top(None, 11.2), 11.2)
         self.assertEqual(charge_axis_top(0, 11.2), 11.2)
-
-    def test_a_much_stronger_charger_caps_at_the_observed_peak(self) -> None:
-        self.assertEqual(charge_axis_top(350.0, 80.0), 80.0)
-
-    def test_a_peak_above_the_rating_is_not_clipped(self) -> None:
-        self.assertEqual(charge_axis_top(7.0, 7.4), 7.4)
+        self.assertEqual(charge_axis_top(None, None), 1.0)
 
 
 class SocDisplayTests(unittest.TestCase):

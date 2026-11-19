@@ -15,10 +15,6 @@ from datetime import datetime, timedelta
 from typing import Any, Callable
 
 STREAM_GAP = timedelta(minutes=15)
-# A charger rated above this multiple of the observed peak is stronger than
-# this session used. The axis then stops at the observed peak so the curve
-# fills the chart. A rating at or under the multiple stays the top of the axis.
-RATED_HEADROOM = 1.5
 
 Point = tuple[datetime, float]
 Span = tuple[datetime, datetime]
@@ -361,22 +357,14 @@ def build_battery(
 def charge_axis_top(rated: float | None, observed: float | None) -> float:
     """Top of the charge-power axis, in kW.
 
-    The selected charger's rated output is the top. With no charger, the top is
-    the observed peak. A rating more than RATED_HEADROOM times that peak is
-    capped at the peak so a much stronger stall does not flatten the curve.
-    A peak above the rating is not clipped.
+    A recorded charger rating is always the top, even when this session's peak
+    is much lower or a moment went above the rating. With no rating, the top
+    is the observed peak.
     """
+    if rated is not None and rated > 0:
+        return float(rated)
     obs = float(observed) if observed is not None and observed > 0 else 0.0
-    if rated is None or rated <= 0:
-        return obs if obs > 0 else 1.0
-    rate = float(rated)
-    if obs <= 0:
-        return rate
-    if obs > rate:
-        return obs
-    if rate > obs * RATED_HEADROOM:
-        return obs
-    return rate
+    return obs if obs > 0 else 1.0
 
 
 def flag_at(points: list[Point], t: datetime, gap: timedelta = STREAM_GAP) -> bool:
