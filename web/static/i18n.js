@@ -251,6 +251,7 @@
     "배터리 히터": "Battery heater",
     "배터리 온도": "Battery temperature",
     "실내": "Inside",
+    "온도": "Temp",
     "실외": "Outside",
     "설정 온도": "Set temperature",
     "조수석 설정": "Passenger set",

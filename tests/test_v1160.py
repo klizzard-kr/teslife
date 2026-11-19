@@ -162,6 +162,8 @@ def _fn(name: str) -> str:
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
         self.assertIn('const APP_VERSION = "v1.16.1"', HTML)
+        self.assertIn("data-clim='cabin' class='on' role='tab' aria-selected='true'>온도</button>", HTML)
+        self.assertIn('"온도": "Temp"', (ROOT / "web" / "static" / "i18n.js").read_text(encoding="utf-8"))
         self.assertIn("cross-xlabel", HTML)
         self.assertIn('label: "시각"', HTML)
         self.assertIn("배터리 히터", HTML)
