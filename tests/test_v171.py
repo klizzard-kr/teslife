@@ -285,7 +285,7 @@ class DetailTests(unittest.TestCase):
         self.assertNotIn("한국시간", str(event))
 
     def test_detail_row_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.15.3"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.0"', HTML)
         trip = HTML[HTML.index("function tripSheetHtml"):HTML.index("function openTripSheet")]
         self.assertLess(trip.index('oneRow("평균 속도"'), trip.index('oneRow("최고 속도"'))
         self.assertLess(trip.index('oneRow("최고 속도"'), trip.index('oneRow("급가속"'))
@@ -295,7 +295,10 @@ class DetailTests(unittest.TestCase):
             trip,
         )
         self.assertLess(trip.index('oneRow("최대 출력"'), trip.index('oneRow("최대 회생"'))
-        self.assertLess(trip.index('oneRow("최대 회생"'), trip.index('oneRow("실내 온도"'))
+        self.assertLess(trip.index('oneRow("최대 회생"'), trip.index("trip-sheet-power"))
+        self.assertIn("trip-climate-slot", trip)
+        self.assertIn("trip-battery-slot", trip)
+        self.assertNotIn('oneRow("실내 온도"', trip)
         self.assertIn(
             "kvBlock(energyHead) + \"<div class='curve-box' id='trip-sheet-power'></div>\" + kvBlock(energyTail)",
             trip,

@@ -814,34 +814,34 @@ def format_soc(value: float) -> str:
     return text + "%"
 
 
-def _soc_tenths(value: float) -> int:
-    """One-decimal percent as tenths. Matches Math.round(value * 10) for a battery %."""
-    return int(math.floor(float(value) * 10 + 0.5))
+def _soc_hundredths(value: float) -> int:
+    """Two-decimal percent as hundredths. Matches Math.round(value * 100)."""
+    return int(math.floor(float(value) * 100 + 0.5))
 
 
-def _soc_tenths_text(tenths: int) -> str:
-    whole, frac = divmod(abs(int(tenths)), 10)
-    if frac == 0:
-        return str(whole)
-    return f"{whole}.{frac}"
+def _soc_hundredths_text(hundredths: int) -> str:
+    sign = "-" if hundredths < 0 else ""
+    whole, frac = divmod(abs(int(hundredths)), 100)
+    return f"{sign}{whole}.{frac:02d}"
 
 
 def format_soc_change(start: float | None, end: float | None) -> str | None:
-    """Detail battery line. One decimal, trailing .0 dropped, no delta.
+    """Detail battery line. Two decimals, no delta.
 
     Equal displayed values are a single number. A missing side is left out.
+    The comparison uses the hundredths that are actually shown.
     """
     if start is None and end is None:
         return None
     if start is None:
-        return _soc_tenths_text(_soc_tenths(end)) + "%"  # type: ignore[arg-type]
+        return _soc_hundredths_text(_soc_hundredths(end)) + "%"  # type: ignore[arg-type]
     if end is None:
-        return _soc_tenths_text(_soc_tenths(start)) + "%"
-    a = _soc_tenths(start)
-    b = _soc_tenths(end)
+        return _soc_hundredths_text(_soc_hundredths(start)) + "%"
+    a = _soc_hundredths(start)
+    b = _soc_hundredths(end)
     if a == b:
-        return _soc_tenths_text(a) + "%"
-    return f"{_soc_tenths_text(a)}% → {_soc_tenths_text(b)}%"
+        return _soc_hundredths_text(a) + "%"
+    return f"{_soc_hundredths_text(a)}% → {_soc_hundredths_text(b)}%"
 
 
 def _list_battery(text: str) -> str:

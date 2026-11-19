@@ -27,7 +27,8 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.15.3"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.0"', HTML)
+        self.assertLess(CHANGELOG.index("## v1.16.0"), CHANGELOG.index("## v1.15.3"))
         self.assertLess(CHANGELOG.index("## v1.15.3"), CHANGELOG.index("## v1.15.2"))
         self.assertLess(HTML.index('version: "1.15.3"'), HTML.index('version: "1.15.2"'))
         self.assertIn("숫자 뒤에 지금 고른 단위", CHANGELOG)
@@ -134,7 +135,7 @@ class ChargeChartTests(unittest.TestCase):
             " return s.replace(/0+$/, '').replace(/\\.$/, ''); }\n"
             "function fmtHm(){ return '00:00'; }\n"
             "function tone(name){ return name === 'chart-axis' ? '#8aa0b5' : '#3dd68c'; }\n"
-            + _fn("svgChargeBand")
+            + _fn("decimate") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
             + body
         )
 
@@ -160,56 +161,18 @@ class ChargeChartTests(unittest.TestCase):
         self.assertLess(got["pause"].index("충전 전력"), got["pause"].index("충전 멈춤"))
         self.assertNotIn("충전 멈춤", got["run"])
 
-    def test_short_mixed_sliver_is_dropped_and_a_real_step_stays(self) -> None:
+    def test_power_chart_has_no_temperature_band(self) -> None:
         src = self._src(
             "const end = '2026-11-13T13:51:00Z';\n"
             "const power = [{ts:'2026-11-13T12:38:00Z', v:7},{ts:end, v:6}];\n"
-            "const artifact = [\n"
-            "  {ts:'2026-11-13T13:13:00Z', min:20},\n"
-            "  {ts:'2026-11-13T13:13:20Z', max:40},\n"
-            "  {ts:'2026-11-13T13:13:40Z', min:32, max:36}\n"
-            "];\n"
-            "const real = [\n"
-            "  {ts:'2026-11-13T13:13:00Z', min:20, max:40},\n"
-            "  {ts:'2026-11-13T13:13:20Z', min:32, max:36}\n"
-            "];\n"
-            "const steps = [\n"
-            "  {ts:'2026-11-13T12:20:00Z', min:30, max:34},\n"
-            "  {ts:'2026-11-13T12:40:00Z', min:33, max:37}\n"
-            "];\n"
-            "function heights(html){\n"
-            "  const out = [];\n"
-            "  const re = /<polygon points=\"([^\"]+)\"/g;\n"
-            "  let m;\n"
-            "  while ((m = re.exec(html))) {\n"
-            "    const ys = m[1].split(' ').map(p => Number(p.split(',')[1]));\n"
-            "    out.push(Math.max.apply(null, ys) - Math.min.apply(null, ys));\n"
-            "  }\n"
-            "  return out;\n"
-            "}\n"
-            "function xs(html){\n"
-            "  const polys = [];\n"
-            "  const re = /<polygon points=\"([^\"]+)\"/g;\n"
-            "  let m;\n"
-            "  while ((m = re.exec(html))) {\n"
-            "    polys.push(m[1].split(' ').map(p => Number(p.split(',')[0])));\n"
-            "  }\n"
-            "  return polys;\n"
-            "}\n"
-            "const a = svgChargeBand(power, artifact, end);\n"
-            "const r = svgChargeBand(power, real, end);\n"
-            "const s = svgChargeBand(power, steps, end);\n"
-            "const sx = xs(s);\n"
-            "process.stdout.write(JSON.stringify({\n"
-            "  artifact: heights(a),\n"
-            "  real: heights(r),\n"
-            "  shared: sx.length > 1 && sx[0][1] === sx[1][0]\n"
-            "}));"
+            "const html = svgChargeBand(power, [{ts:'2026-11-13T13:13:00Z', min:20, max:40}], end, 11);\n"
+            "process.stdout.write(JSON.stringify({html: html}));"
         )
         got = _node(src)
-        self.assertTrue(all(h < 40 for h in got["artifact"]), got["artifact"])
-        self.assertTrue(any(h > 80 for h in got["real"]), got["real"])
-        self.assertTrue(got["shared"])
+        self.assertNotIn("#e7c8a4", got["html"])
+        self.assertNotIn("<polygon", got["html"])
+        self.assertIn(">11<", got["html"])
+        self.assertIn("충전 전력", got["html"])
 
 
 class HourBoundaryTests(unittest.TestCase):
