@@ -17,7 +17,7 @@ def _block(src: str, start: str, end: str) -> str:
 
 class AlertToggleLayoutTests(unittest.TestCase):
     def test_version_and_note(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.9"', HTML)
         self.assertIn("알림 설정: 스위치는 각 항목의 오른쪽 끝에 있어요", HTML)
         self.assertIn("알림 설정: 알림 받기 스위치는 제목 오른쪽에 있어요", HTML)
         self.assertIn("알림 안내: 알림이 막히면 쓰는 브라우저에 맞는 설정 방법을 알려요", HTML)
@@ -51,6 +51,14 @@ class AlertToggleLayoutTests(unittest.TestCase):
         self.assertIn("border: 0", _block(HTML, "#settings-notify .pref-row {", "}"))
         group = _block(HTML, "#push-prefs .section-label {", "}")
         self.assertIn("border-top: 1px solid var(--line)", group)
+        self.assertIn("margin: 16px 0 0", group)
+        self.assertIn("padding: 14px 0 0", group)
+        self.assertIn("font-size: 17px", group)
+        self.assertIn("font-weight: 700", group)
+        self.assertIn("color: var(--text)", group)
+        plain = ".section-label { margin: 8px 0 0; color: var(--text-secondary); font-size: 13px; font-weight: 600; }"
+        self.assertIn(plain, HTML)
+        self.assertEqual(HTML.count(plain), 1)
         self.assertNotIn(".section-label:first-child", HTML)
         dim = _block(HTML, "function setKindSwitches", "function renderPrefs")
         self.assertIn("is-off", dim)

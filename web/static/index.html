@@ -846,6 +846,7 @@
     #settings-notify .pref-row { border: 0; }
     #push-prefs .section-label {
       margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line);
+      font-size: 17px; font-weight: 700; color: var(--text);
     }
     #push-prefs.is-off { opacity: 0.45; }
     #push-prefs.is-off .pref-row { pointer-events: none; }
@@ -2034,8 +2035,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.8"; // display constant only
+    const APP_VERSION = "v1.16.9"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.9", features: [], fixes: ["알림 설정: 주행·충전·보안·차량 제목을 아래 항목보다 크고 진하게 바꿨어요"] },
       { version: "1.16.8", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선은 그래프 밖을 누르면 닫혀요"] },
       { version: "1.16.7", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선이 스크롤하면 그래프와 함께 움직여요"] },
       { version: "1.16.6", features: ["시간별 사용: 충전량은 충전 기록이고, 사용량은 0보다 클 때만 따로 보여요", "온도 눈금: 공조와 배터리 온도는 5℃ 간격이에요", "그래프: 시각은 시작과 끝만 있고, 맨 위·맨 아래 가로선이 있어요"], fixes: ["시간별 사용: 배터리가 안 오른 시간에 주행이 없으면 주차 색이에요"] },
