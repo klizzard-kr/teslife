@@ -531,6 +531,129 @@ def _hour_bounds(
     return prev, inside[-1]
 
 
+def charge_hour_shares(
+    total: float,
+    start: datetime,
+    end: datetime,
+    samples: list[tuple[datetime, float]],
+    hours: list[tuple[datetime, datetime]],
+) -> list[float]:
+    """Split one charge record across hour windows. The parts sum to ``total``.
+
+    Each upward step of the charge-energy counter is spread across the hours it
+    covers. With no sample inside the charge, the split follows clock time.
+    """
+    n = len(hours)
+    if n == 0 or total <= 0 or end <= start:
+        return [0.0] * n
+    weights = _signal_weights(start, end, samples, hours)
+    if weights is None:
+        span = _sec(start, end)
+        weights = []
+        for a, b in hours:
+            lo, hi = max(a, start), min(b, end)
+            weights.append(_sec(lo, hi) / span if hi > lo and span > 0 else 0.0)
+    whole = sum(weights)
+    if whole <= 0:
+        return [0.0] * n
+    parts = [total * w / whole for w in weights]
+    rounded = [round(p, 4) for p in parts]
+    drift = round(total - sum(rounded), 4)
+    if abs(drift) >= 1e-4:
+        i = max(range(n), key=lambda k: rounded[k])
+        rounded[i] = round(rounded[i] + drift, 4)
+    return rounded
+
+
+def _signal_weights(
+    start: datetime,
+    end: datetime,
+    samples: list[tuple[datetime, float]],
+    hours: list[tuple[datetime, datetime]],
+) -> list[float] | None:
+    pts = sorted((t, v) for t, v in samples if v is not None)
+    inside = [(t, v) for t, v in pts if start < t <= end + timedelta(seconds=60)]
+    if not inside:
+        return None
+    prev_v = None
+    for t, v in pts:
+        if t <= start:
+            prev_v = v
+    if prev_v is None:
+        prev_t, prev_v = inside[0]
+        inside = inside[1:]
+    else:
+        prev_t = start
+    weights = [0.0] * len(hours)
+
+    def add(t0: datetime, t1: datetime, rise: float) -> None:
+        if rise <= 0 or t1 <= t0:
+            return
+        clip = min(t1, end)
+        span = _sec(t0, t1)
+        if span <= 0:
+            return
+        if clip > t0:
+            for i, (a, b) in enumerate(hours):
+                lo, hi = max(a, t0), min(b, clip)
+                if hi > lo:
+                    weights[i] += rise * _sec(lo, hi) / span
+        if t1 > end:
+            for i, (a, b) in enumerate(hours):
+                if a <= end - timedelta(microseconds=1) < b or a < end <= b:
+                    weights[i] += rise * _sec(end, t1) / span
+                    break
+
+    for t, v in inside:
+        if v + 1e-9 < prev_v:
+            prev_t, prev_v = t, v
+            continue
+        add(max(prev_t, start), t, v - prev_v)
+        prev_t, prev_v = t, v
+    if sum(weights) <= 1e-9:
+        return None
+    return weights
+
+
+def _hour_use(a: datetime, b: datetime, lanes, er, bl, life) -> tuple[float | None, bool]:
+    """Usage overlapping [a, b), the same figures the mode bars already show."""
+    from process.net_energy import DEFAULT_NET_RATIO, boundary_level, kwh_per_pct, pack_kwh, value_near
+
+    bars = {lane["key"]: lane.get("bars") or [] for lane in lanes}
+    total, est = 0.0, False
+    for bar in bars.get("drive", []):
+        lo, hi = max(parse_ts(bar["start_ts"]), a), min(parse_ts(bar["end_ts"]), b)
+        if hi <= lo:
+            continue
+        start_level = boundary_level(bl, lo, at_end=False)
+        end_level = boundary_level(bl, hi, at_end=True)
+        drop = (start_level - end_level) if start_level is not None and end_level is not None else None
+        per = kwh_per_pct(value_near(er, hi), value_near(bl, hi))
+        if pack_kwh(drop, per) is not None and per:
+            total += round(max(0.0, drop or 0.0), 1) * per
+            continue
+        e0, e1 = _interp(life, lo), _interp(life, hi)
+        if e0 is not None and e1 is not None and e1 > e0:
+            total += (e1 - e0) * DEFAULT_NET_RATIO
+            est = True
+    for key in ("parked", "sentry"):
+        for bar in bars.get(key, []):
+            ba, bb = parse_ts(bar["start_ts"]), parse_ts(bar["end_ts"])
+            lo, hi = max(ba, a), min(bb, b)
+            if hi <= lo:
+                continue
+            shown = _shown_kwh(bar)
+            dur = _sec(ba, bb)
+            if shown is None or shown <= 0 or dur <= 0:
+                continue
+            total += shown * _sec(lo, hi) / dur
+            if bar.get("estimated") or (bar.get("kwh") is None and bar.get("kwh_estimate") is not None):
+                est = True
+    if total <= 1e-6:
+        return None, False
+    return round(total, 4), est
+
+
 def _hours(conn, vid: str, d0: datetime, end: datetime, lanes, cover: list[Span]) -> list[dict[str, Any]]:
     lo, hi = format_ts(d0), format_ts(d0 + timedelta(days=1))
     # Keep the sample from before midnight. The old filter dropped it, so hour 0
@@ -539,6 +662,24 @@ def _hours(conn, vid: str, d0: datetime, end: datetime, lanes, cover: list[Span]
     level = sorted(((t, v) for t, v in level if v is not None), key=lambda p: p[0])
     er = [(t, _as_float(v)) for t, v in _series(conn, vid, "EnergyRemaining", lo, hi)]
     er = [(t, v) for t, v in er if v is not None]
+    life = [(t, f) for t, v in _series(conn, vid, "LifetimeEnergyUsed", lo, hi) if (f := _as_float(v)) is not None]
+    windows = [(d0 + timedelta(hours=h), d0 + timedelta(hours=h + 1)) for h in range(24)]
+    charge_by_hour = [0.0] * 24
+    signal_hi = format_ts(d0 + timedelta(days=1, minutes=2))
+    ac = [(t, f) for t, v in _series(conn, vid, "ACChargingEnergyIn", lo, signal_hi) if (f := _as_float(v)) is not None]
+    dc = [(t, f) for t, v in _series(conn, vid, "DCChargingEnergyIn", lo, signal_hi) if (f := _as_float(v)) is not None]
+    for start_ts, end_ts, kind, kwh in _rows(
+        conn,
+        "SELECT start_ts, end_ts, kind, kwh_added FROM charges "
+        "WHERE vehicle_id = ? AND end_ts > ? AND start_ts < ?",
+        (vid, format_ts(d0), format_ts(d0 + timedelta(days=1))),
+    ):
+        if not start_ts or not end_ts or kwh is None or float(kwh) <= 0:
+            continue
+        series = dc if kind == "DC" else ac
+        parts = charge_hour_shares(float(kwh), parse_ts(start_ts), parse_ts(end_ts), series, windows)
+        for i, part in enumerate(parts):
+            charge_by_hour[i] += part
     charges = _charge_spans(conn, vid, d0, d0 + timedelta(days=1), end)
     out = []
     for h in range(24):
@@ -569,5 +710,11 @@ def _hours(conn, vid: str, d0: datetime, end: datetime, lanes, cover: list[Span]
                 if ref and stop[1] > 0 and abs(delta) > 0:
                     row["kwh"] = round(abs(delta) * ref[-1] / stop[1], 2)
                     row["kwh_estimated"] = True
+        if charge_by_hour[h] > 1e-6:
+            row["charge_kwh"] = round(charge_by_hour[h], 4)
+        use, use_est = _hour_use(a, b, lanes, er, level, life)
+        if use:
+            row["use_kwh"] = use
+            row["use_estimated"] = use_est
         out.append(row)
     return out

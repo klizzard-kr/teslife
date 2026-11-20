@@ -1160,6 +1160,39 @@ def trip_distance_km(
     return (odo_km if odo_km is not None else 0.0), "odometer"
 
 
+def _fan_while_hvac(ev: Events, start: datetime, end: datetime) -> tuple[float | None, float | None]:
+    """Fan max and average, counting speed only while HvacPower is On or Precondition.
+
+    With no HvacPower at all, the raw fan speed is used. A speed reported while
+    the climate is off does not count. Stored rows are not rewritten here; a
+    process-version bump is what would recompute them on the next run.
+    """
+    from web.graphseries import _hvac_setpoint_on, flat_average, gate_fan, level_spans, series_high
+
+    power = ev.series("HvacPower", start, end)
+    hit = ev.at_ts("HvacPower", start - timedelta(microseconds=1))
+    prior = hit if hit is not None and hit[0] < start else None
+    if not power and prior is None:
+        return _max_num(ev, "HvacFanSpeed", start, end), _time_weighted(ev, "HvacFanSpeed", start, end)
+    spans = level_spans(
+        power, start, end, prior,
+        lambda value: 1.0 if _hvac_setpoint_on(value) else 0.0,
+    )
+    on_spans = [(a, b) for a, b, _level in spans]
+    fan_rows = []
+    for ts, value in ev.nums("HvacFanSpeed", start, end, include_start=False):
+        fan_rows.append((ts, float(value)))
+    fan_hit = ev.at_ts("HvacFanSpeed", start - timedelta(microseconds=1))
+    fan_prior = None
+    if fan_hit is not None and fan_hit[0] < start:
+        try:
+            fan_prior = (fan_hit[0], float(fan_hit[1]))
+        except (TypeError, ValueError):
+            fan_prior = None
+    segs = gate_fan(fan_rows, fan_prior, on_spans, start, end, True)
+    return series_high(segs), flat_average(segs, end)
+
+
 def _trip_row(
     vehicle_id: str, ev: Events, start: datetime, end: datetime,
     candidates: list[tuple[datetime, float, float, float, float]],
@@ -1191,7 +1224,7 @@ def _trip_row(
     seat_l = _max_num(ev, "SeatHeaterLeft", start, end)
     seat_r = _max_num(ev, "SeatHeaterRight", start, end)
     wheel = _max_num(ev, "HvacSteeringWheelHeatLevel", start, end)
-    fan_max = _max_num(ev, "HvacFanSpeed", start, end)
+    fan_max, fan_avg = _fan_while_hvac(ev, start, end)
     return {
         "vehicle_id": vehicle_id,
         "start_ts": format_ts(start),
@@ -1229,7 +1262,7 @@ def _trip_row(
         "seat_heat_right_max": int(seat_r) if seat_r is not None else None,
         "wheel_heat_max": int(wheel) if wheel is not None else None,
         "fan_max": int(fan_max) if fan_max is not None else None,
-        "fan_avg": _time_weighted(ev, "HvacFanSpeed", start, end),
+        "fan_avg": fan_avg,
         "hard_accel": hard_accel,
         "hard_brake": hard_brake,
         "hard_turn": hard_turn,

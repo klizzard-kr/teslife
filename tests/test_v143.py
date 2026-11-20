@@ -477,7 +477,7 @@ class ReadTabTests(unittest.TestCase):
     def test_mark_all_read_is_the_open_tab_only(self) -> None:
         self.assertIn("알림 읽음: 모두 읽음은 보고 있는 탭만 읽음으로 표시해요", HTML)
         self.assertIn("주행 알림: 봇이 다듬은 종료 알림에도 배터리, 주행가능거리, 공기압을 보여요", HTML)
-        self.assertIn(">충전 멈춤<", HTML)
+        self.assertNotIn(">충전 멈춤</span>", HTML.split("function svgChargeBand", 1)[1].split("function paintChargeTemps", 1)[0])
 
 
 class BackupCheckTests(unittest.TestCase):

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -204,6 +207,46 @@ class TimelineUiTests(unittest.TestCase):
         self.assertNotIn("overheat", self.html[self.html.index("const MODE_LANES"):self.html.index("const MODE_LABELS")])
         self.assertIn('" 모드별 사용"', self.html)
         self.assertIn('Number(batDay.slice(8)) + " 시간별 사용";', self.html)   # 'M/D 시간별 사용', no %
+
+    def test_timeline_tip_stays_in_the_card_when_the_page_scrolls(self) -> None:
+        # showTlPop used to set position:fixed and move #tl-pop onto document.body,
+        # so a pinned 감시 tip stayed on screen after the card scrolled.
+        card = self.html.split('id="battery-card"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('id="tl-pop"', card)
+        self.assertIn(".tl-pop {\n      position: absolute;", self.html)
+        fn = self.html[self.html.index("function showTlPop("):self.html.index("function hideTlPop(")]
+        self.assertNotIn('position = "fixed"', fn)
+        self.assertNotIn("document.body.appendChild", fn)
+        self.assertIn('getElementById("battery-card")', fn)
+        self.assertIn('pop.style.position = ""', fn)
+        for kind in (".cross-tip {", ".speed-tip {"):
+            block = self.html[self.html.index(kind):self.html.index(kind) + 80]
+            self.assertIn("position: absolute", block)
+            self.assertNotIn("position: fixed", block)
+
+    def test_outside_tap_uses_the_graph_dismiss_handler(self) -> None:
+        self.assertEqual(self.html.count('document.addEventListener("pointerdown", dismissGraphTip)'), 1)
+        bind = self.html[self.html.index("function bindCrosshair("):self.html.index("function crossLine(")]
+        self.assertNotIn('document.addEventListener("pointerdown"', bind)
+        click = self.html[self.html.index("function bindTlPop("):self.html.index("function fmtMinutes(")]
+        self.assertNotIn('document.addEventListener("click"', click)
+        src = (
+            "let tlPinned = {contains(t){ return t === 'bar'; }};\n"
+            "const log = [];\n"
+            "function hideCross(){ log.push('cross'); }\n"
+            "function hideTlPop(){ log.push('tl'); }\n"
+            "const pop = {hidden: false, contains(t){ return t === 'pop'; }};\n"
+            "const chart = {contains(t){ return t === 'chart'; }};\n"
+            "global.document = {querySelectorAll(){ return [chart]; }, getElementById(){ return pop; }};\n"
+            + self.html[self.html.index("function dismissGraphTip("):self.html.index("if (!window.__teslifeCrossDoc)")]
+            + "function run(target){ log.length = 0; dismissGraphTip({target: target}); return log.slice(); }\n"
+            + "process.stdout.write(JSON.stringify({away: run('away'), pop: run('pop'), bar: run('bar'), chart: run('chart')}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["away"], ["cross", "tl"])
+        self.assertEqual(got["pop"], ["cross"])
+        self.assertEqual(got["bar"], ["cross"])
+        self.assertEqual(got["chart"], ["tl"])
         self.assertNotIn('" 시간별 사용 " + fmt(', self.html)
         self.assertIn("text-anchor=\"middle\">' + fmt(v, 1) + \"%</text>", self.html)   # weekly labels 1 decimal
         self.assertNotIn("시간별 · 사용", self.html)
@@ -222,6 +265,31 @@ class TimelineUiTests(unittest.TestCase):
         self.assertIn("#battery-card .chart-legend { margin-left: calc(100% * 76 / 390); }", self.html)
         self.assertNotIn("bh-pct", self.html)
         self.assertNotIn("rgba(255,255,255,0.02)", self.html)
+
+    def test_rising_hour_uses_the_charge_color(self) -> None:
+        legend = self.html.split('id="bat-day"', 1)[1].split('id="mode-title"', 1)[0]
+        self.assertIn(">충전</span>", legend)
+        i = self.html.index("function hourFill(")
+        fn = self.html[i:self.html.index("\n    }\n", i) + 6]
+        src = (
+            "function known(v){ return v !== null && v !== undefined && v !== ''; }\n"
+            "function tone(name){ return name; }\n"
+            + fn
+            + "const out = {\n"
+            "  rose: hourFill({driving:true, charging:false}, {start_pct:63.3, end_pct:66.2}),\n"
+            "  downDrive: hourFill({driving:true, charging:true}, {start_pct:66.2, end_pct:63.3}),\n"
+            "  downCharge: hourFill({driving:false, charging:true}, {start_pct:66.2, end_pct:63.3}),\n"
+            "  flat: hourFill({driving:true}, {start_pct:66.2, end_pct:66.2}),\n"
+            "  park: hourFill({driving:false, charging:false}, null)\n"
+            "};\n"
+            "process.stdout.write(JSON.stringify(out));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["rose"], "chart-charge")
+        self.assertEqual(got["downDrive"], "chart-trip")
+        self.assertEqual(got["downCharge"], "chart-park")
+        self.assertEqual(got["flat"], "chart-trip")
+        self.assertEqual(got["park"], "chart-park")
 
     def test_mode_tooltip_fields_only(self) -> None:
         body = self.html[self.html.index("function barPopHtml"):self.html.index("function hourPopHtml")]
@@ -350,3 +418,43 @@ class DriveNetTests(unittest.TestCase):
         drive = next(l for l in timeline["lanes"] if l["key"] == "drive")["bars"][0]
         self.assertEqual(drive["kwh"], 0.0)
         self.assertEqual(drive["soc_drop"], 0.0)
+
+
+class ChargeShareTests(unittest.TestCase):
+    def test_record_energy_splits_on_the_counter_and_sums_exactly(self) -> None:
+        from web.timeline import charge_hour_shares
+
+        # 2026-11-15 21:00 KST is 12:00 UTC. The charge stays inside that hour.
+        start = datetime(2026, 11, 15, 12, 10, tzinfo=timezone.utc)
+        end = datetime(2026, 11, 15, 12, 50, tzinfo=timezone.utc)
+        hour = datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc)
+        hours = [(hour + timedelta(hours=i), hour + timedelta(hours=i + 1)) for i in range(-12, 12)]
+        samples = [
+            (start, 10.0),
+            (start + timedelta(minutes=20), 11.2),
+            (end, 11.81),
+        ]
+        parts = charge_hour_shares(1.81, start, end, samples, hours)
+        self.assertAlmostEqual(sum(parts), 1.81, places=4)
+        self.assertAlmostEqual(parts[12], 1.81, places=4)
+        self.assertEqual(parts[:12] + parts[13:], [0.0] * 23)
+
+        # The same record crosses 22:00, and the counter steps decide the split.
+        late = datetime(2026, 11, 15, 12, 40, tzinfo=timezone.utc)
+        stop = datetime(2026, 11, 15, 13, 20, tzinfo=timezone.utc)
+        stepped = [
+            (late, 4.0),
+            (datetime(2026, 11, 15, 13, 0, tzinfo=timezone.utc), 5.0),
+            (stop, 5.81),
+        ]
+        split = charge_hour_shares(1.81, late, stop, stepped, hours)
+        self.assertAlmostEqual(sum(split), 1.81, places=4)
+        self.assertGreater(split[12], 0)
+        self.assertGreater(split[13], 0)
+        self.assertAlmostEqual(split[12] / split[13], 1.0 / 0.81, places=2)
+
+        # No counter samples: clock time, still the record total.
+        timed = charge_hour_shares(1.81, late, stop, [], hours)
+        self.assertAlmostEqual(sum(timed), 1.81, places=4)
+        self.assertAlmostEqual(timed[12], 1.81 * 20 / 40, places=4)
+        self.assertAlmostEqual(timed[13], 1.81 * 20 / 40, places=4)

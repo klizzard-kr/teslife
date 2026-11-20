@@ -27,7 +27,24 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.15.3"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
+        self.assertLess(CHANGELOG.index("## v1.16.8"), CHANGELOG.index("## v1.16.7"))
+        self.assertLess(CHANGELOG.index("## v1.16.7"), CHANGELOG.index("## v1.16.6"))
+        self.assertLess(CHANGELOG.index("## v1.16.6"), CHANGELOG.index("## v1.16.5"))
+        self.assertLess(CHANGELOG.index("## v1.16.5"), CHANGELOG.index("## v1.16.4"))
+        self.assertLess(CHANGELOG.index("## v1.16.4"), CHANGELOG.index("## v1.16.3"))
+        self.assertLess(CHANGELOG.index("## v1.16.3"), CHANGELOG.index("## v1.16.2"))
+        self.assertLess(CHANGELOG.index("## v1.16.2"), CHANGELOG.index("## v1.16.1"))
+        self.assertLess(CHANGELOG.index("## v1.16.1"), CHANGELOG.index("## v1.16.0"))
+        self.assertLess(CHANGELOG.index("## v1.16.0"), CHANGELOG.index("## v1.15.3"))
+        self.assertLess(HTML.index('version: "1.16.8"'), HTML.index('version: "1.16.7"'))
+        self.assertLess(HTML.index('version: "1.16.7"'), HTML.index('version: "1.16.6"'))
+        self.assertLess(HTML.index('version: "1.16.6"'), HTML.index('version: "1.16.5"'))
+        self.assertLess(HTML.index('version: "1.16.5"'), HTML.index('version: "1.16.4"'))
+        self.assertLess(HTML.index('version: "1.16.4"'), HTML.index('version: "1.16.3"'))
+        self.assertLess(HTML.index('version: "1.16.3"'), HTML.index('version: "1.16.2"'))
+        self.assertLess(HTML.index('version: "1.16.2"'), HTML.index('version: "1.16.1"'))
+        self.assertLess(HTML.index('version: "1.16.1"'), HTML.index('version: "1.16.0"'))
         self.assertLess(CHANGELOG.index("## v1.15.3"), CHANGELOG.index("## v1.15.2"))
         self.assertLess(HTML.index('version: "1.15.3"'), HTML.index('version: "1.15.2"'))
         self.assertIn("숫자 뒤에 지금 고른 단위", CHANGELOG)
@@ -43,7 +60,7 @@ class TireUnitOnSingleValueTests(unittest.TestCase):
         src = (
             "let pressureUnit = 'psi'; const PSI_PER_BAR = 14.5038;\n"
             "function carTopSvg(){ return ''; }\n"
-            + _fn("fmtFromBar") + _fn("psiNum") + _fn("tirePairText") + _fn("tireCompareHtml")
+            + _fn("fmtTrim") + _fn("fmtFromBar") + _fn("psiNum") + _fn("tirePairText") + _fn("tireCompareHtml")
             + "const before = {fl:2.875, fr:2.88, rl:2.87, rr:2.90};\n"
             "const out = {\n"
             "  home: fmtFromBar(2.875),\n"
@@ -93,12 +110,12 @@ class HourTooltipTests(unittest.TestCase):
             "}\n"
             "const known = v => v !== null && v !== undefined && v !== '';\n"
             "let batTimeline = {hours: [\n"
-            "  {start_pct: 61.9, end_pct: 61.8, delta_pct: -0.1, kwh: 0.05},\n"
-            "  {start_pct: 65.0, end_pct: 63.4, delta_pct: -1.6, kwh: 1.2},\n"
-            "  {start_pct: 80.04, end_pct: 79.96, delta_pct: -0.08, kwh: 0.04},\n"
-            "  {start_pct: 64.6, end_pct: 64.6, delta_pct: 0, kwh: 0},\n"
-            "  {start_pct: 70, end_pct: 72.5, delta_pct: 2.5, kwh: 1.5},\n"
-            "  {start_pct: 50}\n"
+            "  {start_pct: 61.9, end_pct: 61.8, use_kwh: 0.05, use_estimated: true},\n"
+            "  {start_pct: 65.0, end_pct: 63.4, use_kwh: 1.2, use_estimated: true},\n"
+            "  {start_pct: 80.04, end_pct: 79.96, use_kwh: 0.04, use_estimated: true},\n"
+            "  {start_pct: 64.6, end_pct: 64.6, use_kwh: 0},\n"
+            "  {start_pct: 70, end_pct: 72.5, charge_kwh: 1.81, use_kwh: 0.4},\n"
+            "  {start_pct: 50, charge_kwh: 1.5}\n"
             "]};\n"
             + _fn("socTenths") + _fn("socTenthsText") + _fn("socChangeText") + _fn("hourPopHtml")
             + "const out = [0,1,2,3,4,5].map(i => hourPopHtml(i, null));\n"
@@ -121,8 +138,13 @@ class HourTooltipTests(unittest.TestCase):
         self.assertNotIn("사용량", got[3])
         self.assertIn(">70% → 72.5%<", got[4])
         self.assertIn(">충전량<", got[4])
-        self.assertIn("약 1.5kWh", got[4])
+        self.assertIn(">1.81kWh<", got[4])
+        self.assertNotIn("약 1.81", got[4])
+        self.assertIn(">사용량<", got[4])
         self.assertIn(">50%<", got[5])
+        self.assertIn(">충전량<", got[5])
+        self.assertIn(">1.5kWh<", got[5])
+        self.assertNotIn("사용량", got[5])
         self.assertNotIn("%p", "".join(got))
 
 
@@ -134,82 +156,40 @@ class ChargeChartTests(unittest.TestCase):
             " return s.replace(/0+$/, '').replace(/\\.$/, ''); }\n"
             "function fmtHm(){ return '00:00'; }\n"
             "function tone(name){ return name === 'chart-axis' ? '#8aa0b5' : '#3dd68c'; }\n"
-            + _fn("svgChargeBand")
+            + _fn("decimate") + _fn("timeMarks") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
             + body
         )
 
-    def test_pause_moves_to_the_legend(self) -> None:
+    def test_charge_power_fills_under_the_line_and_has_no_pause_mark(self) -> None:
         src = self._src(
             "const power = [\n"
             "  {ts:'2026-11-13T12:38:00Z', v:7},\n"
             "  {ts:'2026-11-13T12:50:00Z', v:0},\n"
             "  {ts:'2026-11-13T13:10:00Z', v:6}\n"
             "];\n"
-            "const steady = [{ts:'2026-11-13T12:38:00Z', v:7},{ts:'2026-11-13T13:51:00Z', v:6}];\n"
-            "const out = {\n"
-            "  pause: svgChargeBand(power, [], '2026-11-13T13:51:00Z'),\n"
-            "  run: svgChargeBand(steady, [], '2026-11-13T13:51:00Z')\n"
-            "};\n"
-            "process.stdout.write(JSON.stringify(out));"
+            "const html = svgChargeBand(power, [], '2026-11-13T13:51:00Z');\n"
+            "process.stdout.write(JSON.stringify({html: html}));"
         )
         got = _node(src)
-        self.assertNotIn(">충전 멈춤</text>", got["pause"])
-        self.assertIn(">충전 멈춤</span>", got["pause"])
-        self.assertIn("background:#8aa0b5;opacity:0.18", got["pause"])
-        self.assertIn("fill-opacity=\"0.18\"", got["pause"])
-        self.assertLess(got["pause"].index("충전 전력"), got["pause"].index("충전 멈춤"))
-        self.assertNotIn("충전 멈춤", got["run"])
+        self.assertNotIn("충전 멈춤", got["html"])
+        self.assertNotIn("fill-opacity=\"0.18\"", got["html"])
+        self.assertIn("<polygon", got["html"])
+        self.assertIn('fill-opacity="0.15"', got["html"])
+        self.assertIn("충전 전력", got["html"])
 
-    def test_short_mixed_sliver_is_dropped_and_a_real_step_stays(self) -> None:
+    def test_power_chart_has_no_temperature_band(self) -> None:
         src = self._src(
             "const end = '2026-11-13T13:51:00Z';\n"
             "const power = [{ts:'2026-11-13T12:38:00Z', v:7},{ts:end, v:6}];\n"
-            "const artifact = [\n"
-            "  {ts:'2026-11-13T13:13:00Z', min:20},\n"
-            "  {ts:'2026-11-13T13:13:20Z', max:40},\n"
-            "  {ts:'2026-11-13T13:13:40Z', min:32, max:36}\n"
-            "];\n"
-            "const real = [\n"
-            "  {ts:'2026-11-13T13:13:00Z', min:20, max:40},\n"
-            "  {ts:'2026-11-13T13:13:20Z', min:32, max:36}\n"
-            "];\n"
-            "const steps = [\n"
-            "  {ts:'2026-11-13T12:20:00Z', min:30, max:34},\n"
-            "  {ts:'2026-11-13T12:40:00Z', min:33, max:37}\n"
-            "];\n"
-            "function heights(html){\n"
-            "  const out = [];\n"
-            "  const re = /<polygon points=\"([^\"]+)\"/g;\n"
-            "  let m;\n"
-            "  while ((m = re.exec(html))) {\n"
-            "    const ys = m[1].split(' ').map(p => Number(p.split(',')[1]));\n"
-            "    out.push(Math.max.apply(null, ys) - Math.min.apply(null, ys));\n"
-            "  }\n"
-            "  return out;\n"
-            "}\n"
-            "function xs(html){\n"
-            "  const polys = [];\n"
-            "  const re = /<polygon points=\"([^\"]+)\"/g;\n"
-            "  let m;\n"
-            "  while ((m = re.exec(html))) {\n"
-            "    polys.push(m[1].split(' ').map(p => Number(p.split(',')[0])));\n"
-            "  }\n"
-            "  return polys;\n"
-            "}\n"
-            "const a = svgChargeBand(power, artifact, end);\n"
-            "const r = svgChargeBand(power, real, end);\n"
-            "const s = svgChargeBand(power, steps, end);\n"
-            "const sx = xs(s);\n"
-            "process.stdout.write(JSON.stringify({\n"
-            "  artifact: heights(a),\n"
-            "  real: heights(r),\n"
-            "  shared: sx.length > 1 && sx[0][1] === sx[1][0]\n"
-            "}));"
+            "const html = svgChargeBand(power, [{ts:'2026-11-13T13:13:00Z', min:20, max:40}], end, 11);\n"
+            "process.stdout.write(JSON.stringify({html: html}));"
         )
         got = _node(src)
-        self.assertTrue(all(h < 40 for h in got["artifact"]), got["artifact"])
-        self.assertTrue(any(h > 80 for h in got["real"]), got["real"])
-        self.assertTrue(got["shared"])
+        self.assertNotIn("#e7c8a4", got["html"])
+        self.assertIn("<polygon", got["html"])
+        self.assertIn('fill-opacity="0.15"', got["html"])
+        self.assertIn(">11<", got["html"])
+        self.assertIn("충전 전력", got["html"])
 
 
 class HourBoundaryTests(unittest.TestCase):

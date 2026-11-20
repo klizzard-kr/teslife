@@ -222,7 +222,7 @@ class SignalChecks(Base):
         at = datetime(2026, 11, 1, 9, 5, tzinfo=KST)
         m.check_battery_month(self.conn, VID, None, at, self.sender)
         self.assertEqual(self.sent[-1]["message"],
-                         "배터리 건강 월간 리포트 (10월) · 용량 약 62.0 kWh · 셀 전압 차이 보통 약 15 mV, 최대 약 20 mV")
+                         "배터리 건강 월간 리포트 (10월) · 용량 약 62 kWh · 셀 전압 차이 보통 약 15 mV, 최대 약 20 mV")
         m.check_battery_month(self.conn, VID, None, at + timedelta(hours=1), self.sender)
         self.assertEqual(len(self.sent), 1)
 

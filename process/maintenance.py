@@ -24,6 +24,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from process import KST, WHEELS, _as_float, decode_value, format_ts, parse_ts
+from web.formatnum import format_number
 
 PSI_PER_BAR = 14.5038
 WHEEL_KO = {"fl": "앞 왼쪽", "fr": "앞 오른쪽", "rl": "뒤 왼쪽", "rr": "뒤 오른쪽"}
@@ -117,7 +118,7 @@ BATTERY_REPORT_HOUR = 9  # KST, on the 1st
 
 
 def _psi(bar: float) -> str:
-    return f"{bar * PSI_PER_BAR:.1f}"
+    return format_number(bar * PSI_PER_BAR, 1)
 
 
 def _alerts():
@@ -317,7 +318,7 @@ def _vs_rec(settings: dict, w: str, bar: Any) -> str:
     below = rec - v
     if below < 0.05:
         return ""
-    return f" · 권장 {round(rec * PSI_PER_BAR)} psi보다 약 {below * PSI_PER_BAR:.1f} psi 낮아요"
+    return f" · 권장 {round(rec * PSI_PER_BAR)} psi보다 약 {format_number(below * PSI_PER_BAR, 1)} psi 낮아요"
 
 
 # ---------------------------------------------------------------- 2b. below the recommended cold pressure
@@ -352,7 +353,7 @@ def check_tire_low(conn: sqlite3.Connection, vid: str, ev: Any, now: datetime, s
     if not low or {w for w, _v, _b in low} <= prev_set:
         _set(conn, vid, "tire_low", state, now)
         return
-    line = f"{LOW_PSI:.1f} psi"
+    line = format_number(LOW_PSI, 1) + " psi"
     names = ", ".join(WHEEL_KO[w] for w, _v, _b in low)
     bits = [f"{names}이 {line}보다 낮아요"]
     msg = "공기압이 낮아요 · " + ", ".join(bits)
@@ -598,14 +599,14 @@ def check_battery_month(conn: sqlite3.Connection, vid: str, ev: Any, now: dateti
     if "capacity_kwh" in r:
         cap = r["capacity_kwh"]
         _set(conn, vid, f"battery_cap:{label}", f"{cap}", now)
-        txt = f"용량 약 {cap:.1f} kWh"
+        txt = f"용량 약 {format_number(cap, 1)} kWh"
         if before and _as_float(before) is not None:
             d = cap - float(before)
-            txt += " (지난달과 같아요)" if abs(d) < 0.05 else f" (지난달보다 {abs(d):.1f} kWh {'줄었' if d < 0 else '늘었'}어요)"
+            txt += " (지난달과 같아요)" if abs(d) < 0.05 else f" (지난달보다 {format_number(abs(d), 1)} kWh {'줄었' if d < 0 else '늘었'}어요)"
             r["capacity_prev_month_kwh"] = float(before)
         if first and _as_float(first[0]) is not None and first[0] != f"{cap}" and before != first[0]:
             r["capacity_first_kwh"] = float(first[0])
-            txt += f", 처음 기록 {float(first[0]):.1f} kWh"
+            txt += f", 처음 기록 {format_number(float(first[0]), 1)} kWh"
         parts.append(txt)
     if "cell_spread_mv_median" in r:
         parts.append(f"셀 전압 차이 보통 약 {r['cell_spread_mv_median']} mV, 최대 약 {r['cell_spread_mv_max']} mV")

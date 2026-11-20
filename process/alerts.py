@@ -17,6 +17,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
+from web.formatnum import format_number
 from process import (
     CHARGE_STATE_KO,
     MIN_TRIP_KM,
@@ -56,7 +57,7 @@ Sender = Callable[[dict[str, Any]], tuple[bool, str]]
 
 def psi(bar: Any) -> str:
     v = _as_float(bar)
-    return "" if v is None else f"{v * PSI_PER_BAR:.1f}"
+    return "" if v is None else format_number(v * PSI_PER_BAR, 1)
 
 
 def _tires_text(values: dict[str, Any] | None, rec: str = "") -> str:
@@ -311,9 +312,9 @@ def check_trip_end(conn, vid, ev, now, sender, tire_alert_bar: float = 2.6) -> N
         estimated = None
     approx = "약 " if estimated else ""
     if row["km_per_kwh"] is not None:
-        parts.append(f"전비 {approx}{row['km_per_kwh']:.1f} km/kWh")
+        parts.append(f"전비 {approx}{format_number(row['km_per_kwh'], 1)} km/kWh")
     if row["kwh"] is not None:
-        parts.append(f"{approx}{row['kwh']:.2f} kWh")
+        parts.append(f"{approx}{format_number(row['kwh'], 2)} kWh")
     if row["start_soc"] is not None and row["end_soc"] is not None:
         parts.append(f"배터리 {row['start_soc']:.0f}→{row['end_soc']:.0f}%")
     hard = _truthy(ev.latest("TpmsHardWarnings")) or _truthy(ev.latest("TpmsSoftWarnings"))
@@ -335,7 +336,7 @@ def check_trip_end(conn, vid, ev, now, sender, tire_alert_bar: float = 2.6) -> N
     brake = row["hard_brake"] if "hard_brake" in row.keys() else None
     short_bits = [distance]
     if regen is not None:
-        short_bits.append(f"회생 {float(regen):.1f}kWh")
+        short_bits.append(f"회생 {format_number(float(regen), 1)}kWh")
     if accel is not None:
         short_bits.append(f"급가속 {int(accel)}")
     if brake is not None:
@@ -349,9 +350,9 @@ def check_trip_end(conn, vid, ev, now, sender, tire_alert_bar: float = 2.6) -> N
         hours, mins = divmod(whole, 60)
         detail.append("시간|" + (f"{hours}시간 {mins}분" if hours else f"{mins}분"))
     if row["kwh"] is not None:
-        detail.append(f"쓴 전력|{approx}{float(row['kwh']):.2f} kWh")
+        detail.append(f"쓴 전력|{approx}{format_number(float(row['kwh']), 2)} kWh")
     if row["km_per_kwh"] is not None:
-        detail.append(f"전비|{approx}{float(row['km_per_kwh']):.1f} km/kWh")
+        detail.append(f"전비|{approx}{format_number(float(row['km_per_kwh']), 1)} km/kWh")
     soc = _as_float(ev.at("BatteryLevel", end))
     start_soc = _as_float(row["start_soc"]) if "start_soc" in row.keys() else None
     end_soc = _as_float(row["end_soc"]) if "end_soc" in row.keys() else None
@@ -369,7 +370,7 @@ def check_trip_end(conn, vid, ev, now, sender, tire_alert_bar: float = 2.6) -> N
         detail.append(f"주행가능|{format_range_km(distance)}")
         data["range_km"] = int(float(distance) + 0.5)
     if regen is not None:
-        detail.append(f"회생|{float(regen):.1f} kWh")
+        detail.append(f"회생|{format_number(float(regen), 1)} kWh")
     if accel is not None:
         detail.append(f"급가속|{int(accel)}회")
     if brake is not None:
@@ -494,7 +495,7 @@ def check_charge_start(conn, vid, ev, now, sender) -> None:
     ttf = _as_float(ev.at("TimeToFullCharge", at))
     parts = [f"충전 시작 {_kst(start)}", "교류(AC)" if kind == "AC" else "직류(DC)"]
     if kw is not None and kw > 0:
-        parts.append(f"{kw:.1f} kW")
+        parts.append(f"{format_number(kw, 1)} kW")
     if soc is not None:
         parts.append(f"배터리 {soc:.0f}%" + (f" → 목표 {limit:.0f}%" if limit is not None else ""))
     if ttf is not None and ttf > 0:
@@ -507,7 +508,7 @@ def check_charge_start(conn, vid, ev, now, sender) -> None:
     if soc is not None:
         detail.insert(0, f"배터리|{soc:.0f}%")
     if kw is not None and kw > 0:
-        detail.append(f"충전 전력|{kw:.1f} kW")
+        detail.append(f"충전 전력|{format_number(kw, 1)} kW")
     if detail:
         message += "\n" + "\n".join(detail)
     sent = _emit(conn, vid, "charge_start", state, message, data, now, sender, event_ts=start)
@@ -547,24 +548,24 @@ def check_charge_end(conn, vid, ev, now, sender) -> None:
         head = f"충전 종료 {_kst(end)}"
     parts = [head, "교류(AC)" if row["kind"] == "AC" else "직류(DC)"]
     if kwh is not None:
-        parts.append(f"{kwh:.1f} kWh")
+        parts.append(f"{format_number(kwh, 1)} kWh")
     if row["start_soc"] is not None and row["end_soc"] is not None:
         parts.append(f"배터리 {row['start_soc']:.0f}→{row['end_soc']:.0f}%")
     h, m = divmod(round(hours * 60), 60)
     parts.append(f"{h}시간 {m}분" if h else f"{m}분")
     avg = (kwh / hours) if kwh and hours > 0 else None
     if avg is not None:
-        parts.append(f"평균 {avg:.1f} kW")
+        parts.append(f"평균 {format_number(avg, 1)} kW")
     if row["loss_kwh"] is not None and row["loss_pct"] is not None:
         # charger-side minus battery-side: conversion plus whatever the car ran meanwhile
-        parts.append(f"충전 중 차가 쓴 양 {row['loss_kwh']:.1f} kWh ({row['loss_pct']:.1f}%)")
+        parts.append(f"충전 중 차가 쓴 양 {format_number(row['loss_kwh'], 1)} kWh ({format_number(row['loss_pct'], 1)}%)")
     data = {k: row[k] for k in row.keys() if k != "vehicle_id"}
     data.update({"reason": status, "duration_h": round(hours, 3),
                  "avg_kw": round(avg, 2) if avg is not None else None})
     soc_bit = ""
     if row["start_soc"] is not None and row["end_soc"] is not None:
         soc_bit = f"{float(row['start_soc']):.0f}% → {float(row['end_soc']):.0f}%"
-    kwh_bit = f"{float(kwh):.1f}kWh" if kwh is not None else ""
+    kwh_bit = f"{format_number(float(kwh), 1)}kWh" if kwh is not None else ""
     short = ", ".join(bit for bit in (soc_bit, kwh_bit) if bit) or head
     rows = []
     if row["start_soc"] is not None and row["end_soc"] is not None:
@@ -574,16 +575,16 @@ def check_charge_end(conn, vid, ev, now, sender) -> None:
         if change:
             rows.append(f"배터리|{change}")
     if kwh is not None:
-        rows.append(f"충전량|{float(kwh):.1f} kWh")
+        rows.append(f"충전량|{format_number(float(kwh), 1)} kWh")
     rows.append("시간|" + (f"{h}시간 {m}분" if h else f"{m}분"))
     rows.append("전류|" + ("교류(AC)" if row["kind"] == "AC" else "직류(DC)"))
     battery = row["battery_kwh"] if "battery_kwh" in row.keys() else None
     if battery is not None:
-        rows.append(f"배터리 저장량|{float(battery):.1f} kWh")
+        rows.append(f"배터리 저장량|{format_number(float(battery), 1)} kWh")
     if row["loss_kwh"] is not None:
-        rows.append(f"충전 중 사용량|{float(row['loss_kwh']):.1f} kWh")
+        rows.append(f"충전 중 사용량|{format_number(float(row['loss_kwh']), 1)} kWh")
     if avg is not None:
-        rows.append(f"평균 충전 전력|{avg:.1f} kW")
+        rows.append(f"평균 충전 전력|{format_number(avg, 1)} kW")
     if label:
         rows.append(f"종료 사유|{label}")
     message = short

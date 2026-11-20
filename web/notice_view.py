@@ -10,6 +10,8 @@ import math
 import re
 from datetime import datetime, timedelta, timezone
 
+from web.formatnum import format_number
+
 KST = timezone(timedelta(hours=9))
 WHEEL_LABELS = ("앞 왼쪽", "앞 오른쪽", "뒤 왼쪽", "뒤 오른쪽")
 # Trip detail, then the alert-only rows. Tires stay last, as on the request.
@@ -343,7 +345,7 @@ def _km_text(value: str | float | int) -> str:
     if isinstance(value, str):
         return value
     if isinstance(value, float) and not value.is_integer():
-        return f"{value:.1f}".rstrip("0").rstrip(".")
+        return format_number(value, 1)
     if isinstance(value, float):
         return str(int(value))
     return str(value)
@@ -473,7 +475,7 @@ def _kw_text(text: str) -> str:
     found = re.search(r"(\d+(?:\.\d+)?)\s*kW(?!h)", text, re.I)
     if not found:
         return ""
-    return f"{float(found.group(1)):.1f}"
+    return format_number(float(found.group(1)), 1)
 
 
 def charge_start_summary(body: str, details: list | None = None) -> str:
@@ -808,40 +810,39 @@ def _full_rows(details: list | None, body: str) -> list[list[str]]:
 
 def format_soc(value: float) -> str:
     """Home battery text: one decimal, trailing zeros removed, then %."""
-    text = f"{float(value):.1f}"
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text + "%"
+    return format_number(float(value), 1) + "%"
 
 
-def _soc_tenths(value: float) -> int:
-    """One-decimal percent as tenths. Matches Math.round(value * 10) for a battery %."""
-    return int(math.floor(float(value) * 10 + 0.5))
+def _soc_hundredths(value: float) -> int:
+    """Two-decimal percent as hundredths. Matches Math.round(value * 100)."""
+    return int(math.floor(float(value) * 100 + 0.5))
 
 
-def _soc_tenths_text(tenths: int) -> str:
-    whole, frac = divmod(abs(int(tenths)), 10)
-    if frac == 0:
-        return str(whole)
-    return f"{whole}.{frac}"
+def _soc_hundredths_text(hundredths: int) -> str:
+    """Two stored hundredths, then the same trailing-zero rule as format_number."""
+    sign = "-" if hundredths < 0 else ""
+    whole, frac = divmod(abs(int(hundredths)), 100)
+    text = f"{sign}{whole}.{frac:02d}"
+    return text.rstrip("0").rstrip(".")
 
 
 def format_soc_change(start: float | None, end: float | None) -> str | None:
-    """Detail battery line. One decimal, trailing .0 dropped, no delta.
+    """Detail battery line. Two decimals, no delta.
 
     Equal displayed values are a single number. A missing side is left out.
+    The comparison uses the hundredths that are actually shown.
     """
     if start is None and end is None:
         return None
     if start is None:
-        return _soc_tenths_text(_soc_tenths(end)) + "%"  # type: ignore[arg-type]
+        return _soc_hundredths_text(_soc_hundredths(end)) + "%"  # type: ignore[arg-type]
     if end is None:
-        return _soc_tenths_text(_soc_tenths(start)) + "%"
-    a = _soc_tenths(start)
-    b = _soc_tenths(end)
+        return _soc_hundredths_text(_soc_hundredths(start)) + "%"
+    a = _soc_hundredths(start)
+    b = _soc_hundredths(end)
     if a == b:
-        return _soc_tenths_text(a) + "%"
-    return f"{_soc_tenths_text(a)}% → {_soc_tenths_text(b)}%"
+        return _soc_hundredths_text(a) + "%"
+    return f"{_soc_hundredths_text(a)}% → {_soc_hundredths_text(b)}%"
 
 
 def _list_battery(text: str) -> str:

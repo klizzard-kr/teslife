@@ -101,13 +101,15 @@ class TireDisplayTests(unittest.TestCase):
 
 class PageTests(unittest.TestCase):
     def test_notes_inbox_chart_and_place(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.15.3"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
         self.assertIn("notes-label", HTML)
         self.assertNotIn(".notice.unread { background", HTML)
         self.assertIn("notice-head", HTML)
         self.assertIn("noticeWhen", HTML)
         chart = HTML.split("function svgChargeBand", 1)[1].split("function paintChargeTemps", 1)[0]
-        self.assertIn("#e7c8a4", chart)
+        self.assertNotIn("#e7c8a4", chart)
+        self.assertIn("#ef8a6b", HTML)
+        self.assertIn("#6ba8ef", HTML)
         self.assertNotIn("#e07a3d", chart)
         self.assertNotIn("배터리 온도(최저~최고)</text>", chart)
         self.assertNotIn("soc-scale", HTML.split("function socBarHtml", 1)[1].split("function psiNum", 1)[0])

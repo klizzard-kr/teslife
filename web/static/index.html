@@ -511,7 +511,7 @@
     .kv-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding: 8px 0; }
     .kv-row span:first-child { color: var(--muted); flex: 0 0 auto; white-space: nowrap; }
     .kv-row span:last-child { text-align: right; min-width: 0; }
-    svg.bchart { width: 100%; height: auto; max-width: 100%; display: block; }
+    svg.bchart { width: 100%; height: auto; max-width: 100%; display: block; overflow: visible; }
     .trip-row { border-top: 1px solid var(--line); padding: 10px 0; }
     .trip-row:first-child { border-top: 0; }
     .trip-line { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
@@ -577,8 +577,34 @@
     .bat-nav span { font-size: 0.85rem; color: var(--muted); text-align: center; flex: 1 1 auto; }
     .bat-avg { color: var(--muted); font-size: 0.8rem; margin: 6px 0 12px; text-align: center; }
     .bat-day-title { font-size: 0.85rem; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
-    .chart-legend { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
-    .chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+    .chart-legend { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
+    .chart-legend span { display: inline-flex; align-items: center; line-height: 1; }
+    .chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; flex: 0 0 auto; transform: translateY(0.06em); }
+    .chart-legend i.line, .chart-legend i.dashline, .chart-legend i.dash { width: 14px; height: 2px; border: 0; border-radius: 0; background: currentColor; }
+    .chart-legend i.dashline, .chart-legend i.dash { background: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 6px); }
+    .chart-legend i.box { background: currentColor; }
+    .chart-legend i.hollow { background: transparent; border: 1.5px solid currentColor; box-sizing: border-box; }
+    .cross-tip .kv-row:last-child, .speed-tip .kv-row:last-child { border-bottom: 0; }
+    .clim-legend { align-items: center; }
+    .clim-legend .leg-group { display: inline-flex; align-items: center; gap: 8px; }
+    .clim-legend .leg-group em { font-style: normal; }
+    .clim-legend .leg-sep { width: 1px; align-self: stretch; min-height: 12px; background: var(--line); }
+    .clim-tabs { display: flex; gap: 6px; margin: 8px 0 4px; }
+    .clim-tabs button {
+      border: 1px solid var(--line); background: transparent; color: var(--muted);
+      border-radius: 999px; padding: 6px 12px; min-height: 36px; font-size: 0.85rem;
+    }
+    .clim-tabs button.disabled { opacity: 0.38; }
+    .detail-block { margin-top: 14px; }
+    .curve-box svg.bchart, .clim-plot svg.bchart { touch-action: pan-y; }
+    .cross-tip {
+      position: absolute; z-index: 6; min-width: 120px; max-width: 220px;
+      padding: 6px 8px; background: var(--card); color: var(--text);
+      border: 1px solid var(--line); border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+      font-size: 0.75rem; pointer-events: none;
+    }
+    .cross-tip .kv-row { padding: 2px 0; }
     #battery-card { position: relative; }
     .bat-day-title.tl-title { margin: 10px 0 4px; }
     /* Gantt-style 모드별 사용: the plot uses the hourly chart's plot area (viewBox 390: left 76,
@@ -1772,7 +1798,10 @@
     function formatNum(n, opts) {
       const num = Number(n);
       let use = opts;
-      if (use && num === Math.trunc(num)) use = Object.assign({}, use, { minimumFractionDigits: 0 });
+      // Grouped numbers use the same trailing-zero rule as fmtTrim: 1,057.0 -> 1,057, 1,039.6 stays.
+      if (use && (use.maximumFractionDigits != null || num === Math.trunc(num))) {
+        use = Object.assign({}, use, { minimumFractionDigits: 0 });
+      }
       if (uiLang() !== "en") {
         return use == null ? num.toLocaleString("ko-KR") : num.toLocaleString("ko-KR", use);
       }
@@ -1828,14 +1857,14 @@
       if (bar === null || bar === undefined || bar === "") return "—";
       const v = Number(bar);
       if (!isFinite(v)) return String(bar);
-      if (pressureUnit === "bar") return v.toFixed(2) + ' bar';
-      return (v * PSI_PER_BAR).toFixed(1) + " psi";
+      if (pressureUnit === "bar") return fmtTrim(v, 2) + ' bar';
+      return fmtTrim(v * PSI_PER_BAR, 1) + " psi";
     }
     function fmtFromPsi(psi) {
       const v = Number(psi);
       if (!isFinite(v)) return String(psi);
-      if (pressureUnit === "bar") return (v * BAR_PER_PSI).toFixed(2) + ' bar';
-      return v.toFixed(1) + " psi";
+      if (pressureUnit === "bar") return fmtTrim(v * BAR_PER_PSI, 2) + ' bar';
+      return fmtTrim(v, 1) + " psi";
     }
     function convertPressureText(text) {
       return String(text == null ? "" : text).replace(/(\d+(?:\.\d+)?)\s*psi/gi, function (_, n) {
@@ -2005,8 +2034,17 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.15.3"; // display constant only
+    const APP_VERSION = "v1.16.8"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.8", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선은 그래프 밖을 누르면 닫혀요"] },
+      { version: "1.16.7", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선이 스크롤하면 그래프와 함께 움직여요"] },
+      { version: "1.16.6", features: ["시간별 사용: 충전량은 충전 기록이고, 사용량은 0보다 클 때만 따로 보여요", "온도 눈금: 공조와 배터리 온도는 5℃ 간격이에요", "그래프: 시각은 시작과 끝만 있고, 맨 위·맨 아래 가로선이 있어요"], fixes: ["시간별 사용: 배터리가 안 오른 시간에 주행이 없으면 주차 색이에요"] },
+      { version: "1.16.5", features: ["시간별 사용: 배터리가 오른 시간은 주행이 있어도 충전 색으로 보여요", "그래프: 배터리 온도, 충전 전력, 공조에도 시각 세로선이 있어요", "공조: 온도 눈금의 맨 위와 맨 아래 숫자가 보여요"], fixes: [] },
+      { version: "1.16.4", features: ["공조 그래프: 네 탭 모두 오른쪽 끝까지 채워요", "공조: 바람 세기는 0·2·4·6·8·10, 시트는 0·1·2·3을 그림 안에 붙여요"], fixes: [] },
+      { version: "1.16.3", features: ["그래프: 오른쪽 눈금이 없는 그림은 오른쪽 끝까지 채워요"], fixes: [] },
+      { version: "1.16.2", features: ["홈: 배터리 끝의 0은 빼요", "공조: 꺼진 탭은 흐리고 누를 수 없어요", "그래프: 세로 선 아래 시각 글자는 빼요"], fixes: ["공조: 공조가 꺼져 있으면 팬 1을 그리지 않아요", "공조: 왼쪽 온도 눈금이 시각에 가리지 않아요"] },
+      { version: "1.16.1", features: ["에너지 상세: 온도 그래프와 배터리 온도는 에너지 상세 안에 있어요", "그래프: 누르면 그 시각(시:분:초)도 함께 보여요", "공조: 탭은 실내·실외, A/C·팬, 시트·핸들, 유리·와이퍼예요", "공조: 팬과 시트는 단계 선이고, 마지막 값은 끝까지 이어져요"], fixes: [] },
+      { version: "1.16.0", features: ["공조: 주행 상세는 실내, 팬, 시트·열선 탭이 있는 그래프 하나예요", "배터리 온도: 주행과 충전 상세에 최고·최저 선과 배터리 히터 막대가 따로 있어요", "그래프: 누르면 그 시각의 값이 따라와요"], fixes: ["충전 그래프: 맨 위 눈금은 충전기 정격이고, 배터리 온도 띠는 빠졌어요", "숫자: 상세와 홈 배터리는 소수 둘째 자리예요"] },
       { version: "1.15.3", features: ["공기압: 주행 상세에서 값 하나만 보일 때 숫자 뒤에 psi나 bar를 붙여요", "충전 그래프: 멈춘 구간은 범례의 충전 멈춤으로 봐요"], fixes: ["배터리: 시간별 말풍선은 시작과 끝만 보여주고, 정각 값이 이어져요", "충전 그래프: 온도 띠 시작의 짧은 세로 막대를 빼요"] },
       { version: "1.15.2", features: ["공기압 단위: 홈과 주행 상세의 단위가 작은 둥근 버튼이에요"], fixes: ["공기압: 주행 후 값이 없으면 주행 전 값만 보여요", "알림 스위치: 알림 받기를 끄면 아래 스위치는 체크 없이 회색이에요"] },
       { version: "1.15.1", features: ["배터리: 주행·충전·알림 상세는 시작과 끝을 소수 한 자리로 보여요", "공기압: 주행 상세의 단위를 누르면 psi와 bar가 바뀌어요"], fixes: ["회생 비율: 요약의 회생 비율을 순 전력이 아니라 누적 사용량으로 나눠요"] },
@@ -2082,12 +2120,21 @@
       if (n < 1) return Math.round(n * 1000) + "m";
       return fmt(n, 1) + " km";
     }
+    function fmtTrim(n, digits) {
+      if (n === null || n === undefined || n === "") return "—";
+      const v = Number(n);
+      if (!isFinite(v)) return String(n);
+      let s = v.toFixed(digits == null ? 2 : digits);
+      if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s;
+    }
     function fmt(n, digits) {
       if (n === null || n === undefined || n === "") return "—";
       if (typeof n !== "number" || !isFinite(n)) return String(n);
-      let s = n.toFixed(digits == null ? 0 : digits);
-      if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
-      return s;
+      return fmtTrim(n, digits == null ? 0 : digits);
+    }
+    function fmtFixed(n, digits) {
+      return fmtTrim(n, digits == null ? 2 : digits);
     }
 
     function fmtKrw(n) {
@@ -2130,12 +2177,12 @@
     function fmtChargeDetail(live) {
       const parts = [];
       const kw = Number(latestSignal(live, ["ACChargingPower", "DCChargingPower"]));
-      if (isFinite(kw) && kw > 0) parts.push(kw.toFixed(1) + " kW");
+      if (isFinite(kw) && kw > 0) parts.push(fmt(kw, 1) + " kW");
       const amps = Number(signalValue(live, "ChargeAmps"));
       if (isFinite(amps) && amps > 0) parts.push(Math.round(amps) + " A");
       const ttf = Number(signalValue(live, "TimeToFullCharge"));
       let tail = "";
-      if (isFinite(ttf) && ttf > 0) tail = "완충까지 " + (ttf < 1 ? Math.max(1, Math.round(ttf * 60)) + "분" : ttf.toFixed(1) + "시간");
+      if (isFinite(ttf) && ttf > 0) tail = "완충까지 " + (ttf < 1 ? Math.max(1, Math.round(ttf * 60)) + "분" : fmt(ttf, 1) + "시간");
       const limit = Number(signalValue(live, "ChargeLimitSoc"));
       if (isFinite(limit) && limit > 0) tail += (tail ? " " : "") + "(한도 " + Math.round(limit) + "%)";
       if (tail) parts.push(tail);
@@ -2202,7 +2249,7 @@
     function applyLive(live) {
       lastPayload = live;
       lastTs = live.last_ts || (live.signals && live.signals.BatteryLevel && live.signals.BatteryLevel.ts) || lastTs;
-      document.getElementById("v-battery").textContent = fmt(signalValue(live, "BatteryLevel"), 1) + "%";
+      document.getElementById("v-battery").textContent = fmtTrim(signalValue(live, "BatteryLevel"), 2) + "%";
       const chargeState = live.charge_in_progress ? "Charging" : live.charge_status;
       const chargeText = fmtChargeState(chargeState);
       document.getElementById("v-charge").textContent = chargeText;
@@ -2458,11 +2505,11 @@
       if (t.start_soc != null || t.end_soc != null) add("배터리", socChangeText(t.start_soc, t.end_soc));
       const r0 = t.start_est_range_km != null ? t.start_est_range_km : t.start_range_km;
       const r1 = t.end_est_range_km != null ? t.end_est_range_km : t.end_range_km;
-      if (r0 != null) add("주행가능", fmt(r0, 0) + "→" + fmt(r1, 0) + " km");
+      if (r0 != null) add("주행가능", fmt(r0, 1) + "→" + fmt(r1, 1) + " km");
       if (t.regen_kwh != null) add("회생", (t.regen_estimated ? "약 " : "") + fmt(t.regen_kwh, 2) + " kWh" + (t.regen_ratio != null ? " (" + Math.round(t.regen_ratio * 100) + "%)" : ""));
       if (t.max_power_kw != null) add("최대 출력·회생", fmt(t.max_power_kw, 0) + " · " + fmt(t.max_regen_kw, 0) + " kW");
       if (t.avg_inside_temp != null || t.avg_outside_temp != null) add("실내·외 온도", fmt(t.avg_inside_temp, 1) + " · " + fmt(t.avg_outside_temp, 1) + " °C");
-      if (t.battery_temp_min != null) add("배터리 온도", fmt(t.battery_temp_min, 0) + "~" + fmt(t.battery_temp_max, 0) + " °C" + (t.battery_heater_on != null ? " · 히터 " + onOff(t.battery_heater_on) : ""));
+      if (t.battery_temp_min != null) add("배터리 온도", fmt(t.battery_temp_min, 0) + "~" + fmt(t.battery_temp_max, 0) + " °C" + (t.battery_heater_on != null ? " · 배터리 히터 " + onOff(t.battery_heater_on) : ""));
       else if (t.battery_heater_on != null) add("배터리 히터", onOff(t.battery_heater_on));
       climateBits(t).forEach(bit => add(bit, bit));
       if (t.hard_accel != null || t.hard_brake != null) {
@@ -2485,97 +2532,241 @@
       if (out.length < 2) out.push(Math.round((start + step) * 1000) / 1000);
       return out;
     }
+    // Temperature axes are always 5°C. A 5°C span also gets the halfway tick (20, 22.5, 25).
+    function tempAxis(lo, hi) {
+      if (!isFinite(lo) || !isFinite(hi)) { lo = 0; hi = 30; }
+      if (hi < lo) { const swap = lo; lo = hi; hi = swap; }
+      const step = 5;
+      let min = Math.floor(lo / step + 1e-9) * step;
+      let max = Math.ceil(hi / step - 1e-9) * step;
+      min = Math.round(min);
+      max = Math.round(max);
+      if (max <= min) max = min + step;
+      const ticks = [];
+      if (max - min === step) ticks.push(min, min + step / 2, max);
+      else {
+        for (let v = min; v <= max + 1e-6 && ticks.length < 24; v += step) ticks.push(Math.round(v));
+      }
+      return {min: min, max: max, step: step, ticks: ticks};
+    }
 
-    function svgChargeBand(power, temps, endTs) {
-      const W = 390, H = 168, L = 36, R = 36, T = 8, B = 22;
+    function seriesValueAt(segments, t, mode) {
+      for (let s = 0; s < segments.length; s++) {
+        const seg = segments[s];
+        if (!seg.length || t < seg[0].t || t > seg[seg.length - 1].t) continue;
+        for (let i = 0; i < seg.length; i++) {
+          const p = seg[i];
+          if (p.t === t) return p.v;
+          const n = seg[i + 1];
+          if (!n || t > n.t) continue;
+          if (mode === "step") return p.v;
+          if (n.t === p.t) return n.v;
+          const f = (t - p.t) / (n.t - p.t);
+          return p.v + (n.v - p.v) * f;
+        }
+      }
+      return null;
+    }
+    function decimate(points, limit) {
+      if (!points || points.length <= limit) return points || [];
+      const last = points.length - 1;
+      const out = [];
+      const step = last / (limit - 1);
+      let prev = -1;
+      for (let i = 0; i < limit; i++) {
+        const idx = Math.round(i * step);
+        if (idx !== prev) out.push(points[idx]);
+        prev = idx;
+      }
+      return out;
+    }
+    function parseSegs(raw) {
+      return (raw || []).map(seg => (seg || []).map(p => {
+        const rawV = p.v != null ? p.v : (p.kw != null ? p.kw : p.kph);
+        return {t: Date.parse(p.ts), v: Number(rawV)};
+      }).filter(p => isFinite(p.t) && isFinite(p.v)));
+    }
+    function flagAt(points, t) {
+      let last = null;
+      for (let i = 0; i < points.length; i++) {
+        if (points[i].t <= t) last = points[i];
+        else break;
+      }
+      if (!last) return false;
+      return last.v >= 0.5;
+    }
+    function hideCross(box) {
+      if (!box) return;
+      box.classList.remove("cross-on");
+      const line = box.querySelector(".cross-line");
+      if (line) line.setAttribute("visibility", "hidden");
+      const tip = box.querySelector(".cross-tip");
+      if (tip) tip.hidden = true;
+    }
+    // One outside tap closes every graph tip: the crosshair, and the battery
+    // hour/mode pop. Installed here so the battery tab has it before any trip chart.
+    function dismissGraphTip(ev) {
+      document.querySelectorAll(".cross-on").forEach(node => {
+        if (!node.contains(ev.target)) hideCross(node);
+      });
+      const pop = document.getElementById("tl-pop");
+      if (!pop || pop.hidden) return;
+      if (pop.contains(ev.target)) return;
+      if (tlPinned && tlPinned.contains(ev.target)) return;
+      hideTlPop();
+    }
+    if (!window.__teslifeCrossDoc) {
+      window.__teslifeCrossDoc = true;
+      document.addEventListener("pointerdown", dismissGraphTip);
+    }
+    function placeCross(box, clientX) {
+      const svg = box.querySelector("svg.bchart");
+      const line = svg && svg.querySelector(".cross-line");
+      if (!svg || !line || !box._crossRows) return;
+      const rect = svg.getBoundingClientRect();
+      if (!rect.width) return;
+      const t0 = Number(svg.getAttribute("data-t0"));
+      const t1 = Number(svg.getAttribute("data-t1"));
+      const L = Number(svg.getAttribute("data-l"));
+      const plot = Number(svg.getAttribute("data-plot"));
+      const top = Number(svg.getAttribute("data-top"));
+      const ih = Number(svg.getAttribute("data-ih"));
+      const xVb = (clientX - rect.left) / rect.width * 390;
+      let u = plot ? (xVb - L) / plot : 0;
+      if (u < 0) u = 0;
+      if (u > 1) u = 1;
+      const when = t0 + (t1 === t0 ? 0 : u * (t1 - t0));
+      const x = L + u * plot;
+      line.setAttribute("x1", String(x));
+      line.setAttribute("x2", String(x));
+      line.setAttribute("y1", String(top));
+      line.setAttribute("y2", String(top + ih));
+      line.setAttribute("visibility", "visible");
+      let tip = box.querySelector(".cross-tip");
+      if (!tip) {
+        tip = document.createElement("div");
+        tip.className = "cross-tip";
+        box.appendChild(tip);
+      }
+      const whenText = fmtSeoulTime(when);
+      const rows = [{label: "시각", text: whenText}].concat(box._crossRows(when) || []);
+      tip.innerHTML = rows.map(r => "<div class='kv-row'><span>" + r.label + "</span><span>" + r.text + "</span></div>").join("");
+      tip.hidden = false;
+      const left = Math.max(8, Math.min((box.clientWidth || rect.width) - 150, (x / 390) * rect.width));
+      tip.style.left = left + "px";
+      tip.style.top = "8px";
+      box._crossX = clientX;
+      box.classList.add("cross-on");
+    }
+    function bindCrosshair(box, rowsAt) {
+      if (!box) return;
+      box._crossRows = rowsAt;
+      if (box._crossOn) return;
+      box._crossOn = true;
+      box.addEventListener("pointerdown", (ev) => {
+        if (ev.target.closest && ev.target.closest(".speed-mark, button, a")) return;
+        box._drag = {x: ev.clientX, y: ev.clientY, id: ev.pointerId, axis: ""};
+      });
+      box.addEventListener("pointermove", (ev) => {
+        const drag = box._drag;
+        if (!drag || ev.pointerId !== drag.id) return;
+        const dx = ev.clientX - drag.x;
+        const dy = ev.clientY - drag.y;
+        if (!drag.axis) {
+          if (Math.hypot(dx, dy) < 6) return;
+          drag.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+          if (drag.axis === "x" && ev.target.setPointerCapture) {
+            try { ev.target.setPointerCapture(ev.pointerId); } catch (err) {}
+          }
+        }
+        if (drag.axis === "x") {
+          if (ev.cancelable) ev.preventDefault();
+          placeCross(box, ev.clientX);
+        }
+      });
+      box.addEventListener("pointerup", (ev) => {
+        const drag = box._drag;
+        if (!drag || ev.pointerId !== drag.id) return;
+        if (drag.axis !== "y") placeCross(box, ev.clientX);
+        box._drag = null;
+      });
+      box.addEventListener("pointercancel", () => { box._drag = null; });
+      box.addEventListener("touchmove", (ev) => {
+        if (box._drag && box._drag.axis === "x" && ev.cancelable) ev.preventDefault();
+      }, {passive: false});
+    }
+    function crossLine(top, ih) {
+      return "<line class='cross-line' x1='0' x2='0' y1='" + top + "' y2='" + (top + ih) +
+        "' stroke='" + tone("chart-axis") + "' stroke-width='1' visibility='hidden' pointer-events='none'></line>";
+    }
+    function chartSvg(inner, H, t0, t1, L, plot, top, ih) {
+      return "<svg class='bchart' overflow='visible' viewBox='0 0 390 " + H + "' preserveAspectRatio='xMidYMid meet' data-t0='" + t0 +
+        "' data-t1='" + t1 + "' data-l='" + L + "' data-plot='" + plot + "' data-top='" + top + "' data-ih='" + ih + "'>" +
+        inner + "</svg>";
+    }
+
+    function timeMarks(t0, t1, xAt, top, height, labelY) {
+      if (!isFinite(t0) || !isFinite(t1)) return {grids: "", labels: ""};
+      const marks = [t0, t1];
+      let grids = "", labels = "";
+      marks.forEach((ms, i) => {
+        const px = xAt(ms);
+        const anchor = i === 0 ? "start" : "end";
+        grids += '<line x1="' + px + '" y1="' + top + '" x2="' + px + '" y2="' + (top + height) + '" stroke="' + tone("chart-grid") + '"></line>';
+        labels += '<text x="' + px + '" y="' + labelY + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="' + anchor + '">' + fmtHm(new Date(ms).toISOString()) + "</text>";
+      });
+      return {grids: grids, labels: labels};
+    }
+    // Thin full-strength lines on the lowest and highest y tick. They sit on the
+    // plot edge, so the stroke is kept at 1px and the svg does not crop it.
+    function axisBaselines(x1, x2, yTop, yBot) {
+      const line = (y) => '<line x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y +
+        '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
+      return line(yTop) + line(yBot);
+    }
+    function svgChargeBand(power, temps, endTs, axisTop, segments, startTs) {
+      const W = 390, H = 168, L = 36, R = 16, T = 8, B = 34;
       const innerW = W - L - R, innerH = H - T - B;
-      const samples = (temps || []).slice().sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
-      const span = power.length ? power : samples.map(t => ({ ts: t.ts }));
-      if (!span.length) return "";
-      const t0 = Date.parse(span[0].ts);
-      const t1 = Date.parse(endTs || span[span.length - 1].ts);
+      const samples = power || [];
+      const segs = (segments && segments.length) ? segments : (samples.length ? [samples] : []);
+      if (!samples.length && !segs.length) return "";
+      const t0 = Date.parse(startTs || (samples[0] && samples[0].ts) || (segs[0] && segs[0][0] && segs[0][0].ts));
+      const t1 = Date.parse(endTs || (samples.length ? samples[samples.length - 1].ts : startTs));
       const x = ts => {
-        const n = Date.parse(ts);
+        const n = typeof ts === "number" ? ts : Date.parse(ts);
         if (!isFinite(n) || !isFinite(t0) || !isFinite(t1)) return null;
         return L + (t1 === t0 ? innerW / 2 : ((n - t0) / (t1 - t0)) * innerW);
       };
-      const pvals = power.map(p => p.v).filter(v => v != null);
-      const pmax = Math.max(1, ...(pvals.length ? pvals : [1]));
-      const yP = v => T + innerH - (v / pmax) * innerH;
-      let holdMin = null, holdMax = null;
-      const band = [];
-      samples.forEach(sample => {
-        const gotMin = sample.min != null && sample.min !== "";
-        const gotMax = sample.max != null && sample.max !== "";
-        if (gotMin) holdMin = Number(sample.min);
-        if (gotMax) holdMax = Number(sample.max);
-        let lo = holdMin, hi = holdMax;
-        if (lo != null && hi != null && lo > hi) lo = hi;
-        if (lo == null && hi != null) lo = hi;
-        if (hi == null && lo != null) hi = lo;
-        if (lo == null || hi == null || !isFinite(Date.parse(sample.ts))) return;
-        // paired: both readings share this timestamp. Otherwise lo/hi mix two times.
-        band.push({ ts: sample.ts, lo: lo, hi: hi, paired: gotMin && gotMax });
-      });
-      const tvals = band.flatMap(b => [b.lo, b.hi]);
-      const dataLo = tvals.length ? Math.min.apply(null, tvals) : 0;
-      const dataHi = tvals.length ? Math.max.apply(null, tvals) : 1;
-      const pad = Math.max(1, (dataHi - dataLo) * 0.12);
-      const axisLo = dataLo - pad, axisHi = dataHi + pad;
-      const yT = v => T + innerH - ((v - axisLo) / (axisHi - axisLo)) * innerH;
+      const pvals = samples.map(p => Number(p.v)).filter(v => isFinite(v));
+      const observed = Math.max(1, ...(pvals.length ? pvals : [1]));
+      const rated = Number(axisTop);
+      const pmax = isFinite(rated) && rated > 0 ? rated : observed;
+      const yP = v => T + innerH - (Number(v) / pmax) * innerH;
       let html = "";
       [0, pmax / 2, pmax].forEach(v => {
-        html += '<text x="' + (L - 4) + '" y="' + (yP(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + fmt(v, v < 10 ? 1 : 0) + "</text>";
+        const label = pmax >= 10 && Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : fmt(v, 1);
+        html += '<text x="' + (L - 4) + '" y="' + (yP(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + label + "</text>";
       });
-      if (tvals.length) [axisLo, axisHi].forEach(v => {
-        html += '<text x="' + (W - R + 4) + '" y="' + (yT(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11">' + fmt(v, 0) + "</text>";
-      });
-      // Step only where a temperature sample exists. Each step runs to the next
-      // sample, so neighbouring steps share an edge. No line back to the empty start.
-      // A min and a max a few seconds apart are not one temperature. Drop that
-      // short mixed sliver when it hangs outside the next step (under 2 minutes).
-      const THIN_MS = 2 * 60 * 1000;
-      for (let i = 0; i < band.length; i++) {
-        const nextTs = i + 1 < band.length ? band[i + 1].ts : (endTs || band[i].ts);
-        const x0 = x(band[i].ts);
-        const x1 = x(nextTs);
-        if (x0 == null || x1 == null) continue;
-        if (i + 1 < band.length && !band[i].paired) {
-          const dur = Date.parse(nextTs) - Date.parse(band[i].ts);
-          const nxt = band[i + 1];
-          if (dur >= 0 && dur < THIN_MS && (band[i].lo < nxt.lo - 1e-9 || band[i].hi > nxt.hi + 1e-9)) continue;
-        }
-        const top = yT(band[i].hi), bot = yT(band[i].lo);
-        html += '<polygon points="' + x0 + "," + top + " " + x1 + "," + top + " " + x1 + "," + bot + " " + x0 + "," + bot +
-          '" fill="#e7c8a4" fill-opacity="0.55"></polygon>';
-      }
-      let paused = false;
-      for (let i = 0; i < power.length - 1; i++) {
-        const a = power[i], b = power[i + 1];
-        if (!(a.v === 0 || b.v === 0)) continue;
-        const x0 = x(a.ts), x1 = x(b.ts);
-        if (x0 == null || x1 == null || x1 <= x0) continue;
-        html += '<rect x="' + x0 + '" y="' + T + '" width="' + (x1 - x0) + '" height="' + innerH +
-          '" fill="' + tone("chart-axis") + '" fill-opacity="0.18"></rect>';
-        paused = true;
-      }
-      if (power.length > 1) {
+      const y0 = yP(0);
+      const marks = timeMarks(t0, t1, ms => x(ms), T, innerH, H - 12);
+      html += marks.grids;
+      segs.forEach(seg => {
+        const drawn = decimate((seg || []).filter(p => p.v != null && x(p.ts) != null), 240);
+        if (drawn.length < 2) return;
+        const area = drawn.map(p => x(p.ts) + "," + yP(p.v)).join(" ") + " " +
+          x(drawn[drawn.length - 1].ts) + "," + y0 + " " + x(drawn[0].ts) + "," + y0;
+        html += '<polygon points="' + area + '" fill="' + tone("chart-charge") + '" fill-opacity="0.15"></polygon>';
         html += '<polyline fill="none" stroke="' + tone("chart-charge") + '" stroke-width="1.8" points="' +
-          power.map(p => x(p.ts) + "," + yP(p.v == null ? 0 : p.v)).join(" ") + '"></polyline>';
-      }
-      [t0, (t0 + t1) / 2, t1].forEach((ms, i) => {
-        const px = L + (t1 === t0 ? innerW / 2 : ((ms - t0) / (t1 - t0)) * innerW);
-        const anchor = i === 0 ? "start" : i === 2 ? "end" : "middle";
-        html += '<text x="' + px + '" y="' + (H - 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="' + anchor + '">' + fmtHm(new Date(ms).toISOString()) + "</text>";
+          drawn.map(p => x(p.ts) + "," + yP(p.v)).join(" ") + '"></polyline>';
       });
-      let legend = "<p class='chart-legend'><span><i style='background:" + tone("chart-charge") + "'></i>충전 전력</span>" +
-        "<span><i style='background:#e7c8a4'></i>배터리 온도(최저~최고)</span>";
-      if (paused) {
-        legend += "<span><i style='background:" + tone("chart-axis") + ";opacity:0.18'></i>충전 멈춤</span>";
-      }
-      legend += "</p>";
-      return '<svg class="bchart" viewBox="0 0 390 ' + H + '" preserveAspectRatio="xMidYMid meet">' + html + "</svg>" + legend;
+      html += axisBaselines(L, W - R, yP(pmax), yP(0));
+      html += marks.labels;
+      html += '<rect class="cross-hit" x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="transparent"></rect>';
+      html += crossLine(T, innerH);
+      return chartSvg(html, H, t0, t1, L, innerW, T, innerH) +
+        "<p class='chart-legend'><span><i style='background:" + tone("chart-charge") + "'></i>충전 전력</span></p>";
     }
+
     function paintChargeTemps(minC, maxC) {
       [["charge-tmin", "charge-tmin-row", minC], ["charge-tmax", "charge-tmax-row", maxC]].forEach(row => {
         const el = document.getElementById(row[0]);
@@ -2587,12 +2778,17 @@
       });
     }
     function svgLine(points, opts) {
-      const W = 390, H = opts.h || 150, L = 40, R = 44, T = 10, B = 22;
+      const W = 390, H = opts.h || 150, L = 40, R = 16, T = 10, B = 34;
       const innerW = W - L - R, innerH = H - T - B;
       const steps = opts.steps || [];
-      if (!points.length && !steps.length) return "";
-      const xs = (points.length ? points : steps[0].points).map(p => Date.parse(p.ts));
-      const t0 = Math.min.apply(null, xs), t1 = Math.max.apply(null, xs);
+      const segs = (opts.segments && opts.segments.length) ? opts.segments : [points];
+      if (!points.length && !steps.length && !segs.some(seg => seg && seg.length)) return "";
+      const xs = [];
+      segs.forEach(seg => (seg || []).forEach(pt => xs.push(Date.parse(pt.ts))));
+      if (opts.t0) xs.push(Date.parse(opts.t0));
+      if (opts.t1) xs.push(Date.parse(opts.t1));
+      const finite = xs.filter(n => isFinite(n));
+      const t0 = Math.min.apply(null, finite), t1 = Math.max.apply(null, finite);
       const vals = points.map(p => p.v).filter(v => v != null);
       if (!vals.length) vals.push(0);
       const ticks = niceTicks(Math.min(0, Math.min.apply(null, vals)), Math.max(0, Math.max.apply(null, vals)));
@@ -2601,19 +2797,25 @@
       const y = v => T + innerH - ((v - ymin) / (ymax - ymin)) * innerH;
       let html = "";
       const dec = ticks.some(v => Math.abs(v - Math.round(v)) > 1e-9) ? 1 : 0;
-      ticks.forEach(v => {
-        html += '<line x1="' + L + '" y1="' + y(v) + '" x2="' + (W - R) + '" y2="' + y(v) + '" stroke="' + tone("chart-grid") + '"></line>';
-        html += '<text x="' + (L - 4) + '" y="' + (y(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + v.toFixed(dec) + "</text>";
+      ticks.forEach((v, i) => {
+        const edge = i === 0 || i === ticks.length - 1;
+        if (!edge) html += '<line x1="' + L + '" y1="' + y(v) + '" x2="' + (W - R) + '" y2="' + y(v) + '" stroke="' + tone("chart-grid") + '"></line>';
+        html += '<text x="' + (L - 4) + '" y="' + (y(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + fmt(v, dec) + "</text>";
       });
       if (ymin < 0) html += '<line x1="' + L + '" y1="' + y(0) + '" x2="' + (W - R) + '" y2="' + y(0) + '" stroke="' + tone("chart-axis") + '"></line>';
-      const drawn = points.filter(p => p.v != null);
-      const pts = drawn.map(p => x(p.ts) + "," + y(p.v)).join(" ");
-      if (drawn.length > 1) {
+      const xMs = ms => L + (t1 === t0 ? innerW / 2 : ((ms - t0) / (t1 - t0)) * innerW);
+      const marks = timeMarks(t0, t1, xMs, T, innerH, H - 12);
+      html += marks.grids;
+      const drawn = [];
+      segs.forEach(seg => (seg || []).forEach(pt => { if (pt.v != null) drawn.push(pt); }));
+      segs.forEach(seg => {
+        const part = decimate((seg || []).filter(pt => pt.v != null), 240);
+        if (part.length < 2) return;
         const base = y(Math.max(0, ymin));
-        const area = drawn.map(p => x(p.ts) + "," + y(p.v)).join(" ") + " " + x(drawn[drawn.length - 1].ts) + "," + base + " " + x(drawn[0].ts) + "," + base;
+        const area = part.map(pt => x(pt.ts) + "," + y(pt.v)).join(" ") + " " + x(part[part.length - 1].ts) + "," + base + " " + x(part[0].ts) + "," + base;
         html += '<polygon points="' + area + '" fill="' + (opts.color || tone("chart-trip")) + '" fill-opacity="' + (tone("chart-area") || "0.15") + '"></polygon>';
-      }
-      if (pts) html += '<polyline fill="none" stroke="' + (opts.color || tone("chart-trip")) + '" stroke-width="1.8" points="' + pts + '"></polyline>';
+        html += '<polyline fill="none" stroke="' + (opts.color || tone("chart-trip")) + '" stroke-width="1.8" points="' + part.map(pt => x(pt.ts) + "," + y(pt.v)).join(" ") + '"></polyline>';
+      });
       steps.forEach(series => {
         const sp = (series.points || []).filter(p => p.v != null);
         if (!sp.length) return;
@@ -2625,10 +2827,9 @@
         sp.forEach((p, i) => {
           const x1 = x(p.ts), y1 = yT(p.v);
           const next = sp[i + 1];
-          const gap = next ? (Date.parse(next.ts) - Date.parse(p.ts)) : 0;
           if (!hold) hold = x1 + "," + y1;
           else hold += " " + x1 + "," + y1;
-          if (next && gap > 0 && gap <= 20 * 60 * 1000) hold += " " + x(next.ts) + "," + y1;
+          if (next) hold += " " + x(next.ts) + "," + y1;
           else {
             html += '<polyline fill="none" stroke="' + series.color + '" stroke-width="1.4" points="' + hold + '"></polyline>';
             html += '<circle cx="' + x1 + '" cy="' + y1 + '" r="2.2" fill="' + series.color + '"></circle>';
@@ -2636,6 +2837,8 @@
           }
         });
       });
+      html += axisBaselines(L, W - R, y(ymax), y(ymin));
+      html += '<rect class="cross-hit" x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="transparent"></rect>';
       (opts.marks || []).forEach((m, i) => {
         const mt = Date.parse(m.ts);
         let prev = null, next = null;
@@ -2656,13 +2859,10 @@
         html += '<circle class="speed-mark" data-i="' + i + '" cx="' + cx + '" cy="' + cy + '" r="14" fill="transparent"></circle>';
         html += '<circle cx="' + cx + '" cy="' + cy + '" r="4" fill="' + color + '" pointer-events="none"></circle>';
       });
-      const axisPts = points.length ? points : ((steps[0] && steps[0].points) || []);
-      if (axisPts.length) {
-        html += '<text x="' + L + '" y="' + (H - 6) + '" fill="' + tone("chart-axis") + '" font-size="11">' + fmtHm(axisPts[0].ts) + "</text>";
-        html += '<text x="' + (W - R) + '" y="' + (H - 6) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + fmtHm(axisPts[axisPts.length - 1].ts) + "</text>";
-      }
+      html += marks.labels;
       html += '<text x="' + (W - R) + '" y="' + (T + 10) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + (opts.unit || "") + "</text>";
-      return '<svg class="bchart" viewBox="0 0 390 ' + H + '" preserveAspectRatio="xMidYMid meet">' + html + "</svg>";
+      html += crossLine(T, innerH);
+      return chartSvg(html, H, t0, t1, L, innerW, T, innerH);
     }
 
     function seoulHms(ts) {
@@ -2713,12 +2913,17 @@
         const data = await fetchJson(apiPath("/api/trips/" + encodeURIComponent(startTs) + "/speed"));
         const pts = (data.points || []).map(p => ({ ts: p.ts, v: p.kph }));
         const marks = data.events || [];
-        el.innerHTML = pts.length > 1 ? svgLine(pts, { unit: "km/h", h: 150, color: tone("chart-trip"), marks: marks }) : "<p class='muted'>기록 없음</p>";
+        const segs = (data.segments && data.segments.length) ? data.segments.map(seg => seg.map(p => ({ts: p.ts, v: p.kph}))) : [pts];
+        el.innerHTML = pts.length > 1 ? svgLine(pts, { unit: "km/h", h: 150, color: tone("chart-trip"), marks: marks, segments: segs, t0: data.start_ts, t1: data.end_ts }) : "<p class='muted'>기록 없음</p>";
         el.querySelectorAll(".speed-mark").forEach(node => {
           node.addEventListener("click", (ev) => {
             ev.stopPropagation();
             showSpeedTip(el, node, marks[Number(node.getAttribute("data-i"))]);
           });
+        });
+        bindCrosshair(el, (ms) => {
+          const v = seriesValueAt(parseSegs(segs.map(seg => seg.map(p => ({ts: p.ts, v: p.v})))), ms, "line");
+          return v == null ? [] : [{label: "속도", text: fmt(v, 1) + " km/h"}];
         });
       } catch (e) {
         el.innerHTML = "";
@@ -2728,12 +2933,527 @@
       try {
         const data = await fetchJson(apiPath("/api/trips/" + encodeURIComponent(startTs) + "/power"));
         const pts = (data.points || []).map(p => ({ ts: p.ts, v: p.kw }));
-        el.innerHTML = pts.length > 1 ? svgLine(pts, { unit: "kW (−는 회생)", h: 150, color: tone("chart-trip") }) : "<p class='muted'>기록 없음</p>";
+        const segs = (data.segments && data.segments.length) ? data.segments.map(seg => seg.map(p => ({ts: p.ts, v: p.kw}))) : [pts];
+        el.innerHTML = pts.length > 1 ? svgLine(pts, { unit: "kW (−는 회생)", h: 150, color: tone("chart-trip"), segments: segs, t0: data.start_ts, t1: data.end_ts }) : "<p class='muted'>기록 없음</p>";
+        bindCrosshair(el, (ms) => {
+          const v = seriesValueAt(parseSegs(segs.map(seg => seg.map(p => ({ts: p.ts, v: p.v})))), ms, "line");
+          return v == null ? [] : [{label: "전력", text: fmtFixed(v, 2) + " kW"}];
+        });
       } catch (e) {
         el.innerHTML = "";
       }
     }
 
+
+    const SEATS = [
+      {key: "seat_left", label: "운전석", dash: ""},
+      {key: "seat_right", label: "조수석", dash: "5 4"},
+      {key: "seat_rear_left", label: "뒷좌석 왼쪽", dash: "2 3"},
+      {key: "seat_rear_center", label: "뒷좌석 가운데", dash: "6 3 2 3"},
+      {key: "seat_rear_right", label: "뒷좌석 오른쪽", dash: "9 3"}
+    ];
+    const HEAT_COLOR = "#e39a4a";
+    const COOL_COLOR = "#6ba8ef";
+    const FAN_OFF = "#7d8794";
+    const FAN_ON = "#12c9a0";
+    const FAN_STYLE = "#8b95a3";
+    const WHEEL_COLOR = "#c45c26";
+    const CLIM_BARS = [
+      ["defrost", "성에 제거", "#d4a24a"],
+      ["rear_defrost", "뒷유리 열선", "#c9844a"],
+      ["wiper_heat", "와이퍼 열선", "#8aa0b5"]
+    ];
+    const STEP_FILL = 0.15;
+    const FAN_AXIS = 10;
+    const HEAT_AXIS = 3;
+    function coverWindow(seg, t0, t1) {
+      if (!seg || !seg.length) return [];
+      if (!isFinite(t0) || !isFinite(t1) || !(t1 > t0)) return seg.slice();
+      if (seg.length === 1) return [{t: t0, v: seg[0].v}, {t: t1, v: seg[0].v}];
+      const out = seg.slice();
+      if (out[out.length - 1].t < t1) out.push({t: t1, v: out[out.length - 1].v});
+      return out;
+    }
+    function usedSegs(raw) {
+      const segs = parseSegs(raw || []);
+      return segs.some(seg => seg.some(p => p.v > 0)) ? segs : [];
+    }
+    function climateModel(data) {
+      const bars = {};
+      Object.keys(data.bars || {}).forEach(key => {
+        const spans = (data.bars[key] || []).map(s => ({
+          t0: Date.parse(s.start), t1: Date.parse(s.end), level: Number(s.level)
+        })).filter(s => isFinite(s.t0) && isFinite(s.t1) && s.level);
+        if (spans.length) bars[key] = spans;
+      });
+      const heat = {};
+      const cool = {};
+      SEATS.forEach(seat => {
+        const heated = usedSegs((data.heat || {})[seat.key]);
+        const cooled = usedSegs((data.cool || {})[seat.key]);
+        if (heated.length) heat[seat.key] = heated;
+        if (cooled.length) cool[seat.key] = cooled;
+      });
+      const auto = parseSegs([data.auto || []]);
+      const ac = parseSegs([data.ac || []]);
+      const model = {
+        t0: Date.parse(data.start_ts), t1: Date.parse(data.end_ts),
+        inside: parseSegs(data.inside), outside: parseSegs(data.outside),
+        setDriver: parseSegs(data.set_driver), setPass: parseSegs(data.set_passenger),
+        fan: parseSegs(data.fan), wheel: usedSegs(data.wheel),
+        heat: heat, cool: cool, auto: auto[0] || [], ac: ac[0] || [], bars: bars
+      };
+      model.any = model.inside.length || model.outside.length || model.setDriver.length || model.fan.length ||
+        model.wheel.length || Object.keys(heat).length || Object.keys(cool).length || Object.keys(bars).length;
+      return model;
+    }
+    function climateTabs(model) {
+      const cabinOn = !!(model.inside.length || model.outside.length || model.setDriver.length);
+      const fanOn = (model.fan || []).some(seg => seg.some(p => p.v > 0));
+      const seatOn = SEATS.some(seat => model.heat[seat.key] || model.cool[seat.key]) || (model.wheel || []).length > 0;
+      const glassOn = CLIM_BARS.some(row => model.bars[row[0]]);
+      return [
+        ["cabin", "실내·실외", cabinOn],
+        ["fan", "A/C·팬", fanOn],
+        ["seats", "시트·핸들", seatOn],
+        ["glass", "유리·와이퍼", glassOn]
+      ];
+    }
+    function tempScale(model) {
+      const vals = [];
+      ["inside", "outside", "setDriver", "setPass"].forEach(key => {
+        (model[key] || []).forEach(seg => seg.forEach(p => vals.push(p.v)));
+      });
+      if (!vals.length) return tempAxis(0, 30);
+      return tempAxis(Math.min.apply(null, vals), Math.max.apply(null, vals));
+    }
+    function yOn(v, scale, top, ih) {
+      const span = (scale.max - scale.min) || 1;
+      return top + ih - ((v - scale.min) / span) * ih;
+    }
+    function fanAxisMax(model) {
+      return FAN_AXIS;
+    }
+    function heatAxisMax(model) {
+      return HEAT_AXIS;
+    }
+    function levelTicks(tab) {
+      if (tab === "fan") return [0, 2, 4, 6, 8, 10];
+      if (tab === "seats") return [0, 1, 2, 3];
+      return [];
+    }
+    function hasRight(tab) { return tab === "fan" || tab === "seats"; }
+    function rightMax(tab, model) { return tab === "seats" ? heatAxisMax(model) : fanAxisMax(model); }
+    function fanPieces(model) {
+      const out = [];
+      let n = 0;
+      (model.fan || []).forEach(seg => {
+        const drawn = coverWindow(seg, model.t0, model.t1);
+        for (let i = 0; i < drawn.length - 1; i++) {
+          const a = drawn[i];
+          const b = drawn[i + 1];
+          const active = a.v > 0.05;
+          const auto = active && flagAt(model.auto, a.t);
+          out.push({
+            key: "fan" + (n++),
+            color: active && flagAt(model.ac, a.t) ? FAN_ON : FAN_OFF,
+            dash: active && !auto ? "5 4" : "",
+            hold: [a, {t: b.t, v: a.v}],
+            step: [a, {t: b.t, v: a.v}, b]
+          });
+        }
+      });
+      return out;
+    }
+    function seriesOp(tab, key) {
+      if (key === "inside") return tab === "cabin" ? 1 : 0.22;
+      if (tab === "cabin" && (key === "outside" || key === "setDriver" || key === "setPass")) return 1;
+      if (tab === "fan" && key === "fan") return 1;
+      if (tab === "seats" && (key === "heat" || key === "cool" || key === "wheel")) return 1;
+      if (tab === "glass" && key === "bars") return 1;
+      return 0;
+    }
+    function stepPts(drawn) {
+      const out = [];
+      drawn.forEach((p, i) => {
+        if (i) out.push({t: p.t, v: drawn[i - 1].v});
+        out.push(p);
+      });
+      return out;
+    }
+    function levelWord(v) {
+      if (!isFinite(v) || Math.abs(v) < 0.5) return "끔";
+      return String(Math.round(v));
+    }
+    function climateSvg(model, fromTab, toTab, u) {
+      const bars = CLIM_BARS.filter(row => model.bars[row[0]]);
+      const barStrip = bars.length ? 4 + bars.length * 10 : 0;
+      const W = 390, L = 40, R = 16, T = 12, lineH = 176;
+      const H = T + lineH + barStrip + 36;
+      const innerW = W - L - R, innerH = lineH;
+      const t0 = model.t0, t1 = model.t1;
+      const xOf = (t) => L + (t1 === t0 ? innerW / 2 : ((t - t0) / (t1 - t0)) * innerW);
+      const temps = tempScale(model);
+      const blend = (a, b) => a + (b - a) * u;
+      const opOf = (key) => blend(seriesOp(fromTab, key), seriesOp(toTab, key));
+      let html = "";
+      const fill = tone("chart-axis");
+      const hasTemp = model.inside.length || model.outside.length || model.setDriver.length || model.setPass.length;
+      if (hasTemp) {
+        temps.ticks.forEach(v => {
+          const y = yOn(v, temps, T, innerH);
+          if (y < T - 0.5 || y > T + innerH + 0.5) return;
+          const atTop = Math.abs(y - T) < 1;
+          const atBot = Math.abs(y - (T + innerH)) < 1;
+          if (!atTop && !atBot) {
+            html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
+              "' stroke='" + tone("chart-grid") + "' opacity='0.35'></line>";
+          }
+          let ty = y + 4;
+          if (atTop) ty = T + 9;
+          if (atBot) ty = T + innerH - 2;
+          html += "<text x='" + (L - 4) + "' y='" + ty + "' fill='" + fill +
+            "' font-size='11' text-anchor='end'>" + fmt(v, 1) + "°C</text>";
+        });
+      }
+      const marks = timeMarks(t0, t1, xOf, T, innerH, H - 12);
+      html += marks.grids;
+      const seen = {};
+      levelTicks(fromTab).forEach(v => { seen[v] = true; });
+      levelTicks(toTab).forEach(v => { seen[v] = true; });
+      Object.keys(seen).forEach(key => {
+        const v = Number(key);
+        const fromOn = levelTicks(fromTab).indexOf(v) >= 0;
+        const toOn = levelTicks(toTab).indexOf(v) >= 0;
+        const yOf = (tab) => yOn(v, {min: 0, max: rightMax(tab, model)}, T, innerH);
+        const y0 = fromOn ? yOf(fromTab) : yOf(toTab);
+        const y1 = toOn ? yOf(toTab) : yOf(fromTab);
+        const op = blend(fromOn ? 1 : 0, toOn ? 1 : 0);
+        if (op < 0.04) return;
+        const y = y0 + (y1 - y0) * u;
+        html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
+          "' stroke='" + tone("chart-grid") + "' opacity='" + (op * 0.28).toFixed(3) + "'></line>";
+        const labelY = y < T + 12 ? y + 11 : y - 2;
+        html += "<text x='" + (L + innerW - 4) + "' y='" + labelY + "' fill='" + fill +
+          "' font-size='10' text-anchor='end' opacity='" + (op * 0.75).toFixed(3) + "'>" + v + "</text>";
+      });
+      const yLevel = (tab, v) => yOn(v, {min: 0, max: rightMax(hasRight(tab) ? tab : (hasRight(fromTab) ? fromTab : toTab), model)}, T, innerH);
+      const paintFill = (pts, color, op, fromS, toS) => {
+        if (op < 0.02 || pts.length < 2) return;
+        const yb = blend(yLevel(fromS, 0), yLevel(toS, 0));
+        const top = pts.map(p => {
+          const y = blend(yLevel(fromS, p.v), yLevel(toS, p.v));
+          return (xOf(p.t) || 0) + "," + y;
+        }).join(" ");
+        const x0 = xOf(pts[0].t) || 0;
+        const x1 = xOf(pts[pts.length - 1].t) || 0;
+        html += "<polygon points='" + top + " " + x1 + "," + yb + " " + x0 + "," + yb +
+          "' fill='" + color + "' fill-opacity='" + (STEP_FILL * op).toFixed(3) + "'></polygon>";
+      };
+      const paintLine = (pts, color, width, dash, op, yAt) => {
+        if (op < 0.02 || pts.length < 2) return;
+        const points = pts.map(p => (xOf(p.t) || 0) + "," + yAt(p)).join(" ");
+        const dashAttr = dash ? " stroke-dasharray='" + dash + "'" : "";
+        html += "<polyline fill='none' stroke='" + color + "' stroke-width='" + width +
+          "' stroke-opacity='" + op.toFixed(3) + "'" + dashAttr + " points='" + points + "'></polyline>";
+      };
+      const fromS = hasRight(fromTab) ? fromTab : (hasRight(toTab) ? toTab : "fan");
+      const toS = hasRight(toTab) ? toTab : fromS;
+      fanPieces(model).forEach(piece => paintFill(piece.hold, piece.color, opOf("fan"), fromS, toS));
+      const levelOp = (kind) => opOf(kind);
+      SEATS.forEach(seat => {
+        (model.heat[seat.key] || []).forEach(seg => {
+          paintFill(stepPts(decimate(coverWindow(seg, t0, t1), 180)), HEAT_COLOR, levelOp("heat"), fromS, toS);
+        });
+        (model.cool[seat.key] || []).forEach(seg => {
+          paintFill(stepPts(decimate(coverWindow(seg, t0, t1), 180)), COOL_COLOR, levelOp("cool"), fromS, toS);
+        });
+      });
+      (model.wheel || []).forEach(seg => {
+        paintFill(stepPts(decimate(coverWindow(seg, t0, t1), 180)), WHEEL_COLOR, levelOp("wheel"), fromS, toS);
+      });
+      const lines = [
+        {key: "inside", color: "#d5dee8", width: 1.6, dash: "", segs: model.inside, mode: "line"},
+        {key: "outside", color: "#9aa6b2", width: 1.4, dash: "", segs: model.outside, mode: "line"},
+        {key: "setDriver", color: "#f2a3c7", width: 1.8, dash: "", segs: model.setDriver, mode: "step"},
+        {key: "setPass", color: "#f2a3c7", width: 1.5, dash: "4 3", segs: model.setPass, mode: "step"}
+      ];
+      lines.forEach(series => {
+        const op = opOf(series.key);
+        if (op < 0.02) return;
+        series.segs.forEach(seg => {
+          const base = series.key === "setDriver" || series.key === "setPass" ? seg : coverWindow(seg, t0, t1);
+          const drawn = decimate(base, 180);
+          if (drawn.length < 2) return;
+          const stepped = series.mode === "step" ? stepPts(drawn) : drawn;
+          const yAt = (p) => {
+            const y0 = yOn(p.v, temps, T, innerH);
+            return y0;
+          };
+          paintLine(stepped, series.color, series.width, series.dash, op, yAt);
+        });
+      });
+      fanPieces(model).forEach(piece => {
+        const op = opOf("fan");
+        const yAt = (p) => blend(yLevel(fromS, p.v), yLevel(toS, p.v));
+        paintLine(piece.step, piece.color, 1.8, piece.dash, op, yAt);
+      });
+      SEATS.forEach(seat => {
+        (model.heat[seat.key] || []).forEach(seg => {
+          const stepped = stepPts(decimate(coverWindow(seg, t0, t1), 180));
+          paintLine(stepped, HEAT_COLOR, 1.8, seat.dash, opOf("heat"), p => blend(yLevel(fromS, p.v), yLevel(toS, p.v)));
+        });
+        (model.cool[seat.key] || []).forEach(seg => {
+          const stepped = stepPts(decimate(coverWindow(seg, t0, t1), 180));
+          paintLine(stepped, COOL_COLOR, 1.8, seat.dash, opOf("cool"), p => blend(yLevel(fromS, p.v), yLevel(toS, p.v)));
+        });
+      });
+      (model.wheel || []).forEach(seg => {
+        const stepped = stepPts(decimate(coverWindow(seg, t0, t1), 180));
+        paintLine(stepped, WHEEL_COLOR, 2.2, "", opOf("wheel"), p => blend(yLevel(fromS, p.v), yLevel(toS, p.v)));
+      });
+      const barOp = opOf("bars");
+      if (barOp > 0.02) {
+        bars.forEach((row, i) => {
+          const y = T + innerH + 4 + i * 10;
+          model.bars[row[0]].forEach(span => {
+            const x0 = xOf(span.t0), x1 = xOf(span.t1);
+            if (x0 == null || x1 == null || x1 <= x0) return;
+            html += "<rect x='" + x0 + "' y='" + y + "' width='" + (x1 - x0) + "' height='7' rx='2' fill='" +
+              row[2] + "' fill-opacity='" + barOp.toFixed(3) + "'></rect>";
+          });
+        });
+      }
+      html += marks.labels;
+      if (hasTemp) html += axisBaselines(L, L + innerW, yOn(temps.max, temps, T, innerH), yOn(temps.min, temps, T, innerH));
+      else {
+        const tab = hasRight(toTab) ? toTab : (hasRight(fromTab) ? fromTab : "fan");
+        const scale = {min: 0, max: rightMax(tab, model)};
+        html += axisBaselines(L, L + innerW, yOn(scale.max, scale, T, innerH), yOn(0, scale, T, innerH));
+      }
+      html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
+      html += crossLine(T, innerH);
+      return chartSvg(html, H, t0, t1, L, innerW, T, innerH);
+    }
+    function climateLegend(model, tab) {
+      const bit = (color, label, dash) => "<span><i" + (dash ? " class='dash'" : "") + " style='" +
+        (dash ? "color:" + color : "background:" + color) + "'></i>" + label + "</span>";
+      const mark = (cls, color, label) => "<span><i class='" + cls + "' style='color:" + color + "'></i>" + label + "</span>";
+      const join = (parts) => parts.filter(Boolean).join("<span class='leg-sep' aria-hidden='true'></span>");
+      const group = (label, body) => "<span class='leg-group'><em>" + label + "</em>" + body + "</span>";
+      const inside = model.inside.length ? bit("#9aa6b2", "실내") : "";
+      if (tab === "fan") {
+        return join([
+          inside,
+          mark("line", FAN_STYLE, "오토") + mark("dashline", FAN_STYLE, "수동"),
+          mark("box", FAN_ON, "A/C 켬") + mark("hollow", FAN_OFF, "A/C 끔")
+        ]);
+      }
+      if (tab === "seats") {
+        const used = SEATS.filter(seat => model.heat[seat.key] || model.cool[seat.key]);
+        const colors = [];
+        if (used.some(seat => model.heat[seat.key])) colors.push(bit(HEAT_COLOR, "열선"));
+        if (used.some(seat => model.cool[seat.key])) colors.push(bit(COOL_COLOR, "통풍"));
+        if (model.wheel.length) colors.push(bit(WHEEL_COLOR, "핸들 열선"));
+        const styles = used.map(seat => bit("#8aa0b5", seat.label, !!seat.dash)).join("");
+        return join([inside, colors.length ? group("색", colors.join("")) : "", styles ? group("자리", styles) : ""]);
+      }
+      if (tab === "glass") {
+        const bits = CLIM_BARS.filter(row => model.bars[row[0]]).map(row => bit(row[2], row[1]));
+        return join([inside].concat(bits));
+      }
+      const parts = [];
+      if (model.inside.length) parts.push(bit("#d5dee8", "실내"));
+      if (model.outside.length) parts.push(bit("#9aa6b2", "실외"));
+      if (model.setDriver.length && model.setPass.length) {
+        parts.push(group("설정 온도", bit("#f2a3c7", "운전석") + bit("#f2a3c7", "조수석", true)));
+      } else if (model.setDriver.length) parts.push(bit("#f2a3c7", "설정 온도"));
+      return join(parts);
+    }
+    function climateRows(model, tab, ms) {
+      const rows = [];
+      const add = (label, segs, mode, kind) => {
+        if (!segs || !segs.length) return;
+        const v = seriesValueAt(segs, ms, mode);
+        if (v == null) return;
+        rows.push({label: label, text: kind === "level" ? levelWord(v) : fmt(v, 1) + "°C"});
+      };
+      if (model.inside.length) add("실내", model.inside, "line", "°C");
+      if (tab === "cabin") {
+        add("실외", model.outside, "line", "°C");
+        add("설정 온도", model.setDriver, "step", "°C");
+        add("조수석 설정", model.setPass, "step", "°C");
+      }
+      if (tab === "fan") {
+        const v = seriesValueAt(model.fan, ms, "step");
+        if (v != null) {
+          let text = levelWord(v);
+          if (v > 0.5) {
+            if (flagAt(model.auto, ms)) text += " · 오토";
+            if (flagAt(model.ac, ms)) text += " · A/C";
+          }
+          rows.push({label: "바람 세기", text: text});
+        }
+      }
+      if (tab === "seats") {
+        SEATS.forEach(seat => {
+          if (model.heat[seat.key]) add(seat.label + " 열선", model.heat[seat.key], "step", "level");
+          if (model.cool[seat.key]) add(seat.label + " 통풍", model.cool[seat.key], "step", "level");
+        });
+        if (model.wheel.length) add("핸들 열선", model.wheel, "step", "level");
+      }
+      if (tab === "glass") {
+        CLIM_BARS.forEach(row => {
+          const hit = (model.bars[row[0]] || []).find(s => ms >= s.t0 && ms < s.t1);
+          if (hit) rows.push({label: row[1], text: "켜짐"});
+        });
+      }
+      return rows;
+    }
+    function mountClimate(slot, data) {
+      const model = climateModel(data);
+      const tabs = climateTabs(model);
+      if (!isFinite(model.t0) || !isFinite(model.t1) || !model.any) { slot.innerHTML = ""; return; }
+      const first = (tabs.find(t => t[2]) || tabs[0]);
+      slot.innerHTML = "<div class='detail-block'>" +
+        tempSummary([["평균 실내 온도", data.avg_inside], ["평균 실외 온도", data.avg_outside]]) +
+        "<div class='clim-tabs' role='tablist'>" +
+        tabs.map(t => {
+          const on = t[0] === first[0] && t[2];
+          const cls = (on ? "on" : "") + (t[2] ? "" : " disabled");
+          return "<button type='button' data-clim='" + t[0] + "'" + (cls ? " class='" + cls.trim() + "'" : "") +
+            " role='tab' aria-selected='" + (on ? "true" : "false") + "'" +
+            (t[2] ? "" : " aria-disabled='true'") + ">" + t[1] + "</button>";
+        }).join("") +
+        "</div><div class='curve-box clim-plot'></div><p class='chart-legend clim-legend'></p></div>";
+      const plot = slot.querySelector(".clim-plot");
+      const legend = slot.querySelector(".clim-legend");
+      let tab = first[2] ? first[0] : tabs[0][0];
+      let frame = 0;
+      const paint = (from, to, blend) => {
+        plot.innerHTML = climateSvg(model, from, to, blend);
+        legend.innerHTML = climateLegend(model, to);
+        if (plot.classList.contains("cross-on") && plot._crossX != null) placeCross(plot, plot._crossX);
+      };
+      const go = (next) => {
+        const from = tab;
+        tab = next;
+        slot.querySelectorAll("[data-clim]").forEach(btn => {
+          const on = btn.getAttribute("data-clim") === next;
+          btn.classList.toggle("on", on);
+          btn.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        plot._crossRows = (ms) => climateRows(model, next, ms);
+        const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const dur = reduce ? 0 : 320;
+        const started = performance.now();
+        cancelAnimationFrame(frame);
+        const step = (now) => {
+          const u = dur ? Math.min(1, (now - started) / dur) : 1;
+          paint(from, next, 1 - Math.pow(1 - u, 3));
+          if (u < 1) frame = requestAnimationFrame(step);
+        };
+        frame = requestAnimationFrame(step);
+      };
+      slot.querySelectorAll("[data-clim]").forEach(btn => btn.addEventListener("click", () => {
+        if (btn.getAttribute("aria-disabled") === "true") return;
+        go(btn.getAttribute("data-clim"));
+      }));
+      bindCrosshair(plot, (ms) => climateRows(model, tab, ms));
+      paint(tab, tab, 1);
+    }
+    function tempSummary(rows) {
+      const html = (rows || []).filter(row => row[1] != null && isFinite(Number(row[1]))).map(row =>
+        "<div class='kv-row'><span>" + row[0] + "</span><span>" + fmt(row[1], 1) + " °C</span></div>"
+      ).join("");
+      return html ? "<div class='kv'>" + html + "</div>" : "";
+    }
+    function batteryRows(model, ms) {
+      const rows = [];
+      const hi = seriesValueAt(model.max, ms, "line");
+      const lo = seriesValueAt(model.min, ms, "line");
+      if (hi != null) rows.push({label: "최고", text: fmt(hi, 1) + "°C"});
+      if (lo != null) rows.push({label: "최저", text: fmt(lo, 1) + "°C"});
+      const heat = (model.heater || []).some(s => ms >= s.t0 && ms < s.t1);
+      if (model.heater && model.heater.length) rows.push({label: "배터리 히터", text: heat ? "켜짐" : "꺼짐"});
+      return rows;
+    }
+    function svgBatteryTemp(model) {
+      const W = 390, H = 180, L = 40, R = 16, T = 16, B = 46;
+      const innerW = W - L - R, innerH = H - T - B;
+      const vals = [];
+      model.min.forEach(seg => seg.forEach(p => vals.push(p.v)));
+      model.max.forEach(seg => seg.forEach(p => vals.push(p.v)));
+      const lo = vals.length ? Math.min.apply(null, vals) : 0;
+      const hi = vals.length ? Math.max.apply(null, vals) : 1;
+      const scale = tempAxis(lo, hi);
+      const t0 = model.t0, t1 = model.t1;
+      const xOf = (t) => L + (t1 === t0 ? innerW / 2 : ((t - t0) / (t1 - t0)) * innerW);
+      let html = "";
+      (model.heater || []).forEach(span => {
+        const x0 = xOf(span.t0), x1 = xOf(span.t1);
+        if (x0 == null || x1 == null || x1 <= x0) return;
+        html += "<rect x='" + x0 + "' y='" + T + "' width='" + (x1 - x0) + "' height='" + innerH +
+          "' fill='#e39a4a' fill-opacity='0.16'></rect>";
+      });
+      scale.ticks.forEach(v => {
+        const y = yOn(v, scale, T, innerH);
+        let ty = y + 4;
+        if (Math.abs(y - T) < 1) ty = T + 9;
+        if (Math.abs(y - (T + innerH)) < 1) ty = T + innerH - 2;
+        html += "<text x='" + (L - 4) + "' y='" + ty + "' fill='" + tone("chart-axis") + "' font-size='11' text-anchor='end'>" + fmt(v, 1) + "°C</text>";
+      });
+      const drawLine = (segs, color) => {
+        segs.forEach(seg => {
+          const drawn = decimate(coverWindow(seg, model.t0, model.t1), 180);
+          if (drawn.length < 2) return;
+          html += "<polyline fill='none' stroke='" + color + "' stroke-width='1.8' points='" +
+            drawn.map(p => xOf(p.t) + "," + yOn(p.v, scale, T, innerH)).join(" ") + "'></polyline>";
+        });
+      };
+      const marks = timeMarks(t0, t1, xOf, T, innerH, H - 12);
+      html += marks.grids;
+      drawLine(model.max, "#ef8a6b");
+      drawLine(model.min, "#6ba8ef");
+      html += axisBaselines(L, L + innerW, yOn(scale.max, scale, T, innerH), yOn(scale.min, scale, T, innerH));
+      html += marks.labels;
+      html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
+      html += crossLine(T, innerH);
+      let legend = "<p class='chart-legend'><span><i style='background:#ef8a6b'></i>최고</span><span><i style='background:#6ba8ef'></i>최저</span>";
+      if (model.heater && model.heater.length) {
+        legend += "<span><i style='background:#e39a4a;opacity:0.4'></i>배터리 히터</span>";
+      }
+      legend += "</p>";
+      return chartSvg(html, H, t0, t1, L, innerW, T, innerH) + legend;
+    }
+    function mountBattery(slot, battery, startTs, endTs) {
+      if (!slot) return;
+      const min = parseSegs(battery && battery.min);
+      const max = parseSegs(battery && battery.max);
+      if (!min.length && !max.length) { slot.innerHTML = ""; return; }
+      const heater = ((battery && battery.heater) || []).map(s => ({
+        t0: Date.parse(s.start), t1: Date.parse(s.end)
+      })).filter(s => isFinite(s.t0) && isFinite(s.t1) && s.t1 > s.t0);
+      const model = {min: min, max: max, heater: heater, t0: Date.parse(startTs), t1: Date.parse(endTs)};
+      slot.innerHTML = "<div class='detail-block'><div class='card-head'><strong>배터리 온도</strong></div>" +
+        tempSummary([["최저 배터리 온도", battery && battery.low], ["최고 배터리 온도", battery && battery.high]]) +
+        "<div class='curve-box batt-plot'></div></div>";
+      const plot = slot.querySelector(".batt-plot");
+      plot.innerHTML = svgBatteryTemp(model);
+      bindCrosshair(plot, (ms) => batteryRows(model, ms));
+    }
+    async function loadTripClimate(startTs) {
+      const climateSlot = document.getElementById("trip-climate-slot");
+      const battSlot = document.getElementById("trip-battery-slot");
+      try {
+        const data = await fetchJson(apiPath("/api/trips/" + encodeURIComponent(startTs) + "/climate"));
+        if (climateSlot) mountClimate(climateSlot, data);
+        if (battSlot) mountBattery(battSlot, data.battery, data.start_ts, data.end_ts);
+      } catch (err) {
+        if (climateSlot) climateSlot.innerHTML = "";
+        if (battSlot) battSlot.innerHTML = "";
+      }
+    }
 
     // ---------------------------------------------------------------- route map
     // Naver Dynamic Map when /api/map/config has ncpKeyId. Otherwise this stays on Leaflet.
@@ -2899,6 +3619,14 @@
       });
     }
 
+    function hourFill(h, tlHour) {
+      const rose = tlHour && known(tlHour.start_pct) && known(tlHour.end_pct)
+        && Number(tlHour.end_pct) > Number(tlHour.start_pct);
+      if (rose) return tone("chart-charge");
+      const drove = (h && h.driving) || (tlHour && (tlHour.states || []).some(s => s.lane === "drive"));
+      if (drove) return tone("chart-trip");
+      return tone("chart-park");
+    }
     function drawBatDay(hours) {
       const svg = document.getElementById("bat-day");
       // L/R hold the % axis (: back from the full-width  try, the labels overlapped the bars).
@@ -2911,9 +3639,10 @@
       let html = "";
       [0, 50, 100].forEach(v => {
         const yy = T + innerH - (v / 100) * innerH;
-        html += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
+        if (v === 50) html += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
         html += '<text x="' + (L - 4) + '" y="' + (yy + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + v + "%</text>";
       });
+      html += axisBaselines(L, W - R, T, T + innerH);
       hours.forEach((h, i) => {
         const tl = batTimeline && batTimeline.hours ? batTimeline.hours[i] : null;
         const hasTl = tl && (tl.states.length || known(tl.start_pct));
@@ -2922,7 +3651,7 @@
           '<rect x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + innerH + '" fill="transparent"></rect>';
         if (h.pct != null) {
           const hh = (Math.max(0, Math.min(100, h.pct)) / 100) * innerH;
-          const color = h.driving ? tone("chart-trip") : h.charging ? tone("chart-charge") : tone("chart-park");
+          const color = hourFill(h, tl);
           html += '<rect class="bh-bar" x="' + (L + slot * i + 1.5) + '" y="' + (T + innerH - hh) + '" width="' + bw + '" height="' + hh + '" rx="2" fill="' + color + '" fill-opacity="' + (tone("chart-bar-opacity") || "1") + '"></rect>';
         }
         // Selected-bar ring, the same emphasis as a tapped mode bar (.tl-bar.on): a 2px line in the
@@ -3106,9 +3835,11 @@
       if (t && (known(t.start_pct) || known(t.end_pct))) {
         const text = socChangeText(known(t.start_pct) ? t.start_pct : null, known(t.end_pct) ? t.end_pct : null);
         if (text) rows.push(["배터리", text]);
-        if (known(t.delta_pct) && known(t.kwh) && t.delta_pct !== 0) {
-          const d = t.delta_pct;
-          rows.push([d > 0 ? "충전량" : "사용량", "약 " + fmt(t.kwh, t.kwh < 0.1 ? 3 : 2) + "kWh"]);
+        if (known(t.charge_kwh) && Number(t.charge_kwh) > 0) {
+          rows.push(["충전량", fmt(t.charge_kwh, t.charge_kwh < 0.1 ? 3 : 2) + "kWh"]);
+        }
+        if (known(t.use_kwh) && Number(t.use_kwh) > 0) {
+          rows.push(["사용량", (t.use_estimated ? "약 " : "") + fmt(t.use_kwh, t.use_kwh < 0.1 ? 3 : 2) + "kWh"]);
         }
       } else if (hb && known(hb.pct)) {
         rows.push(["배터리", fmt(hb.pct, 1) + "%"]);
@@ -3118,21 +3849,27 @@
     }
     function showTlPop(html, anchor) {
       const pop = document.getElementById("tl-pop");
-      if (pop.parentNode !== document.body) document.body.appendChild(pop);
+      // Stay inside the battery card. position:fixed on document.body kept the
+      // open tip on the screen after the card scrolled away.
+      const host = document.getElementById("battery-card") || pop.parentNode;
+      if (host && pop.parentNode !== host) host.appendChild(pop);
       pop.innerHTML = html;
       pop.hidden = false;
-      pop.style.position = "fixed";
+      pop.style.position = "";
       const nav = document.querySelector("nav.tabbar, nav");
       const navTop = nav ? nav.getBoundingClientRect().top : window.innerHeight;
       const limit = Math.max(120, navTop - 8);
       pop.style.maxHeight = Math.min(window.innerHeight * 0.46, limit - 8) + "px";
+      const base = host.getBoundingClientRect();
       const ar = anchor.getBoundingClientRect();
       const pw = pop.offsetWidth || 220;
-      const left = Math.max(8, Math.min(ar.left + ar.width / 2 - pw / 2, window.innerWidth - pw - 8));
-      let top = ar.bottom + 6;
+      const maxLeft = Math.max(8, base.width - pw - 8);
+      let left = ar.left - base.left + ar.width / 2 - pw / 2;
+      if (left < 8) left = 8;
+      if (left > maxLeft) left = maxLeft;
+      let top = ar.bottom - base.top + 6;
       const ph = pop.offsetHeight;
-      if (top + ph > limit) top = Math.max(8, ar.top - ph - 6);
-      if (top + ph > limit) top = Math.max(8, limit - ph);
+      if (ar.bottom + 6 + ph > limit) top = ar.top - base.top - ph - 6;
       pop.style.left = left + "px";
       pop.style.top = top + "px";
     }
@@ -3157,10 +3894,6 @@
         showTlPop(render(), el);
       });
     }
-    document.addEventListener("click", (ev) => {
-      if (ev.target.closest && ev.target.closest("#tl-pop")) return;
-      if (tlPinned) hideTlPop();
-    });
     document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") hideTlPop(); });
 
 
@@ -3282,7 +4015,13 @@
         const pts = (data.points || []).filter(p => p.kw != null).map(p => ({ ts: p.ts, v: p.kw }));
         if (data.avg_kw != null || data.max_kw != null) paintChargePower(data.avg_kw, data.max_kw);
         paintChargeTemps(data.battery_temp_min, data.battery_temp_max);
-        el.innerHTML = (pts.length > 1 || (data.temps || []).length) ? svgChargeBand(pts, data.temps || [], c.end_ts) : "<p class='muted'>기록 없음</p>";
+        const segs = (data.segments && data.segments.length) ? data.segments.map(seg => seg.map(p => ({ts: p.ts, v: p.kw}))) : [pts];
+        el.innerHTML = (pts.length > 1 || segs.length) ? svgChargeBand(pts, [], c.end_ts, data.axis_kw, segs, data.start_ts || c.start_ts) : "<p class='muted'>기록 없음</p>";
+        bindCrosshair(el, (ms) => {
+          const v = seriesValueAt(parseSegs(segs.map(seg => seg.map(p => ({ts: p.ts, v: p.v})))), ms, "line");
+          return v == null ? [] : [{label: "충전 전력", text: fmtFixed(v, 2) + " kW"}];
+        });
+        mountBattery(document.getElementById("charge-battery-slot"), data.battery, data.start_ts || c.start_ts, data.end_ts || c.end_ts);
         return true;
       } catch (e) {
         el.innerHTML = "";
@@ -3807,7 +4546,7 @@
         if (d) rows.push(["걸린 시간", d]);
       }
       const meters = pathMeters(piece.pts.map(p => [p.lat, p.lon]));
-      if (meters >= 1) rows.push(["거리", meters >= 1000 ? (meters / 1000).toFixed(1) + " km" : Math.round(meters) + " m"]);
+      if (meters >= 1) rows.push(["거리", meters >= 1000 ? fmt(meters / 1000, 1) + " km" : Math.round(meters) + " m"]);
       if (piece.speeds && piece.speeds.length) {
         const avg = piece.speeds.reduce((s, v) => s + v, 0) / piece.speeds.length;
         rows.push(["평균", Math.round(avg) + " km/h"]);
@@ -4114,6 +4853,29 @@
       const frac = n % 10;
       return frac === 0 ? String(whole) : whole + "." + frac;
     }
+    function socHundredths(v) {
+      const n = Number(v);
+      if (!isFinite(n)) return null;
+      return Math.round(n * 100);
+    }
+    function socFixedText(hundredths) {
+      const neg = hundredths < 0;
+      const n = Math.abs(hundredths);
+      const whole = Math.floor(n / 100);
+      const frac = n % 100;
+      let s = whole + "." + String(frac).padStart(2, "0");
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return (neg ? "-" : "") + s;
+    }
+    function socDetailText(start, end) {
+      const a = start == null || start === "" ? null : socHundredths(start);
+      const b = end == null || end === "" ? null : socHundredths(end);
+      if (a == null && b == null) return "";
+      if (a == null) return socFixedText(b) + "%";
+      if (b == null) return socFixedText(a) + "%";
+      if (a === b) return socFixedText(a) + "%";
+      return socFixedText(a) + "% → " + socFixedText(b) + "%";
+    }
     function socChangeText(start, end) {
       const a = start == null || start === "" ? null : socTenths(start);
       const b = end == null || end === "" ? null : socTenths(end);
@@ -4125,15 +4887,15 @@
     }
     function socBarHtml(start, end) {
       if ((start == null || start === "") && (end == null || end === "")) return "";
-      const a = start == null || start === "" ? null : socTenths(start);
-      const b = end == null || end === "" ? null : socTenths(end);
-      const text = socChangeText(start, end);
+      const a = start == null || start === "" ? null : socHundredths(start);
+      const b = end == null || end === "" ? null : socHundredths(end);
+      const text = socDetailText(start, end);
       const endShown = b == null ? a : b;
-      const endLeft = endShown == null ? 0 : Math.max(0, Math.min(100, endShown / 10));
+      const endLeft = endShown == null ? 0 : Math.max(0, Math.min(100, endShown / 100));
       let delta = "";
       if (a != null && b != null && a !== b) {
-        const lo = Math.min(a, b) / 10;
-        const hi = Math.max(a, b) / 10;
+        const lo = Math.min(a, b) / 100;
+        const hi = Math.max(a, b) / 100;
         const left = Math.max(0, Math.min(100, lo));
         const width = Math.max(0, Math.min(100 - left, hi - lo));
         if (width > 0) {
@@ -4149,7 +4911,7 @@
       if (bar == null || bar === "") return null;
       const v = Number(bar);
       if (!isFinite(v)) return null;
-      return pressureUnit === "bar" ? v.toFixed(2) : (v * PSI_PER_BAR).toFixed(1);
+      return pressureUnit === "bar" ? fmtTrim(v, 2) : fmtTrim(v * PSI_PER_BAR, 1);
     }
     function tirePairText(beforeBar, afterBar) {
       const a = psiNum(beforeBar);
@@ -4209,38 +4971,26 @@
       ];
       const r0 = t.start_est_range_km != null ? t.start_est_range_km : t.start_range_km;
       const r1 = t.end_est_range_km != null ? t.end_est_range_km : t.end_range_km;
-      const range = r0 == null ? null : fmt(r0, 0) + " → " + fmt(r1, 0) + " km";
-      const batt = t.battery_temp_min == null ? null : fmt(t.battery_temp_min, 0) + "–" + fmt(t.battery_temp_max, 0) + " °C";
+      const range = r0 == null ? null : fmt(r0, 1) + " → " + fmt(r1, 1) + " km";
       const energyHead = [
-        oneRow("회생", t.regen_kwh == null ? null : (t.regen_estimated ? "약 " : "") + fmt(t.regen_kwh, 2) + " kWh"),
+        oneRow("회생", t.regen_kwh == null ? null : (t.regen_estimated ? "약 " : "") + fmtFixed(t.regen_kwh, 2) + " kWh"),
         oneRow("주행가능", range),
-        oneRow("최대 출력", t.max_power_kw == null ? null : fmt(t.max_power_kw, 1) + " kW"),
-        oneRow("최대 회생", t.max_regen_kw == null ? null : fmt(t.max_regen_kw, 1) + " kW"),
+        oneRow("최대 출력", t.max_power_kw == null ? null : fmtFixed(t.max_power_kw, 2) + " kW"),
+        oneRow("최대 회생", t.max_regen_kw == null ? null : fmtFixed(t.max_regen_kw, 2) + " kW"),
       ];
-      const energyTail = [
-        oneRow("실내 온도", t.avg_inside_temp == null ? null : fmt(t.avg_inside_temp, 1) + " °C"),
-        oneRow("외부 온도", t.avg_outside_temp == null ? null : fmt(t.avg_outside_temp, 1) + " °C"),
-        oneRow("배터리 최저 온도", t.battery_temp_min == null ? null : fmt(t.battery_temp_min, 1) + " °C"),
-        oneRow("배터리 최고 온도", t.battery_temp_max == null ? null : fmt(t.battery_temp_max, 1) + " °C"),
-        oneRow("히터", t.battery_heater_on == null ? null : onOff(t.battery_heater_on)),
-        oneRow("공조", t.hvac_on == null ? null : onOff(t.hvac_on)),
-        oneRow("팬", (t.hvac_on === false || t.hvac_on === 0) ? "꺼짐" : ((t.fan_avg == null && t.fan_max == null) ? null : fanPhrase(t.fan_avg, t.fan_max, t.hvac_on))),
-        heatRow("운전석 열선", t.seat_heat_left_max),
-        heatRow("조수석 열선", t.seat_heat_right_max),
-        oneRow("핸들 열선", t.wheel_heat_max == null ? null : (Number(t.wheel_heat_max) > 0 ? "켜짐" : "꺼짐")),
-      ];
+      const energyTail = [];
       return "<div class='sheet-stack'>" + (route ? "<p class='sheet-kicker'>" + fmtDetailWhen(t.start_ts, t.end_ts) + "</p><p class='sheet-route'>" + escHtml(route) + "</p>"
         : "<p class='sheet-kicker'>" + fmtDetailWhen(t.start_ts, t.end_ts) + "</p>") +
         "<div class='key-grid'>" +
         keyCell("거리", t.km == null ? null : fmtTripDistance(t.km), "") +
         keyCell("시간", t.duration_s == null ? null : fmtMin(t.duration_s), "") +
-        keyCell("쓴 전력", t.kwh == null ? null : approx + fmt(t.kwh, 2), "kWh") +
+        keyCell("쓴 전력", t.kwh == null ? null : approx + fmtFixed(t.kwh, 2), "kWh") +
         keyCell("전비", t.km_per_kwh == null ? null : approx + fmt(t.km_per_kwh, 1), "km/kWh") +
         "</div>" +
         socBarHtml(t.start_soc, t.end_soc) +
         tireCompareHtml(t.tire_before, t.tire_after) +
         foldHtml("운전 패턴", "", kvBlock(patternHead) + "<div class='curve-box' id='trip-sheet-speed'></div>" + kvBlock(patternTail)) +
-        foldHtml("에너지 상세", "", kvBlock(energyHead) + "<div class='curve-box' id='trip-sheet-power'></div>" + kvBlock(energyTail)) +
+        foldHtml("에너지 상세", "", kvBlock(energyHead) + "<div class='curve-box' id='trip-sheet-power'></div>" + "<div id='trip-climate-slot'></div><div id='trip-battery-slot'></div>" + kvBlock(energyTail)) +
         "</div>";
     }
     let openTripRow = null;
@@ -4254,6 +5004,7 @@
       if (box) loadTripPower(box, t.start_ts);
       const speed = document.getElementById("trip-sheet-speed");
       if (speed) loadTripSpeed(speed, t.start_ts);
+      loadTripClimate(t.start_ts);
       document.getElementById("trip-overlay").classList.add("show");
     }
     function metricHtml(items) {
@@ -4555,8 +5306,8 @@
       if (a != null && !isFinite(a)) a = null;
       if (m != null && !isFinite(m)) m = null;
       if (a != null && m != null && a > m) m = a;
-      const as = a == null ? null : fmt(a, 1);
-      let ms = m == null ? null : fmt(m, 1);
+      const as = a == null ? null : fmtFixed(a, 2);
+      let ms = m == null ? null : fmtFixed(m, 2);
       if (as != null && ms != null && Number(as) > Number(ms)) ms = as;
       return [as, ms];
     }
@@ -4578,15 +5329,15 @@
       const unit = known(c.unit_krw_per_kwh) ? dimSpan(aboutMark(c.unit_estimated) + fmt(c.unit_krw_per_kwh, 1) + "원/kWh", !!c.unit_estimated) : null;
       const disc = c.meta && known(c.meta.discount_krw) && Number(c.meta.discount_krw) > 0
         ? "<div class='tariff-line'><span>할인·포인트</span><strong>" + fmtKrw(c.meta.discount_krw) + "</strong></div>" : "";
-      const sentCell = sent == null ? null : dimSpan(aboutMark(c.sent_estimated) + fmt(sent, 2), !!c.sent_estimated);
+      const sentCell = sent == null ? null : dimSpan(aboutMark(c.sent_estimated) + fmtFixed(sent, 2), !!c.sent_estimated);
       const lossKwh = (sent == null || !known(c.battery_in_kwh) || !known(c.loss_kwh)) ? null
         : Math.max(0, sent - Number(c.battery_in_kwh) - Number(c.loss_kwh));
       const lossEstimated = !!(c.sent_estimated && lossKwh != null);
       const lossPct = (sent == null || !(sent > 0) || lossKwh == null) ? null : (lossKwh / sent) * 100;
       const energy = [
-        oneRow("충전량", sent == null ? null : dimSpan(aboutMark(c.sent_estimated) + fmt(sent, 2) + " kWh", !!c.sent_estimated)),
-        oneRow("배터리 저장량", known(c.battery_in_kwh) ? fmt(c.battery_in_kwh, 2) + " kWh" : null),
-        oneRow("충전 중 사용량", known(c.loss_kwh) ? fmt(c.loss_kwh, 2) + " kWh" : null),
+        oneRow("충전량", sent == null ? null : dimSpan(aboutMark(c.sent_estimated) + fmtFixed(sent, 2) + " kWh", !!c.sent_estimated)),
+        oneRow("배터리 저장량", known(c.battery_in_kwh) ? fmtFixed(c.battery_in_kwh, 2) + " kWh" : null),
+        oneRow("충전 중 사용량", known(c.loss_kwh) ? fmtFixed(c.loss_kwh, 2) + " kWh" : null),
         oneRow("손실률", lossPct == null ? null : dimSpan(aboutMark(lossEstimated) + fmt(lossPct, 1) + "%", lossEstimated)),
         oneRow("충전효율", c.efficiency_pct == null ? null : dimSpan(aboutMark(c.efficiency_estimated) + fmt(c.efficiency_pct, 1) + "%", !!c.efficiency_estimated)),
         "<div class='kv-row' id='charge-avg-row'" + (powers[0] ? "" : " hidden") + "><span>평균 충전 전력</span><span id='charge-avg'>" + (powers[0] ? powers[0] + " kW" : "") + "</span></div>",
@@ -4613,7 +5364,7 @@
         socBarHtml(c.start_soc, c.end_soc) +
         foldHtml("충전기", "", "<div class='kv'>" + chargerRows + "</div>") +
         choiceHtml +
-        foldHtml("에너지 상세", "", (energy ? "<div class='kv'>" + energy + "</div>" : "") + "<div class='curve-box' id='charge-sheet-curve'></div>") +
+        foldHtml("에너지 상세", "", (energy ? "<div class='kv'>" + energy + "</div>" : "") + "<div class='curve-box' id='charge-sheet-curve'></div><div id='charge-battery-slot'></div>") +
         "</div>";
     }
     function openChargeDetail(idx) {
@@ -4775,8 +5526,7 @@
     function fmtKmGrouped(n) {
       const v = Number(n);
       if (!isFinite(v)) return "";
-      const digits = Math.abs(v - Math.round(v)) < 1e-6 ? 0 : 1;
-      return formatNum(v, { minimumFractionDigits: digits, maximumFractionDigits: digits }) + " km";
+      return formatNum(v, { maximumFractionDigits: 1 }) + " km";
     }
     function catAmountText(b) {
       const miss = b.missing_amount || 0;

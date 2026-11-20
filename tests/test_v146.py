@@ -23,6 +23,7 @@ VID = "car-suggest"
 _TEMPLATES = (
     re.compile(r"^/api/trips/[^/]+/power$"),
     re.compile(r"^/api/trips/[^/]+/speed$"),
+    re.compile(r"^/api/trips/[^/]+/climate$"),
     re.compile(r"^/api/trips/[^/]+/route$"),
     re.compile(r"^/api/charges/[^/]+/curve$"),
 )
@@ -70,7 +71,7 @@ class RouteRegistrationTests(unittest.TestCase):
 
     def test_version_and_note(self) -> None:
         self.assertEqual(PROCESS_VERSION, "24")
-        self.assertIn('const APP_VERSION = "v1.15.3"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
         note = HTML.split('version: "1.14.6"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("충전 장소: 장소 칸에서 추천이 다시 떠요", note)
         clear = HTML.split('getElementById("place-clear").addEventListener("click"', 1)[1]

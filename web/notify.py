@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote, urlparse
 
+from web.formatnum import format_number
 from web.pushcrypto import (
     b64url_decode,
     dump_public_raw,
@@ -760,7 +761,7 @@ def _charge_detail_lines(conn, vehicle_id, start_ts, end_ts, kwh) -> list[str]:
         kind, battery, used, avg, start, end = row
     lines = []
     if kwh is not None:
-        lines.append(f"충전량|{float(kwh):.1f} kWh")
+        lines.append(f"충전량|{format_number(float(kwh), 1)} kWh")
     if start and end:
         try:
             hours = (_parse(end) - _parse(start)).total_seconds() / 3600.0
@@ -771,11 +772,11 @@ def _charge_detail_lines(conn, vehicle_id, start_ts, end_ts, kwh) -> list[str]:
     if kind:
         lines.append("전류|" + ("교류(AC)" if kind == "AC" else "직류(DC)"))
     if battery is not None:
-        lines.append(f"배터리 저장량|{float(battery):.1f} kWh")
+        lines.append(f"배터리 저장량|{format_number(float(battery), 1)} kWh")
     if used is not None:
-        lines.append(f"충전 중 사용량|{float(used):.1f} kWh")
+        lines.append(f"충전 중 사용량|{format_number(float(used), 1)} kWh")
     if avg is not None:
-        lines.append(f"평균 충전 전력|{float(avg):.1f} kW")
+        lines.append(f"평균 충전 전력|{format_number(float(avg), 1)} kW")
     reason = _charge_reason(conn, vehicle_id, end or end_ts)
     if reason:
         lines.append(f"종료 사유|{reason}")
@@ -836,7 +837,7 @@ def _charge_notices(conn: sqlite3.Connection, vehicle_id: str, now: datetime) ->
         soc = ""
         if start_soc is not None and end_soc is not None:
             soc = f"{float(start_soc):.0f}% → {float(end_soc):.0f}%"
-        kwh_bit = f"{float(kwh):.1f}kWh" if kwh is not None else ""
+        kwh_bit = f"{format_number(float(kwh), 1)}kWh" if kwh is not None else ""
         line = ", ".join(bit for bit in (soc, kwh_bit) if bit) or "충전이 끝났어요"
         line_en = ", ".join(bit for bit in (soc, kwh_bit) if bit) or "Charging finished"
         rows = _charge_detail_lines(conn, vehicle_id, start_ts, end_ts, kwh)

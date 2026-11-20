@@ -81,12 +81,12 @@ class LowAlertTests(Base):
     def test_alert_once_text_and_new_wheel(self) -> None:
         self.reading(T0, 2.65, 2.9, 2.875, 2.9)
         out = self.run_at(T0 + timedelta(minutes=1))
-        self.assertEqual(out, ["공기압이 낮아요 · 앞 왼쪽이 39.0 psi보다 낮아요"])
+        self.assertEqual(out, ["공기압이 낮아요 · 앞 왼쪽이 39 psi보다 낮아요"])
         self.assertEqual(self.run_at(T0 + timedelta(minutes=2)), [])
         self.reading(T0 + timedelta(hours=20), 2.7, 2.675, 2.9, 2.9)
         out = self.run_at(T0 + timedelta(hours=20, minutes=1))
         self.assertEqual(len(out), 1)
-        self.assertIn("앞 오른쪽이 39.0 psi보다 낮아요", out[0])
+        self.assertIn("앞 오른쪽이 39 psi보다 낮아요", out[0])
         # back in range -> quiet; low again later -> alerts again
         self.reading(T0 + timedelta(hours=30), 2.9, 2.9, 2.9, 2.9)
         self.assertEqual(self.run_at(T0 + timedelta(hours=30, minutes=1)), [])

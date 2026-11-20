@@ -285,7 +285,7 @@ class DetailTests(unittest.TestCase):
         self.assertNotIn("한국시간", str(event))
 
     def test_detail_row_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.15.3"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
         trip = HTML[HTML.index("function tripSheetHtml"):HTML.index("function openTripSheet")]
         self.assertLess(trip.index('oneRow("평균 속도"'), trip.index('oneRow("최고 속도"'))
         self.assertLess(trip.index('oneRow("최고 속도"'), trip.index('oneRow("급가속"'))
@@ -295,11 +295,14 @@ class DetailTests(unittest.TestCase):
             trip,
         )
         self.assertLess(trip.index('oneRow("최대 출력"'), trip.index('oneRow("최대 회생"'))
-        self.assertLess(trip.index('oneRow("최대 회생"'), trip.index('oneRow("실내 온도"'))
-        self.assertIn(
-            "kvBlock(energyHead) + \"<div class='curve-box' id='trip-sheet-power'></div>\" + kvBlock(energyTail)",
-            trip,
-        )
+        self.assertLess(trip.index('oneRow("최대 회생"'), trip.index("trip-sheet-power"))
+        self.assertNotIn('oneRow("실내 온도"', trip)
+        energy = trip[trip.index('foldHtml("에너지 상세"'):]
+        self.assertLess(energy.index("trip-sheet-power"), energy.index("trip-climate-slot"))
+        self.assertLess(energy.index("trip-climate-slot"), energy.index("trip-battery-slot"))
+        before = trip[:trip.index('foldHtml("에너지 상세"')]
+        self.assertNotIn("trip-climate-slot", before)
+        self.assertNotIn("trip-battery-slot", before)
         self.assertIn('foldHtml("운전 패턴"', trip)
         charge = HTML[HTML.index("function chargeSheetHtml"):HTML.index("function openChargeDetail")]
         energy = charge[charge.index('oneRow("충전량"'):]
@@ -312,6 +315,10 @@ class DetailTests(unittest.TestCase):
         self.assertLess(charge.index('keyCell("충전량"'), charge.index('keyCell("금액"'))
         self.assertLess(charge.index("평균 충전 전력"), charge.index("최대 충전 전력"))
         self.assertLess(charge.index("최대 충전 전력"), charge.index("charge-sheet-curve"))
+        fold = charge.index('foldHtml("에너지 상세"')
+        self.assertGreater(charge.index("charge-battery-slot"), fold)
+        self.assertLess(charge.index("charge-sheet-curve"), charge.index("charge-battery-slot"))
+        self.assertNotIn("charge-battery-slot", charge[:fold])
         self.assertNotIn("chargeFlowHtml", charge)
         self.assertNotIn("손실량", charge)
         self.assertIn('foldHtml("충전기"', charge)
