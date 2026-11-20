@@ -27,7 +27,8 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.9"', HTML)
+        self.assertLess(CHANGELOG.index("## v1.16.9"), CHANGELOG.index("## v1.16.8"))
         self.assertLess(CHANGELOG.index("## v1.16.8"), CHANGELOG.index("## v1.16.7"))
         self.assertLess(CHANGELOG.index("## v1.16.7"), CHANGELOG.index("## v1.16.6"))
         self.assertLess(CHANGELOG.index("## v1.16.6"), CHANGELOG.index("## v1.16.5"))
@@ -37,6 +38,7 @@ class VersionTests(unittest.TestCase):
         self.assertLess(CHANGELOG.index("## v1.16.2"), CHANGELOG.index("## v1.16.1"))
         self.assertLess(CHANGELOG.index("## v1.16.1"), CHANGELOG.index("## v1.16.0"))
         self.assertLess(CHANGELOG.index("## v1.16.0"), CHANGELOG.index("## v1.15.3"))
+        self.assertLess(HTML.index('version: "1.16.9"'), HTML.index('version: "1.16.8"'))
         self.assertLess(HTML.index('version: "1.16.8"'), HTML.index('version: "1.16.7"'))
         self.assertLess(HTML.index('version: "1.16.7"'), HTML.index('version: "1.16.6"'))
         self.assertLess(HTML.index('version: "1.16.6"'), HTML.index('version: "1.16.5"'))
@@ -156,7 +158,7 @@ class ChargeChartTests(unittest.TestCase):
             " return s.replace(/0+$/, '').replace(/\\.$/, ''); }\n"
             "function fmtHm(){ return '00:00'; }\n"
             "function tone(name){ return name === 'chart-axis' ? '#8aa0b5' : '#3dd68c'; }\n"
-            + _fn("decimate") + _fn("timeMarks") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
+            + _fn("decimate") + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
             + body
         )
 

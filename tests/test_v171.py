@@ -285,7 +285,7 @@ class DetailTests(unittest.TestCase):
         self.assertNotIn("한국시간", str(event))
 
     def test_detail_row_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.9"', HTML)
         trip = HTML[HTML.index("function tripSheetHtml"):HTML.index("function openTripSheet")]
         self.assertLess(trip.index('oneRow("평균 속도"'), trip.index('oneRow("최고 속도"'))
         self.assertLess(trip.index('oneRow("최고 속도"'), trip.index('oneRow("급가속"'))
@@ -296,6 +296,22 @@ class DetailTests(unittest.TestCase):
         )
         self.assertLess(trip.index('oneRow("최대 출력"'), trip.index('oneRow("최대 회생"'))
         self.assertLess(trip.index('oneRow("최대 회생"'), trip.index("trip-sheet-power"))
+        self.assertLess(trip.index('oneRow("회생"'), trip.index('oneRow("회생률"'))
+        self.assertLess(trip.index('oneRow("회생률"'), trip.index('oneRow("주행가능"'))
+        rate = HTML[HTML.index("function regenRateText("):HTML.index("function tripSheetHtml(")]
+        src = rate + (
+            "process.stdout.write(JSON.stringify({\n"
+            "  shown: regenRateText({regen_ratio: 0.34}),\n"
+            "  est: regenRateText({regen_ratio: 0.34, regen_estimated: true}),\n"
+            "  none: regenRateText({regen_ratio: null}),\n"
+            "  missing: regenRateText({})\n"
+            "}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["shown"], "34%")
+        self.assertEqual(got["est"], "약 34%")
+        self.assertIsNone(got["none"])
+        self.assertIsNone(got["missing"])
         self.assertNotIn('oneRow("실내 온도"', trip)
         energy = trip[trip.index('foldHtml("에너지 상세"'):]
         self.assertLess(energy.index("trip-sheet-power"), energy.index("trip-climate-slot"))

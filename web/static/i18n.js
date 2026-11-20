@@ -241,6 +241,7 @@
     "최고 속도": "Top speed",
     "걸린 시간": "Duration",
     "회생": "Regen",
+    "회생률": "Regen rate",
     "회생제동": "Regen braking",
     "급가속": "Hard accel",
     "급제동": "Hard brake",

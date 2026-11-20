@@ -29,7 +29,7 @@ def _button(html: str) -> str:
 
 class TireDisplayTests(unittest.TestCase):
     def test_chips_keep_the_saved_unit(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.9"', HTML)
         self.assertIn('id="pressure-unit" class="unit-tag tire-unit"', HTML)
         self.assertLess(CHANGELOG.index("## v1.15.2"), CHANGELOG.index("## v1.15.1"))
         chip = HTML.split("button.unit-tag.tire-unit {", 1)[1].split("}", 1)[0]
