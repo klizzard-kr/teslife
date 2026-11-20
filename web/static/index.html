@@ -2034,8 +2034,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.6"; // display constant only
+    const APP_VERSION = "v1.16.7"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.7", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선이 스크롤하면 그래프와 함께 움직여요"] },
       { version: "1.16.6", features: ["시간별 사용: 충전량은 충전 기록이고, 사용량은 0보다 클 때만 따로 보여요", "온도 눈금: 공조와 배터리 온도는 5℃ 간격이에요", "그래프: 시각은 시작과 끝만 있고, 맨 위·맨 아래 가로선이 있어요"], fixes: ["시간별 사용: 배터리가 안 오른 시간에 주행이 없으면 주차 색이에요"] },
       { version: "1.16.5", features: ["시간별 사용: 배터리가 오른 시간은 주행이 있어도 충전 색으로 보여요", "그래프: 배터리 온도, 충전 전력, 공조에도 시각 세로선이 있어요", "공조: 온도 눈금의 맨 위와 맨 아래 숫자가 보여요"], fixes: [] },
       { version: "1.16.4", features: ["공조 그래프: 네 탭 모두 오른쪽 끝까지 채워요", "공조: 바람 세기는 0·2·4·6·8·10, 시트는 0·1·2·3을 그림 안에 붙여요"], fixes: [] },
@@ -3839,21 +3840,27 @@
     }
     function showTlPop(html, anchor) {
       const pop = document.getElementById("tl-pop");
-      if (pop.parentNode !== document.body) document.body.appendChild(pop);
+      // Stay inside the battery card. position:fixed on document.body kept the
+      // open tip on the screen after the card scrolled away.
+      const host = document.getElementById("battery-card") || pop.parentNode;
+      if (host && pop.parentNode !== host) host.appendChild(pop);
       pop.innerHTML = html;
       pop.hidden = false;
-      pop.style.position = "fixed";
+      pop.style.position = "";
       const nav = document.querySelector("nav.tabbar, nav");
       const navTop = nav ? nav.getBoundingClientRect().top : window.innerHeight;
       const limit = Math.max(120, navTop - 8);
       pop.style.maxHeight = Math.min(window.innerHeight * 0.46, limit - 8) + "px";
+      const base = host.getBoundingClientRect();
       const ar = anchor.getBoundingClientRect();
       const pw = pop.offsetWidth || 220;
-      const left = Math.max(8, Math.min(ar.left + ar.width / 2 - pw / 2, window.innerWidth - pw - 8));
-      let top = ar.bottom + 6;
+      const maxLeft = Math.max(8, base.width - pw - 8);
+      let left = ar.left - base.left + ar.width / 2 - pw / 2;
+      if (left < 8) left = 8;
+      if (left > maxLeft) left = maxLeft;
+      let top = ar.bottom - base.top + 6;
       const ph = pop.offsetHeight;
-      if (top + ph > limit) top = Math.max(8, ar.top - ph - 6);
-      if (top + ph > limit) top = Math.max(8, limit - ph);
+      if (ar.bottom + 6 + ph > limit) top = ar.top - base.top - ph - 6;
       pop.style.left = left + "px";
       pop.style.top = top + "px";
     }

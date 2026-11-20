@@ -187,7 +187,7 @@ class PlaceSearchTests(unittest.TestCase):
 
 class PageTests(unittest.TestCase):
     def test_version_notes_and_place_field(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.6"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.7"', HTML)
         self.assertIn("ncpKeyId=", HTML)
         self.assertIn("loadLeaflet()", HTML)
         self.assertIn('id="place-clear"', HTML)

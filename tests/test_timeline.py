@@ -207,6 +207,22 @@ class TimelineUiTests(unittest.TestCase):
         self.assertNotIn("overheat", self.html[self.html.index("const MODE_LANES"):self.html.index("const MODE_LABELS")])
         self.assertIn('" 모드별 사용"', self.html)
         self.assertIn('Number(batDay.slice(8)) + " 시간별 사용";', self.html)   # 'M/D 시간별 사용', no %
+
+    def test_timeline_tip_stays_in_the_card_when_the_page_scrolls(self) -> None:
+        # showTlPop used to set position:fixed and move #tl-pop onto document.body,
+        # so a pinned 감시 tip stayed on screen after the card scrolled.
+        card = self.html.split('id="battery-card"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('id="tl-pop"', card)
+        self.assertIn(".tl-pop {\n      position: absolute;", self.html)
+        fn = self.html[self.html.index("function showTlPop("):self.html.index("function hideTlPop(")]
+        self.assertNotIn('position = "fixed"', fn)
+        self.assertNotIn("document.body.appendChild", fn)
+        self.assertIn('getElementById("battery-card")', fn)
+        self.assertIn('pop.style.position = ""', fn)
+        for kind in (".cross-tip {", ".speed-tip {"):
+            block = self.html[self.html.index(kind):self.html.index(kind) + 80]
+            self.assertIn("position: absolute", block)
+            self.assertNotIn("position: fixed", block)
         self.assertNotIn('" 시간별 사용 " + fmt(', self.html)
         self.assertIn("text-anchor=\"middle\">' + fmt(v, 1) + \"%</text>", self.html)   # weekly labels 1 decimal
         self.assertNotIn("시간별 · 사용", self.html)
