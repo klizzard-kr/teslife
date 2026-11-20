@@ -2034,8 +2034,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.7"; // display constant only
+    const APP_VERSION = "v1.16.8"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.8", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선은 그래프 밖을 누르면 닫혀요"] },
       { version: "1.16.7", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선이 스크롤하면 그래프와 함께 움직여요"] },
       { version: "1.16.6", features: ["시간별 사용: 충전량은 충전 기록이고, 사용량은 0보다 클 때만 따로 보여요", "온도 눈금: 공조와 배터리 온도는 5℃ 간격이에요", "그래프: 시각은 시작과 끝만 있고, 맨 위·맨 아래 가로선이 있어요"], fixes: ["시간별 사용: 배터리가 안 오른 시간에 주행이 없으면 주차 색이에요"] },
       { version: "1.16.5", features: ["시간별 사용: 배터리가 오른 시간은 주행이 있어도 충전 색으로 보여요", "그래프: 배터리 온도, 충전 전력, 공조에도 시각 세로선이 있어요", "공조: 온도 눈금의 맨 위와 맨 아래 숫자가 보여요"], fixes: [] },
@@ -2602,6 +2603,22 @@
       const tip = box.querySelector(".cross-tip");
       if (tip) tip.hidden = true;
     }
+    // One outside tap closes every graph tip: the crosshair, and the battery
+    // hour/mode pop. Installed here so the battery tab has it before any trip chart.
+    function dismissGraphTip(ev) {
+      document.querySelectorAll(".cross-on").forEach(node => {
+        if (!node.contains(ev.target)) hideCross(node);
+      });
+      const pop = document.getElementById("tl-pop");
+      if (!pop || pop.hidden) return;
+      if (pop.contains(ev.target)) return;
+      if (tlPinned && tlPinned.contains(ev.target)) return;
+      hideTlPop();
+    }
+    if (!window.__teslifeCrossDoc) {
+      window.__teslifeCrossDoc = true;
+      document.addEventListener("pointerdown", dismissGraphTip);
+    }
     function placeCross(box, clientX) {
       const svg = box.querySelector("svg.bchart");
       const line = svg && svg.querySelector(".cross-line");
@@ -2646,14 +2663,6 @@
       box._crossRows = rowsAt;
       if (box._crossOn) return;
       box._crossOn = true;
-      if (!window.__teslifeCrossDoc) {
-        window.__teslifeCrossDoc = true;
-        document.addEventListener("pointerdown", (ev) => {
-          document.querySelectorAll(".cross-on").forEach(node => {
-            if (!node.contains(ev.target)) hideCross(node);
-          });
-        });
-      }
       box.addEventListener("pointerdown", (ev) => {
         if (ev.target.closest && ev.target.closest(".speed-mark, button, a")) return;
         box._drag = {x: ev.clientX, y: ev.clientY, id: ev.pointerId, axis: ""};
@@ -3885,10 +3894,6 @@
         showTlPop(render(), el);
       });
     }
-    document.addEventListener("click", (ev) => {
-      if (ev.target.closest && ev.target.closest("#tl-pop")) return;
-      if (tlPinned) hideTlPop();
-    });
     document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") hideTlPop(); });
 
 

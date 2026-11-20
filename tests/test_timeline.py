@@ -223,6 +223,30 @@ class TimelineUiTests(unittest.TestCase):
             block = self.html[self.html.index(kind):self.html.index(kind) + 80]
             self.assertIn("position: absolute", block)
             self.assertNotIn("position: fixed", block)
+
+    def test_outside_tap_uses_the_graph_dismiss_handler(self) -> None:
+        self.assertEqual(self.html.count('document.addEventListener("pointerdown", dismissGraphTip)'), 1)
+        bind = self.html[self.html.index("function bindCrosshair("):self.html.index("function crossLine(")]
+        self.assertNotIn('document.addEventListener("pointerdown"', bind)
+        click = self.html[self.html.index("function bindTlPop("):self.html.index("function fmtMinutes(")]
+        self.assertNotIn('document.addEventListener("click"', click)
+        src = (
+            "let tlPinned = {contains(t){ return t === 'bar'; }};\n"
+            "const log = [];\n"
+            "function hideCross(){ log.push('cross'); }\n"
+            "function hideTlPop(){ log.push('tl'); }\n"
+            "const pop = {hidden: false, contains(t){ return t === 'pop'; }};\n"
+            "const chart = {contains(t){ return t === 'chart'; }};\n"
+            "global.document = {querySelectorAll(){ return [chart]; }, getElementById(){ return pop; }};\n"
+            + self.html[self.html.index("function dismissGraphTip("):self.html.index("if (!window.__teslifeCrossDoc)")]
+            + "function run(target){ log.length = 0; dismissGraphTip({target: target}); return log.slice(); }\n"
+            + "process.stdout.write(JSON.stringify({away: run('away'), pop: run('pop'), bar: run('bar'), chart: run('chart')}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["away"], ["cross", "tl"])
+        self.assertEqual(got["pop"], ["cross"])
+        self.assertEqual(got["bar"], ["cross"])
+        self.assertEqual(got["chart"], ["tl"])
         self.assertNotIn('" 시간별 사용 " + fmt(', self.html)
         self.assertIn("text-anchor=\"middle\">' + fmt(v, 1) + \"%</text>", self.html)   # weekly labels 1 decimal
         self.assertNotIn("시간별 · 사용", self.html)

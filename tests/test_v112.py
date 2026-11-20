@@ -101,7 +101,7 @@ class TireDisplayTests(unittest.TestCase):
 
 class PageTests(unittest.TestCase):
     def test_notes_inbox_chart_and_place(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.7"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
         self.assertIn("notes-label", HTML)
         self.assertNotIn(".notice.unread { background", HTML)
         self.assertIn("notice-head", HTML)

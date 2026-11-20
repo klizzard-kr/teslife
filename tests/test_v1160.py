@@ -225,7 +225,7 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.7"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.8"', HTML)
         tabs = _fn("climateTabs")
         self.assertIn('["cabin", "실내·실외", cabinOn]', tabs)
         self.assertIn('["fan", "A/C·팬", fanOn]', tabs)
