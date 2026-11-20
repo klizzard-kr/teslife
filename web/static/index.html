@@ -2034,8 +2034,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.4"; // display constant only
+    const APP_VERSION = "v1.16.5"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.5", features: ["시간별 사용: 배터리가 오른 시간은 주행이 있어도 충전 색으로 보여요"], fixes: [] },
       { version: "1.16.4", features: ["공조 그래프: 네 탭 모두 오른쪽 끝까지 채워요", "공조: 바람 세기는 0·2·4·6·8·10, 시트는 0·1·2·3을 그림 안에 붙여요"], fixes: [] },
       { version: "1.16.3", features: ["그래프: 오른쪽 눈금이 없는 그림은 오른쪽 끝까지 채워요"], fixes: [] },
       { version: "1.16.2", features: ["홈: 배터리 끝의 0은 빼요", "공조: 꺼진 탭은 흐리고 누를 수 없어요", "그래프: 세로 선 아래 시각 글자는 빼요"], fixes: ["공조: 공조가 꺼져 있으면 팬 1을 그리지 않아요", "공조: 왼쪽 온도 눈금이 시각에 가리지 않아요"] },
@@ -3559,6 +3560,14 @@
       });
     }
 
+    function hourFill(h, tlHour) {
+      const rose = tlHour && known(tlHour.start_pct) && known(tlHour.end_pct)
+        && Number(tlHour.end_pct) > Number(tlHour.start_pct);
+      if (rose) return tone("chart-charge");
+      if (h && h.driving) return tone("chart-trip");
+      if (h && h.charging) return tone("chart-charge");
+      return tone("chart-park");
+    }
     function drawBatDay(hours) {
       const svg = document.getElementById("bat-day");
       // L/R hold the % axis (: back from the full-width  try, the labels overlapped the bars).
@@ -3582,7 +3591,7 @@
           '<rect x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + innerH + '" fill="transparent"></rect>';
         if (h.pct != null) {
           const hh = (Math.max(0, Math.min(100, h.pct)) / 100) * innerH;
-          const color = h.driving ? tone("chart-trip") : h.charging ? tone("chart-charge") : tone("chart-park");
+          const color = hourFill(h, tl);
           html += '<rect class="bh-bar" x="' + (L + slot * i + 1.5) + '" y="' + (T + innerH - hh) + '" width="' + bw + '" height="' + hh + '" rx="2" fill="' + color + '" fill-opacity="' + (tone("chart-bar-opacity") || "1") + '"></rect>';
         }
         // Selected-bar ring, the same emphasis as a tapped mode bar (.tl-bar.on): a 2px line in the

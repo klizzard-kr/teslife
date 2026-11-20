@@ -155,7 +155,7 @@ class RematchTests(unittest.TestCase):
 
 class ScreenTests(unittest.TestCase):
     def test_v180_wording(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.4"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.5"', HTML)
         self.assertIn('class="settings-heading">화면', HTML)
         self.assertIn('class="settings-heading">알림', HTML)
         self.assertIn('id="lang-select"', HTML)

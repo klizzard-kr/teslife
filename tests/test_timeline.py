@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -222,6 +225,31 @@ class TimelineUiTests(unittest.TestCase):
         self.assertIn("#battery-card .chart-legend { margin-left: calc(100% * 76 / 390); }", self.html)
         self.assertNotIn("bh-pct", self.html)
         self.assertNotIn("rgba(255,255,255,0.02)", self.html)
+
+    def test_rising_hour_uses_the_charge_color(self) -> None:
+        legend = self.html.split('id="bat-day"', 1)[1].split('id="mode-title"', 1)[0]
+        self.assertIn(">충전</span>", legend)
+        i = self.html.index("function hourFill(")
+        fn = self.html[i:self.html.index("\n    }\n", i) + 6]
+        src = (
+            "function known(v){ return v !== null && v !== undefined && v !== ''; }\n"
+            "function tone(name){ return name; }\n"
+            + fn
+            + "const out = {\n"
+            "  rose: hourFill({driving:true, charging:false}, {start_pct:63.3, end_pct:66.2}),\n"
+            "  drive: hourFill({driving:true, charging:false}, {start_pct:66.2, end_pct:63.3}),\n"
+            "  flat: hourFill({driving:true}, {start_pct:66.2, end_pct:66.2}),\n"
+            "  charge: hourFill({driving:false, charging:true}, {start_pct:40, end_pct:40}),\n"
+            "  park: hourFill({driving:false, charging:false}, null)\n"
+            "};\n"
+            "process.stdout.write(JSON.stringify(out));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["rose"], "chart-charge")
+        self.assertEqual(got["drive"], "chart-trip")
+        self.assertEqual(got["flat"], "chart-trip")
+        self.assertEqual(got["charge"], "chart-charge")
+        self.assertEqual(got["park"], "chart-park")
 
     def test_mode_tooltip_fields_only(self) -> None:
         body = self.html[self.html.index("function barPopHtml"):self.html.index("function hourPopHtml")]
