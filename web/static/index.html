@@ -2037,7 +2037,7 @@
     }
     const APP_VERSION = "v1.16.9"; // display constant only
     const RELEASE_NOTES = [
-      { version: "1.16.9", features: [], fixes: ["알림 설정: 주행·충전·보안·차량 제목을 아래 항목보다 크고 진하게 바꿨어요"] },
+      { version: "1.16.9", features: ["주행 상세: 회생 다음에 회생률을 보여요"], fixes: ["알림 설정: 주행·충전·보안·차량 제목을 아래 항목보다 크고 진하게 바꿨어요", "그래프: 눈금마다 가로선이 있고, 글자는 그 선 가운데에 있어요"] },
       { version: "1.16.8", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선은 그래프 밖을 누르면 닫혀요"] },
       { version: "1.16.7", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선이 스크롤하면 그래프와 함께 움직여요"] },
       { version: "1.16.6", features: ["시간별 사용: 충전량은 충전 기록이고, 사용량은 0보다 클 때만 따로 보여요", "온도 눈금: 공조와 배터리 온도는 5℃ 간격이에요", "그래프: 시각은 시작과 끝만 있고, 맨 위·맨 아래 가로선이 있어요"], fixes: ["시간별 사용: 배터리가 안 오른 시간에 주행이 없으면 주차 색이에요"] },
@@ -2719,15 +2719,21 @@
       });
       return {grids: grids, labels: labels};
     }
+    function yTickLine(x1, x2, y) {
+      return '<line x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y +
+        '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
+    }
+    function yTickText(x, y, label, size, extra) {
+      return '<text x="' + x + '" y="' + y + '" fill="' + tone("chart-axis") + '" font-size="' + (size || 11) +
+        '" text-anchor="end" dominant-baseline="middle"' + (extra || "") + ">" + label + "</text>";
+    }
     // Thin full-strength lines on the lowest and highest y tick. They sit on the
     // plot edge, so the stroke is kept at 1px and the svg does not crop it.
     function axisBaselines(x1, x2, yTop, yBot) {
-      const line = (y) => '<line x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y +
-        '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
-      return line(yTop) + line(yBot);
+      return yTickLine(x1, x2, yTop) + yTickLine(x1, x2, yBot);
     }
     function svgChargeBand(power, temps, endTs, axisTop, segments, startTs) {
-      const W = 390, H = 168, L = 36, R = 16, T = 8, B = 34;
+      const W = 390, H = 168, L = 36, R = 16, T = 12, B = 34;
       const innerW = W - L - R, innerH = H - T - B;
       const samples = power || [];
       const segs = (segments && segments.length) ? segments : (samples.length ? [samples] : []);
@@ -2747,7 +2753,9 @@
       let html = "";
       [0, pmax / 2, pmax].forEach(v => {
         const label = pmax >= 10 && Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : fmt(v, 1);
-        html += '<text x="' + (L - 4) + '" y="' + (yP(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + label + "</text>";
+        const yy = yP(v);
+        if (Math.abs(yy - T) >= 1 && Math.abs(yy - (T + innerH)) >= 1) html += yTickLine(L, W - R, yy);
+        html += yTickText(L - 4, yy, label);
       });
       const y0 = yP(0);
       const marks = timeMarks(t0, t1, ms => x(ms), T, innerH, H - 12);
@@ -2780,7 +2788,7 @@
       });
     }
     function svgLine(points, opts) {
-      const W = 390, H = opts.h || 150, L = 40, R = 16, T = 10, B = 34;
+      const W = 390, H = opts.h || 150, L = 40, R = 16, T = 12, B = 34;
       const innerW = W - L - R, innerH = H - T - B;
       const steps = opts.steps || [];
       const segs = (opts.segments && opts.segments.length) ? opts.segments : [points];
@@ -2801,8 +2809,8 @@
       const dec = ticks.some(v => Math.abs(v - Math.round(v)) > 1e-9) ? 1 : 0;
       ticks.forEach((v, i) => {
         const edge = i === 0 || i === ticks.length - 1;
-        if (!edge) html += '<line x1="' + L + '" y1="' + y(v) + '" x2="' + (W - R) + '" y2="' + y(v) + '" stroke="' + tone("chart-grid") + '"></line>';
-        html += '<text x="' + (L - 4) + '" y="' + (y(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + fmt(v, dec) + "</text>";
+        if (!edge) html += yTickLine(L, W - R, y(v));
+        html += yTickText(L - 4, y(v), fmt(v, dec));
       });
       if (ymin < 0) html += '<line x1="' + L + '" y1="' + y(0) + '" x2="' + (W - R) + '" y2="' + y(0) + '" stroke="' + tone("chart-axis") + '"></line>';
       const xMs = ms => L + (t1 === t0 ? innerW / 2 : ((ms - t0) / (t1 - t0)) * innerW);
@@ -3099,7 +3107,6 @@
       const blend = (a, b) => a + (b - a) * u;
       const opOf = (key) => blend(seriesOp(fromTab, key), seriesOp(toTab, key));
       let html = "";
-      const fill = tone("chart-axis");
       const hasTemp = model.inside.length || model.outside.length || model.setDriver.length || model.setPass.length;
       if (hasTemp) {
         temps.ticks.forEach(v => {
@@ -3107,15 +3114,8 @@
           if (y < T - 0.5 || y > T + innerH + 0.5) return;
           const atTop = Math.abs(y - T) < 1;
           const atBot = Math.abs(y - (T + innerH)) < 1;
-          if (!atTop && !atBot) {
-            html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
-              "' stroke='" + tone("chart-grid") + "' opacity='0.35'></line>";
-          }
-          let ty = y + 4;
-          if (atTop) ty = T + 9;
-          if (atBot) ty = T + innerH - 2;
-          html += "<text x='" + (L - 4) + "' y='" + ty + "' fill='" + fill +
-            "' font-size='11' text-anchor='end'>" + fmt(v, 1) + "°C</text>";
+          if (!atTop && !atBot) html += yTickLine(L, L + innerW, y);
+          html += yTickText(L - 4, y, fmt(v, 1) + "°C");
         });
       }
       const marks = timeMarks(t0, t1, xOf, T, innerH, H - 12);
@@ -3135,9 +3135,7 @@
         const y = y0 + (y1 - y0) * u;
         html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
           "' stroke='" + tone("chart-grid") + "' opacity='" + (op * 0.28).toFixed(3) + "'></line>";
-        const labelY = y < T + 12 ? y + 11 : y - 2;
-        html += "<text x='" + (L + innerW - 4) + "' y='" + labelY + "' fill='" + fill +
-          "' font-size='10' text-anchor='end' opacity='" + (op * 0.75).toFixed(3) + "'>" + v + "</text>";
+        html += yTickText(L + innerW - 4, y, v, 10, " opacity='" + (op * 0.75).toFixed(3) + "'");
       });
       const yLevel = (tab, v) => yOn(v, {min: 0, max: rightMax(hasRight(tab) ? tab : (hasRight(fromTab) ? fromTab : toTab), model)}, T, innerH);
       const paintFill = (pts, color, op, fromS, toS) => {
@@ -3400,10 +3398,8 @@
       });
       scale.ticks.forEach(v => {
         const y = yOn(v, scale, T, innerH);
-        let ty = y + 4;
-        if (Math.abs(y - T) < 1) ty = T + 9;
-        if (Math.abs(y - (T + innerH)) < 1) ty = T + innerH - 2;
-        html += "<text x='" + (L - 4) + "' y='" + ty + "' fill='" + tone("chart-axis") + "' font-size='11' text-anchor='end'>" + fmt(v, 1) + "°C</text>";
+        if (Math.abs(y - T) >= 1 && Math.abs(y - (T + innerH)) >= 1) html += yTickLine(L, L + innerW, y);
+        html += yTickText(L - 4, y, fmt(v, 1) + "°C");
       });
       const drawLine = (segs, color) => {
         segs.forEach(seg => {
@@ -3634,15 +3630,15 @@
       // L/R hold the % axis (: back from the full-width  try, the labels overlapped the bars).
       // The 모드별 사용 gantt (.tl-plot margins 76/390, 8/390) and both legends start at L too, so
       // 0시 and the legends line up under the bars.
-      const W = 390, H = 190, L = 76, R = 8, T = 10, B = 24;
+      const W = 390, H = 190, L = 76, R = 8, T = 12, B = 28;
       const innerW = W - L - R, innerH = H - T - B;
       const slot = innerW / 24;
       const bw = Math.max(4, slot - 3);
       let html = "";
       [0, 50, 100].forEach(v => {
         const yy = T + innerH - (v / 100) * innerH;
-        if (v === 50) html += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
-        html += '<text x="' + (L - 4) + '" y="' + (yy + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + v + "%</text>";
+        if (v === 50) html += yTickLine(L, W - R, yy);
+        html += yTickText(L - 4, yy, v + "%");
       });
       html += axisBaselines(L, W - R, T, T + innerH);
       hours.forEach((h, i) => {
@@ -4960,6 +4956,12 @@
       const html = rows.join("");
       return html ? "<div class='kv'>" + html + "</div>" : "";
     }
+    function regenRateText(t) {
+      if (!t || t.regen_ratio == null || t.regen_ratio === "") return null;
+      const n = Number(t.regen_ratio);
+      if (!isFinite(n)) return null;
+      return (t.regen_estimated ? "약 " : "") + Math.round(n * 100) + "%";
+    }
     function tripSheetHtml(t, pairs) {
       const approx = t.kwh_estimated ? "약 " : "";
       const route = tripLabel(t);
@@ -4976,6 +4978,7 @@
       const range = r0 == null ? null : fmt(r0, 1) + " → " + fmt(r1, 1) + " km";
       const energyHead = [
         oneRow("회생", t.regen_kwh == null ? null : (t.regen_estimated ? "약 " : "") + fmtFixed(t.regen_kwh, 2) + " kWh"),
+        oneRow("회생률", regenRateText(t)),
         oneRow("주행가능", range),
         oneRow("최대 출력", t.max_power_kw == null ? null : fmtFixed(t.max_power_kw, 2) + " kW"),
         oneRow("최대 회생", t.max_regen_kw == null ? null : fmtFixed(t.max_regen_kw, 2) + " kW"),

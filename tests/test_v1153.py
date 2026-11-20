@@ -158,7 +158,7 @@ class ChargeChartTests(unittest.TestCase):
             " return s.replace(/0+$/, '').replace(/\\.$/, ''); }\n"
             "function fmtHm(){ return '00:00'; }\n"
             "function tone(name){ return name === 'chart-axis' ? '#8aa0b5' : '#3dd68c'; }\n"
-            + _fn("decimate") + _fn("timeMarks") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
+            + _fn("decimate") + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
             + body
         )
 

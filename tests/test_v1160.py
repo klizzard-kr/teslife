@@ -258,7 +258,8 @@ class PageGraphTests(unittest.TestCase):
         self.assertNotIn("R = 44", svg)
         self.assertNotIn("L = 104", svg)
         self.assertIn("L + innerW - 4", svg)
-        self.assertIn("text-anchor='end'", svg)
+        self.assertIn("yTickText(L + innerW - 4, y, v, 10", svg)
+        self.assertIn('text-anchor="end" dominant-baseline="middle"', _fn("yTickText"))
         self.assertNotIn("innerW + 4", svg)
         self.assertIn("return [0, 2, 4, 6, 8, 10]", _fn("levelTicks"))
         self.assertIn("return [0, 1, 2, 3]", _fn("levelTicks"))
@@ -298,7 +299,7 @@ class PageGraphTests(unittest.TestCase):
         src = (
             "function tone(){ return '#8aa0b5'; }\n"
             + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
-            + _fn("timeMarks") + _fn("axisBaselines")
+            + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines")
             + _fn("decimate") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg")
             + chunk
             + "const t0 = Date.parse('2026-11-15T11:40:00Z');\n"
@@ -308,7 +309,7 @@ class PageGraphTests(unittest.TestCase):
             + "  fan:[[{t:t0,v:11},{t:t1,v:6}]], wheel:[],\n"
             + "  heat:{seat_left:[[{t:t0,v:2},{t:t1,v:3}]]}, cool:{}, auto:[], ac:[], bars:{}};\n"
             + "function labels(html){\n"
-            + "  const out=[]; const re=/font-size='10' text-anchor='end' opacity='([^']+)'>([^<]+)/g; let m;\n"
+            + "  const out=[]; const re=/font-size=\"10\" text-anchor=\"end\" dominant-baseline=\"middle\" opacity='([^']+)'>([^<]+)/g; let m;\n"
             + "  while((m=re.exec(html))) out.push({op:Number(m[1]), text:m[2]});\n"
             + "  return out.filter(t => t.op > 0.5).map(t => t.text);\n"
             + "}\n"
@@ -344,8 +345,7 @@ class PageGraphTests(unittest.TestCase):
             + "  fan:labels(fan), seats:labels(seats), cabin:labels(cabin),\n"
             + "  high: fan.indexOf(',-'),\n"
             + "  deg:deg(cabin), vlines:[vlines(cabin),vlines(fan),vlines(glass)],\n"
-            + "  edges:[edges(cabin),edges(fan),edges(seats),edges(glass)],\n"
-            + "  mid: (cabin.match(/y1='100'[^>]*opacity='0.35'/) || []).length\n"
+            + "  edges:[edges(cabin),edges(fan),edges(seats),edges(glass)]\n"
             + "}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
@@ -356,11 +356,11 @@ class PageGraphTests(unittest.TestCase):
         self.assertGreater(got["high"], 0)
         self.assertEqual(got["deg"], ["20", "22.5", "25"])
         self.assertEqual(got["vlines"], [2, 2, 2])
-        self.assertGreater(got["mid"], 0)
         for edge in got["edges"]:
-            self.assertEqual(len(edge["lines"]), 2)
             ys = sorted(line["y"] for line in edge["lines"])
-            self.assertEqual(ys, [edge["top"], edge["top"] + edge["ih"]])
+            self.assertEqual(ys[0], edge["top"])
+            self.assertEqual(ys[-1], edge["top"] + edge["ih"])
+            self.assertIn(edge["top"] + edge["ih"] / 2, ys)
             for line in edge["lines"]:
                 self.assertGreater(line["y"], 0)
                 self.assertLess(line["y"], edge["h"])
@@ -381,7 +381,7 @@ class PageGraphTests(unittest.TestCase):
         src = (
             "function tone(){ return '#8aa0b5'; }\n"
             + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
-            + _fn("timeMarks") + _fn("axisBaselines") + _fn("decimate") + _fn("coverWindow")
+            + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("decimate") + _fn("coverWindow")
             + _fn("yOn") + _fn("crossLine") + _fn("chartSvg") + _fn("svgBatteryTemp")
             + _fn("svgLine") + _fn("svgChargeBand")
             + "function pack(lo, hi){ const a = tempAxis(lo, hi);"
@@ -429,13 +429,100 @@ class PageGraphTests(unittest.TestCase):
         self.assertLessEqual(got["wide"]["min"], 12)
         self.assertGreaterEqual(got["wide"]["max"], 33)
         for edge in got["edges"].values():
-            self.assertEqual(len(edge["lines"]), 2)
             ys = sorted(line["y"] for line in edge["lines"])
-            self.assertEqual(ys, [edge["top"], edge["bot"]])
+            self.assertEqual(ys[0], edge["top"])
+            self.assertEqual(ys[-1], edge["bot"])
+            self.assertGreaterEqual(len(ys), 3)
             for line in edge["lines"]:
                 self.assertGreater(line["y"], 0)
                 self.assertLess(line["y"], edge["h"])
                 self.assertEqual([line["x1"], line["x2"]], [edge["L"], edge["L"] + edge["plot"]])
+
+    def test_every_labeled_y_tick_has_a_gridline(self) -> None:
+        start = HTML.index("    const SEATS = [")
+        chunk = HTML[start:HTML.index("    function climateLegend")]
+        src = (
+            "function tone(){ return '#8aa0b5'; }\n"
+            + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
+            + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("decimate")
+            + _fn("coverWindow") + _fn("yOn") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg")
+            + _fn("svgLine") + _fn("svgChargeBand") + _fn("svgBatteryTemp")
+            + chunk
+            + "function hlines(html){\n"
+            + "  const re=/<line x1=\"([^\"]+)\" y1=\"([^\"]+)\" x2=\"([^\"]+)\" y2=\"([^\"]+)\" stroke=\"[^\"]+\" stroke-width=\"1\" vector-effect=\"non-scaling-stroke\"><\\/line>/g;\n"
+            + "  const out=[]; let m; while((m=re.exec(html))) if(m[2]===m[4]) out.push(Number(m[2]));\n"
+            + "  return out;\n"
+            + "}\n"
+            + "function covered(lines, ys){ return ys.every(y => lines.some(v => Math.abs(v-y)<0.05)); }\n"
+            + "const t0 = Date.parse('2026-11-15T11:40:00Z');\n"
+            + "const t1 = Date.parse('2026-11-15T12:10:00Z');\n"
+            + "const model = {t0:t0, t1:t1,\n"
+            + "  inside:[[{t:t0,v:22},{t:t1,v:23}]], outside:[], setDriver:[], setPass:[],\n"
+            + "  fan:[[{t:t0,v:6},{t:t1,v:4}]], wheel:[], heat:{}, cool:{}, auto:[], ac:[], bars:{}};\n"
+            + "const batt = {min:[[{t:t0,v:21},{t:t1,v:22}]], max:[[{t:t0,v:24},{t:t1,v:24}]], heater:[], t0:t0, t1:t1};\n"
+            + "const speed = svgLine([{ts:'2026-11-15T11:40:00Z', v:12},{ts:'2026-11-15T12:10:00Z', v:48}],"
+            + " {h:150, unit:'km/h', t0:'2026-11-15T11:40:00Z', t1:'2026-11-15T12:10:00Z'});\n"
+            + "const power = svgLine([{ts:'2026-11-15T11:40:00Z', v:-20},{ts:'2026-11-15T12:10:00Z', v:40}],"
+            + " {h:150, unit:'kW', t0:'2026-11-15T11:40:00Z', t1:'2026-11-15T12:10:00Z'});\n"
+            + "const charge = svgChargeBand([{ts:'2026-11-15T11:40:00Z', v:3.5},{ts:'2026-11-15T12:10:00Z', v:7}],"
+            + " [], '2026-11-15T12:10:00Z', 7, null, '2026-11-15T11:40:00Z');\n"
+            + "const cabin = climateSvg(model,'cabin','cabin',1);\n"
+            + "const fan = climateSvg(model,'fan','fan',1);\n"
+            + "const seats = climateSvg(model,'seats','seats',1);\n"
+            + "const glass = climateSvg(model,'glass','glass',1);\n"
+            + "const bn = svgBatteryTemp(batt);\n"
+            + "function ysOf(lo, hi, n){ const out=[]; for(let i=0;i<=n;i++) out.push(lo+(hi-lo)*i/n); return out; }\n"
+            + "function labels(html, size){\n"
+            + "  const re = new RegExp('<text x=\"[^\"]+\" y=\"([^\"]+)\" fill=\"[^\"]+\" font-size=\"' + size + '\" text-anchor=\"end\" dominant-baseline=\"middle\"', 'g');\n"
+            + "  const out=[]; let m; while((m=re.exec(html))) out.push(Number(m[1])); return out;\n"
+            + "}\n"
+            + "function anyH(html){\n"
+            + "  const out=[]; const re=/<line\\b[^>]*>/g; let m;\n"
+            + "  while((m=re.exec(html))){\n"
+            + "    const y1=m[0].match(/\\by1=(['\"])([^'\"]+)\\1/), y2=m[0].match(/\\by2=(['\"])([^'\"]+)\\1/);\n"
+            + "    if(y1 && y2 && y1[2]===y2[2]) out.push(Number(y1[2]));\n"
+            + "  }\n"
+            + "  return out;\n"
+            + "}\n"
+            + "function centered(html, size){\n"
+            + "  const labs=labels(html, size), lines=anyH(html);\n"
+            + "  const h=Number(html.match(/viewBox='0 0 390 ([0-9.]+)'/)[1]);\n"
+            + "  return labs.length>0 && labs.every(y => lines.some(v => Math.abs(v-y)<0.05) && y-6>0 && y+6<h);\n"
+            + "}\n"
+            + "function ends(html){\n"
+            + "  const labs=labels(html,'11').slice().sort((a,b)=>a-b);\n"
+            + "  const top=Number(html.match(/data-top='([^']+)'/)[1]);\n"
+            + "  const ih=Number(html.match(/data-ih='([^']+)'/)[1]);\n"
+            + "  return Math.abs(labs[0]-top)<0.05 && Math.abs(labs[labs.length-1]-(top+ih))<0.05;\n"
+            + "}\n"
+            + "const graphs={charge:charge, batt:bn, cabin:cabin, fan:fan, seats:seats, glass:glass, speed:speed, power:power};\n"
+            + "const center={}; const end={};\n"
+            + "Object.keys(graphs).forEach(k => { center[k]=centered(graphs[k],'11'); end[k]=ends(graphs[k]); });\n"
+            + "center.fanLevels=centered(fan,'10'); center.seatLevels=centered(seats,'10');\n"
+            + "process.stdout.write(JSON.stringify({\n"
+            + "  charge: covered(hlines(charge), ysOf(12, 134, 2)),\n"
+            + "  batt: covered(hlines(bn), ysOf(16, 134, 2)),\n"
+            + "  cabin: covered(hlines(cabin), ysOf(12, 188, 2)),\n"
+            + "  fan: covered(hlines(fan), ysOf(12, 188, 2)),\n"
+            + "  seats: covered(hlines(seats), ysOf(12, 188, 2)),\n"
+            + "  glass: covered(hlines(glass), ysOf(12, 188, 2)),\n"
+            + "  speed: covered(hlines(speed), ysOf(12, 116, 3)),\n"
+            + "  power: covered(hlines(power), ysOf(12, 116, 3)),\n"
+            + "  center: center, end: end\n"
+            + "}));"
+        )
+        # The renderer names are checked from source so a new graph cannot skip the helper.
+        for name in ("svgLine", "svgChargeBand", "svgBatteryTemp", "climateSvg", "drawBatDay"):
+            self.assertIn("yTickLine(", _fn(name))
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        for key in ("charge", "batt", "cabin", "fan", "seats", "glass", "speed", "power"):
+            self.assertTrue(got[key], key)
+            self.assertTrue(got["center"][key], key)
+            self.assertTrue(got["end"][key], key)
+        self.assertTrue(got["center"]["fanLevels"])
+        self.assertTrue(got["center"]["seatLevels"])
+        self.assertNotIn("T + 9", _fn("climateSvg"))
+        self.assertNotIn("innerH - 2", _fn("svgBatteryTemp"))
 
     def test_crosshair_reads_real_samples_and_skips_a_gap(self) -> None:
         src = (
