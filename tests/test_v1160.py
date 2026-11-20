@@ -225,7 +225,7 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.5"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.6"', HTML)
         tabs = _fn("climateTabs")
         self.assertIn('["cabin", "실내·실외", cabinOn]', tabs)
         self.assertIn('["fan", "A/C·팬", fanOn]', tabs)
@@ -297,7 +297,8 @@ class PageGraphTests(unittest.TestCase):
         chunk = HTML[start:HTML.index("    function climateLegend")]
         src = (
             "function tone(){ return '#8aa0b5'; }\n"
-            + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks")
+            + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
+            + _fn("timeMarks") + _fn("axisBaselines")
             + _fn("decimate") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg")
             + chunk
             + "const t0 = Date.parse('2026-11-15T11:40:00Z');\n"
@@ -321,12 +322,30 @@ class PageGraphTests(unittest.TestCase):
             + "  while((m=re.exec(html))) out.push(m[1]);\n"
             + "  return out;\n"
             + "}\n"
-            + "function vlines(html){ return (html.match(/<line x1=\"/g) || []).length; }\n"
+            + "function vlines(html){\n"
+            + "  const re = /<line x1=\"([^\"]+)\" y1=\"([^\"]+)\" x2=\"([^\"]+)\"/g;\n"
+            + "  let n = 0, m;\n"
+            + "  while ((m = re.exec(html))) if (m[1] === m[3]) n++;\n"
+            + "  return n;\n"
+            + "}\n"
+            + "function edges(html){\n"
+            + "  const h = Number(html.match(/viewBox='0 0 390 ([0-9.]+)'/)[1]);\n"
+            + "  const top = Number(html.match(/data-top='([^']+)'/)[1]);\n"
+            + "  const ih = Number(html.match(/data-ih='([^']+)'/)[1]);\n"
+            + "  const L = Number(html.match(/data-l='([^']+)'/)[1]);\n"
+            + "  const plot = Number(html.match(/data-plot='([^']+)'/)[1]);\n"
+            + "  const re = /<line x1=\"([^\"]+)\" y1=\"([^\"]+)\" x2=\"([^\"]+)\" y2=\"([^\"]+)\" stroke=\"[^\"]+\" stroke-width=\"1\" vector-effect=\"non-scaling-stroke\"><\\/line>/g;\n"
+            + "  const lines = []; let m;\n"
+            + "  while ((m = re.exec(html))) if (m[2] === m[4]) lines.push({x1:Number(m[1]), x2:Number(m[3]), y:Number(m[2])});\n"
+            + "  return {h:h, top:top, ih:ih, L:L, plot:plot, lines:lines};\n"
+            + "}\n"
             + "process.stdout.write(JSON.stringify({\n"
             + "  plot:[plot(cabin),plot(fan),plot(seats),plot(glass)],\n"
             + "  fan:labels(fan), seats:labels(seats), cabin:labels(cabin),\n"
             + "  high: fan.indexOf(',-'),\n"
-            + "  deg:deg(cabin), vlines:[vlines(cabin),vlines(fan),vlines(glass)]\n"
+            + "  deg:deg(cabin), vlines:[vlines(cabin),vlines(fan),vlines(glass)],\n"
+            + "  edges:[edges(cabin),edges(fan),edges(seats),edges(glass)],\n"
+            + "  mid: (cabin.match(/y1='100'[^>]*opacity='0.35'/) || []).length\n"
             + "}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
@@ -335,12 +354,88 @@ class PageGraphTests(unittest.TestCase):
         self.assertEqual(got["seats"], ["0", "1", "2", "3"])
         self.assertEqual(got["cabin"], [])
         self.assertGreater(got["high"], 0)
-        self.assertIn("21", got["deg"])
-        self.assertIn("24", got["deg"])
-        self.assertEqual(got["vlines"], [3, 3, 3])
-        grid = 'y2="\' + (T + innerH) + \'" stroke="\' + tone("chart-grid") + \'"></line>'
+        self.assertEqual(got["deg"], ["20", "22.5", "25"])
+        self.assertEqual(got["vlines"], [2, 2, 2])
+        self.assertGreater(got["mid"], 0)
+        for edge in got["edges"]:
+            self.assertEqual(len(edge["lines"]), 2)
+            ys = sorted(line["y"] for line in edge["lines"])
+            self.assertEqual(ys, [edge["top"], edge["top"] + edge["ih"]])
+            for line in edge["lines"]:
+                self.assertGreater(line["y"], 0)
+                self.assertLess(line["y"], edge["h"])
+                self.assertEqual(line["x1"], edge["L"])
+                self.assertEqual(line["x2"], edge["L"] + edge["plot"])
+        self.assertIn("function timeMarks(", HTML)
+        marks = _fn("timeMarks")
+        self.assertIn("const marks = [t0, t1]", marks)
+        self.assertNotIn("(t1 - t0) / 2", marks)
         for name in ("svgLine", "svgChargeBand", "svgBatteryTemp", "climateSvg"):
-            self.assertIn(grid, _fn(name))
+            self.assertIn("timeMarks(", _fn(name))
+            self.assertIn("axisBaselines(", _fn(name))
+        self.assertIn("axisBaselines(", _fn("drawBatDay"))
+        self.assertIn("function axisBaselines(", HTML)
+        self.assertIn("overflow='visible'", _fn("chartSvg"))
+
+    def test_temperature_steps_and_baselines_on_every_graph(self) -> None:
+        src = (
+            "function tone(){ return '#8aa0b5'; }\n"
+            + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
+            + _fn("timeMarks") + _fn("axisBaselines") + _fn("decimate") + _fn("coverWindow")
+            + _fn("yOn") + _fn("crossLine") + _fn("chartSvg") + _fn("svgBatteryTemp")
+            + _fn("svgLine") + _fn("svgChargeBand")
+            + "function pack(lo, hi){ const a = tempAxis(lo, hi);"
+            + " return {min:a.min, max:a.max, ticks:a.ticks, labels:a.ticks.map(v => fmt(v, 1))}; }\n"
+            + "function deg(html){ const out=[]; const re=/>([-0-9.]+)°C</g; let m;"
+            + " while((m=re.exec(html))) out.push(m[1]); return out; }\n"
+            + "function edges(html){\n"
+            + "  const h = Number(html.match(/viewBox='0 0 390 ([0-9.]+)'/)[1]);\n"
+            + "  const top = Number(html.match(/data-top='([^']+)'/)[1]);\n"
+            + "  const ih = Number(html.match(/data-ih='([^']+)'/)[1]);\n"
+            + "  const L = Number(html.match(/data-l='([^']+)'/)[1]);\n"
+            + "  const plot = Number(html.match(/data-plot='([^']+)'/)[1]);\n"
+            + "  const re = /<line x1=\"([^\"]+)\" y1=\"([^\"]+)\" x2=\"([^\"]+)\" y2=\"([^\"]+)\" stroke=\"[^\"]+\" stroke-width=\"1\" vector-effect=\"non-scaling-stroke\"><\\/line>/g;\n"
+            + "  const lines = []; let m;\n"
+            + "  while ((m = re.exec(html))) if (m[2] === m[4]) lines.push({x1:Number(m[1]), x2:Number(m[3]), y:Number(m[2])});\n"
+            + "  return {h:h, top:top, bot:top+ih, L:L, plot:plot, lines:lines};\n"
+            + "}\n"
+            + "const t0 = Date.parse('2026-11-15T11:40:00Z');\n"
+            + "const t1 = Date.parse('2026-11-15T12:10:00Z');\n"
+            + "const narrow = {min:[[{t:t0,v:21},{t:t1,v:22}]], max:[[{t:t0,v:24},{t:t1,v:24}]], heater:[], t0:t0, t1:t1};\n"
+            + "const wide = {min:[[{t:t0,v:12},{t:t1,v:18}]], max:[[{t:t0,v:28},{t:t1,v:33}]], heater:[], t0:t0, t1:t1};\n"
+            + "const speed = svgLine([{ts:'2026-11-15T11:40:00Z', v:12},{ts:'2026-11-15T12:10:00Z', v:48}],"
+            + " {h:150, unit:'km/h', t0:'2026-11-15T11:40:00Z', t1:'2026-11-15T12:10:00Z'});\n"
+            + "const power = svgLine([{ts:'2026-11-15T11:40:00Z', v:-20},{ts:'2026-11-15T12:10:00Z', v:40}],"
+            + " {h:150, unit:'kW', t0:'2026-11-15T11:40:00Z', t1:'2026-11-15T12:10:00Z'});\n"
+            + "const charge = svgChargeBand([{ts:'2026-11-15T11:40:00Z', v:3},{ts:'2026-11-15T12:10:00Z', v:7}],"
+            + " [], '2026-11-15T12:10:00Z', 11, null, '2026-11-15T11:40:00Z');\n"
+            + "const bn = svgBatteryTemp(narrow), bw = svgBatteryTemp(wide);\n"
+            + "process.stdout.write(JSON.stringify({\n"
+            + "  narrow: pack(22, 23), wide: pack(12, 33), exact: pack(20, 25),\n"
+            + "  bn: deg(bn), bw: deg(bw),\n"
+            + "  edges: {bn:edges(bn), bw:edges(bw), speed:edges(speed), power:edges(power), charge:edges(charge)}\n"
+            + "}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["narrow"], {"min": 20, "max": 25, "ticks": [20, 22.5, 25], "labels": ["20", "22.5", "25"]})
+        self.assertEqual(got["exact"], got["narrow"])
+        self.assertEqual(got["wide"]["min"], 10)
+        self.assertEqual(got["wide"]["max"], 35)
+        self.assertEqual(got["wide"]["ticks"], [10, 15, 20, 25, 30, 35])
+        self.assertEqual(got["wide"]["labels"], ["10", "15", "20", "25", "30", "35"])
+        self.assertTrue(all(abs(b - a - 5) < 1e-9 for a, b in zip(got["wide"]["ticks"], got["wide"]["ticks"][1:])))
+        self.assertEqual(got["bn"], ["20", "22.5", "25"])
+        self.assertEqual(got["bw"], ["10", "15", "20", "25", "30", "35"])
+        self.assertLessEqual(got["wide"]["min"], 12)
+        self.assertGreaterEqual(got["wide"]["max"], 33)
+        for edge in got["edges"].values():
+            self.assertEqual(len(edge["lines"]), 2)
+            ys = sorted(line["y"] for line in edge["lines"])
+            self.assertEqual(ys, [edge["top"], edge["bot"]])
+            for line in edge["lines"]:
+                self.assertGreater(line["y"], 0)
+                self.assertLess(line["y"], edge["h"])
+                self.assertEqual([line["x1"], line["x2"]], [edge["L"], edge["L"] + edge["plot"]])
 
     def test_crosshair_reads_real_samples_and_skips_a_gap(self) -> None:
         src = (

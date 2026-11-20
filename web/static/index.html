@@ -511,7 +511,7 @@
     .kv-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding: 8px 0; }
     .kv-row span:first-child { color: var(--muted); flex: 0 0 auto; white-space: nowrap; }
     .kv-row span:last-child { text-align: right; min-width: 0; }
-    svg.bchart { width: 100%; height: auto; max-width: 100%; display: block; }
+    svg.bchart { width: 100%; height: auto; max-width: 100%; display: block; overflow: visible; }
     .trip-row { border-top: 1px solid var(--line); padding: 10px 0; }
     .trip-row:first-child { border-top: 0; }
     .trip-line { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
@@ -2034,8 +2034,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.5"; // display constant only
+    const APP_VERSION = "v1.16.6"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.6", features: ["시간별 사용: 충전량은 충전 기록이고, 사용량은 0보다 클 때만 따로 보여요", "온도 눈금: 공조와 배터리 온도는 5℃ 간격이에요", "그래프: 시각은 시작과 끝만 있고, 맨 위·맨 아래 가로선이 있어요"], fixes: ["시간별 사용: 배터리가 안 오른 시간에 주행이 없으면 주차 색이에요"] },
       { version: "1.16.5", features: ["시간별 사용: 배터리가 오른 시간은 주행이 있어도 충전 색으로 보여요", "그래프: 배터리 온도, 충전 전력, 공조에도 시각 세로선이 있어요", "공조: 온도 눈금의 맨 위와 맨 아래 숫자가 보여요"], fixes: [] },
       { version: "1.16.4", features: ["공조 그래프: 네 탭 모두 오른쪽 끝까지 채워요", "공조: 바람 세기는 0·2·4·6·8·10, 시트는 0·1·2·3을 그림 안에 붙여요"], fixes: [] },
       { version: "1.16.3", features: ["그래프: 오른쪽 눈금이 없는 그림은 오른쪽 끝까지 채워요"], fixes: [] },
@@ -2529,6 +2530,23 @@
       if (out.length < 2) out.push(Math.round((start + step) * 1000) / 1000);
       return out;
     }
+    // Temperature axes are always 5°C. A 5°C span also gets the halfway tick (20, 22.5, 25).
+    function tempAxis(lo, hi) {
+      if (!isFinite(lo) || !isFinite(hi)) { lo = 0; hi = 30; }
+      if (hi < lo) { const swap = lo; lo = hi; hi = swap; }
+      const step = 5;
+      let min = Math.floor(lo / step + 1e-9) * step;
+      let max = Math.ceil(hi / step - 1e-9) * step;
+      min = Math.round(min);
+      max = Math.round(max);
+      if (max <= min) max = min + step;
+      const ticks = [];
+      if (max - min === step) ticks.push(min, min + step / 2, max);
+      else {
+        for (let v = min; v <= max + 1e-6 && ticks.length < 24; v += step) ticks.push(Math.round(v));
+      }
+      return {min: min, max: max, step: step, ticks: ticks};
+    }
 
     function seriesValueAt(segments, t, mode) {
       for (let s = 0; s < segments.length; s++) {
@@ -2672,11 +2690,30 @@
         "' stroke='" + tone("chart-axis") + "' stroke-width='1' visibility='hidden' pointer-events='none'></line>";
     }
     function chartSvg(inner, H, t0, t1, L, plot, top, ih) {
-      return "<svg class='bchart' viewBox='0 0 390 " + H + "' preserveAspectRatio='xMidYMid meet' data-t0='" + t0 +
+      return "<svg class='bchart' overflow='visible' viewBox='0 0 390 " + H + "' preserveAspectRatio='xMidYMid meet' data-t0='" + t0 +
         "' data-t1='" + t1 + "' data-l='" + L + "' data-plot='" + plot + "' data-top='" + top + "' data-ih='" + ih + "'>" +
         inner + "</svg>";
     }
 
+    function timeMarks(t0, t1, xAt, top, height, labelY) {
+      if (!isFinite(t0) || !isFinite(t1)) return {grids: "", labels: ""};
+      const marks = [t0, t1];
+      let grids = "", labels = "";
+      marks.forEach((ms, i) => {
+        const px = xAt(ms);
+        const anchor = i === 0 ? "start" : "end";
+        grids += '<line x1="' + px + '" y1="' + top + '" x2="' + px + '" y2="' + (top + height) + '" stroke="' + tone("chart-grid") + '"></line>';
+        labels += '<text x="' + px + '" y="' + labelY + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="' + anchor + '">' + fmtHm(new Date(ms).toISOString()) + "</text>";
+      });
+      return {grids: grids, labels: labels};
+    }
+    // Thin full-strength lines on the lowest and highest y tick. They sit on the
+    // plot edge, so the stroke is kept at 1px and the svg does not crop it.
+    function axisBaselines(x1, x2, yTop, yBot) {
+      const line = (y) => '<line x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y +
+        '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
+      return line(yTop) + line(yBot);
+    }
     function svgChargeBand(power, temps, endTs, axisTop, segments, startTs) {
       const W = 390, H = 168, L = 36, R = 16, T = 8, B = 34;
       const innerW = W - L - R, innerH = H - T - B;
@@ -2701,10 +2738,8 @@
         html += '<text x="' + (L - 4) + '" y="' + (yP(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + label + "</text>";
       });
       const y0 = yP(0);
-      [t0, (t0 + t1) / 2, t1].forEach(ms => {
-        const px = L + (t1 === t0 ? innerW / 2 : ((ms - t0) / (t1 - t0)) * innerW);
-        html += '<line x1="' + px + '" y1="' + T + '" x2="' + px + '" y2="' + (T + innerH) + '" stroke="' + tone("chart-grid") + '"></line>';
-      });
+      const marks = timeMarks(t0, t1, ms => x(ms), T, innerH, H - 12);
+      html += marks.grids;
       segs.forEach(seg => {
         const drawn = decimate((seg || []).filter(p => p.v != null && x(p.ts) != null), 240);
         if (drawn.length < 2) return;
@@ -2714,11 +2749,8 @@
         html += '<polyline fill="none" stroke="' + tone("chart-charge") + '" stroke-width="1.8" points="' +
           drawn.map(p => x(p.ts) + "," + yP(p.v)).join(" ") + '"></polyline>';
       });
-      [t0, (t0 + t1) / 2, t1].forEach((ms, i) => {
-        const px = L + (t1 === t0 ? innerW / 2 : ((ms - t0) / (t1 - t0)) * innerW);
-        const anchor = i === 0 ? "start" : i === 2 ? "end" : "middle";
-        html += '<text x="' + px + '" y="' + (H - 12) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="' + anchor + '">' + fmtHm(new Date(ms).toISOString()) + "</text>";
-      });
+      html += axisBaselines(L, W - R, yP(pmax), yP(0));
+      html += marks.labels;
       html += '<rect class="cross-hit" x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="transparent"></rect>';
       html += crossLine(T, innerH);
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH) +
@@ -2755,17 +2787,15 @@
       const y = v => T + innerH - ((v - ymin) / (ymax - ymin)) * innerH;
       let html = "";
       const dec = ticks.some(v => Math.abs(v - Math.round(v)) > 1e-9) ? 1 : 0;
-      ticks.forEach(v => {
-        html += '<line x1="' + L + '" y1="' + y(v) + '" x2="' + (W - R) + '" y2="' + y(v) + '" stroke="' + tone("chart-grid") + '"></line>';
+      ticks.forEach((v, i) => {
+        const edge = i === 0 || i === ticks.length - 1;
+        if (!edge) html += '<line x1="' + L + '" y1="' + y(v) + '" x2="' + (W - R) + '" y2="' + y(v) + '" stroke="' + tone("chart-grid") + '"></line>';
         html += '<text x="' + (L - 4) + '" y="' + (y(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + fmt(v, dec) + "</text>";
       });
       if (ymin < 0) html += '<line x1="' + L + '" y1="' + y(0) + '" x2="' + (W - R) + '" y2="' + y(0) + '" stroke="' + tone("chart-axis") + '"></line>';
-      if (isFinite(t0) && isFinite(t1)) {
-        [t0, t1].forEach(ms => {
-          const px = x(new Date(ms).toISOString());
-          html += '<line x1="' + px + '" y1="' + T + '" x2="' + px + '" y2="' + (T + innerH) + '" stroke="' + tone("chart-grid") + '"></line>';
-        });
-      }
+      const xMs = ms => L + (t1 === t0 ? innerW / 2 : ((ms - t0) / (t1 - t0)) * innerW);
+      const marks = timeMarks(t0, t1, xMs, T, innerH, H - 12);
+      html += marks.grids;
       const drawn = [];
       segs.forEach(seg => (seg || []).forEach(pt => { if (pt.v != null) drawn.push(pt); }));
       segs.forEach(seg => {
@@ -2797,6 +2827,7 @@
           }
         });
       });
+      html += axisBaselines(L, W - R, y(ymax), y(ymin));
       html += '<rect class="cross-hit" x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="transparent"></rect>';
       (opts.marks || []).forEach((m, i) => {
         const mt = Date.parse(m.ts);
@@ -2818,10 +2849,7 @@
         html += '<circle class="speed-mark" data-i="' + i + '" cx="' + cx + '" cy="' + cy + '" r="14" fill="transparent"></circle>';
         html += '<circle cx="' + cx + '" cy="' + cy + '" r="4" fill="' + color + '" pointer-events="none"></circle>';
       });
-      if (isFinite(t0) && isFinite(t1)) {
-        html += '<text x="' + L + '" y="' + (H - 12) + '" fill="' + tone("chart-axis") + '" font-size="11">' + fmtHm(new Date(t0).toISOString()) + "</text>";
-        html += '<text x="' + (W - R) + '" y="' + (H - 12) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + fmtHm(new Date(t1).toISOString()) + "</text>";
-      }
+      html += marks.labels;
       html += '<text x="' + (W - R) + '" y="' + (T + 10) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + (opts.unit || "") + "</text>";
       html += crossLine(T, innerH);
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH);
@@ -2986,11 +3014,8 @@
       ["inside", "outside", "setDriver", "setPass"].forEach(key => {
         (model[key] || []).forEach(seg => seg.forEach(p => vals.push(p.v)));
       });
-      if (!vals.length) return {min: 0, max: 30};
-      const lo = Math.min.apply(null, vals);
-      const hi = Math.max.apply(null, vals);
-      const pad = Math.max(0.6, (hi - lo) * 0.15);
-      return {min: lo - pad, max: hi + pad};
+      if (!vals.length) return tempAxis(0, 30);
+      return tempAxis(Math.min.apply(null, vals), Math.max.apply(null, vals));
     }
     function yOn(v, scale, top, ih) {
       const span = (scale.max - scale.min) || 1;
@@ -3065,26 +3090,24 @@
       const fill = tone("chart-axis");
       const hasTemp = model.inside.length || model.outside.length || model.setDriver.length || model.setPass.length;
       if (hasTemp) {
-        const ticks = niceTicks(temps.min, temps.max).slice();
-        [temps.max, temps.min].forEach(end => {
-          const ey = yOn(end, temps, T, innerH);
-          if (!ticks.some(v => Math.abs(yOn(v, temps, T, innerH) - ey) < 12)) ticks.push(end);
-        });
-        ticks.forEach(v => {
+        temps.ticks.forEach(v => {
           const y = yOn(v, temps, T, innerH);
           if (y < T - 0.5 || y > T + innerH + 0.5) return;
+          const atTop = Math.abs(y - T) < 1;
+          const atBot = Math.abs(y - (T + innerH)) < 1;
+          if (!atTop && !atBot) {
+            html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
+              "' stroke='" + tone("chart-grid") + "' opacity='0.35'></line>";
+          }
           let ty = y + 4;
-          if (Math.abs(v - temps.max) < 1e-6) ty = Math.max(T + 9, Math.min(ty, T + innerH - 2));
-          if (Math.abs(v - temps.min) < 1e-6) ty = Math.min(T + innerH - 2, Math.max(ty, T + 9));
-          html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
-            "' stroke='" + tone("chart-grid") + "' opacity='0.35'></line>";
+          if (atTop) ty = T + 9;
+          if (atBot) ty = T + innerH - 2;
           html += "<text x='" + (L - 4) + "' y='" + ty + "' fill='" + fill +
-            "' font-size='11' text-anchor='end'>" + fmt(v, 0) + "°C</text>";
+            "' font-size='11' text-anchor='end'>" + fmt(v, 1) + "°C</text>";
         });
       }
-      [t0, (t0 + t1) / 2, t1].forEach(ms => {
-        html += '<line x1="' + xOf(ms) + '" y1="' + T + '" x2="' + xOf(ms) + '" y2="' + (T + innerH) + '" stroke="' + tone("chart-grid") + '"></line>';
-      });
+      const marks = timeMarks(t0, t1, xOf, T, innerH, H - 12);
+      html += marks.grids;
       const seen = {};
       levelTicks(fromTab).forEach(v => { seen[v] = true; });
       levelTicks(toTab).forEach(v => { seen[v] = true; });
@@ -3191,11 +3214,13 @@
           });
         });
       }
-      [t0, (t0 + t1) / 2, t1].forEach((ms, i) => {
-        const px = xOf(ms);
-        const anchor = i === 0 ? "start" : i === 2 ? "end" : "middle";
-        html += "<text x='" + px + "' y='" + (H - 12) + "' fill='" + fill + "' font-size='11' text-anchor='" + anchor + "'>" + fmtHm(new Date(ms).toISOString()) + "</text>";
-      });
+      html += marks.labels;
+      if (hasTemp) html += axisBaselines(L, L + innerW, yOn(temps.max, temps, T, innerH), yOn(temps.min, temps, T, innerH));
+      else {
+        const tab = hasRight(toTab) ? toTab : (hasRight(fromTab) ? fromTab : "fan");
+        const scale = {min: 0, max: rightMax(tab, model)};
+        html += axisBaselines(L, L + innerW, yOn(scale.max, scale, T, innerH), yOn(0, scale, T, innerH));
+      }
       html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
       html += crossLine(T, innerH);
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH);
@@ -3351,8 +3376,7 @@
       model.max.forEach(seg => seg.forEach(p => vals.push(p.v)));
       const lo = vals.length ? Math.min.apply(null, vals) : 0;
       const hi = vals.length ? Math.max.apply(null, vals) : 1;
-      const pad = Math.max(0.6, (hi - lo) * 0.18);
-      const scale = {min: lo - pad, max: hi + pad};
+      const scale = tempAxis(lo, hi);
       const t0 = model.t0, t1 = model.t1;
       const xOf = (t) => L + (t1 === t0 ? innerW / 2 : ((t - t0) / (t1 - t0)) * innerW);
       let html = "";
@@ -3362,9 +3386,12 @@
         html += "<rect x='" + x0 + "' y='" + T + "' width='" + (x1 - x0) + "' height='" + innerH +
           "' fill='#e39a4a' fill-opacity='0.16'></rect>";
       });
-      [scale.min, (scale.min + scale.max) / 2, scale.max].forEach(v => {
+      scale.ticks.forEach(v => {
         const y = yOn(v, scale, T, innerH);
-        html += "<text x='" + (L - 4) + "' y='" + (y + 4) + "' fill='" + tone("chart-axis") + "' font-size='11' text-anchor='end'>" + fmt(v, 0) + "°C</text>";
+        let ty = y + 4;
+        if (Math.abs(y - T) < 1) ty = T + 9;
+        if (Math.abs(y - (T + innerH)) < 1) ty = T + innerH - 2;
+        html += "<text x='" + (L - 4) + "' y='" + ty + "' fill='" + tone("chart-axis") + "' font-size='11' text-anchor='end'>" + fmt(v, 1) + "°C</text>";
       });
       const drawLine = (segs, color) => {
         segs.forEach(seg => {
@@ -3374,17 +3401,12 @@
             drawn.map(p => xOf(p.t) + "," + yOn(p.v, scale, T, innerH)).join(" ") + "'></polyline>";
         });
       };
-      [t0, (t0 + t1) / 2, t1].forEach(ms => {
-        const px = xOf(ms);
-        html += '<line x1="' + px + '" y1="' + T + '" x2="' + px + '" y2="' + (T + innerH) + '" stroke="' + tone("chart-grid") + '"></line>';
-      });
+      const marks = timeMarks(t0, t1, xOf, T, innerH, H - 12);
+      html += marks.grids;
       drawLine(model.max, "#ef8a6b");
       drawLine(model.min, "#6ba8ef");
-      [t0, (t0 + t1) / 2, t1].forEach((ms, i) => {
-        const px = xOf(ms);
-        const anchor = i === 0 ? "start" : i === 2 ? "end" : "middle";
-        html += "<text x='" + px + "' y='" + (H - 12) + "' fill='" + tone("chart-axis") + "' font-size='11' text-anchor='" + anchor + "'>" + fmtHm(new Date(ms).toISOString()) + "</text>";
-      });
+      html += axisBaselines(L, L + innerW, yOn(scale.max, scale, T, innerH), yOn(scale.min, scale, T, innerH));
+      html += marks.labels;
       html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
       html += crossLine(T, innerH);
       let legend = "<p class='chart-legend'><span><i style='background:#ef8a6b'></i>최고</span><span><i style='background:#6ba8ef'></i>최저</span>";
@@ -3591,8 +3613,8 @@
       const rose = tlHour && known(tlHour.start_pct) && known(tlHour.end_pct)
         && Number(tlHour.end_pct) > Number(tlHour.start_pct);
       if (rose) return tone("chart-charge");
-      if (h && h.driving) return tone("chart-trip");
-      if (h && h.charging) return tone("chart-charge");
+      const drove = (h && h.driving) || (tlHour && (tlHour.states || []).some(s => s.lane === "drive"));
+      if (drove) return tone("chart-trip");
       return tone("chart-park");
     }
     function drawBatDay(hours) {
@@ -3607,9 +3629,10 @@
       let html = "";
       [0, 50, 100].forEach(v => {
         const yy = T + innerH - (v / 100) * innerH;
-        html += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
+        if (v === 50) html += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
         html += '<text x="' + (L - 4) + '" y="' + (yy + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + v + "%</text>";
       });
+      html += axisBaselines(L, W - R, T, T + innerH);
       hours.forEach((h, i) => {
         const tl = batTimeline && batTimeline.hours ? batTimeline.hours[i] : null;
         const hasTl = tl && (tl.states.length || known(tl.start_pct));
@@ -3802,9 +3825,11 @@
       if (t && (known(t.start_pct) || known(t.end_pct))) {
         const text = socChangeText(known(t.start_pct) ? t.start_pct : null, known(t.end_pct) ? t.end_pct : null);
         if (text) rows.push(["배터리", text]);
-        if (known(t.delta_pct) && known(t.kwh) && t.delta_pct !== 0) {
-          const d = t.delta_pct;
-          rows.push([d > 0 ? "충전량" : "사용량", "약 " + fmt(t.kwh, t.kwh < 0.1 ? 3 : 2) + "kWh"]);
+        if (known(t.charge_kwh) && Number(t.charge_kwh) > 0) {
+          rows.push(["충전량", fmt(t.charge_kwh, t.charge_kwh < 0.1 ? 3 : 2) + "kWh"]);
+        }
+        if (known(t.use_kwh) && Number(t.use_kwh) > 0) {
+          rows.push(["사용량", (t.use_estimated ? "약 " : "") + fmt(t.use_kwh, t.use_kwh < 0.1 ? 3 : 2) + "kWh"]);
         }
       } else if (hb && known(hb.pct)) {
         rows.push(["배터리", fmt(hb.pct, 1) + "%"]);

@@ -27,13 +27,15 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.5"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.6"', HTML)
+        self.assertLess(CHANGELOG.index("## v1.16.6"), CHANGELOG.index("## v1.16.5"))
         self.assertLess(CHANGELOG.index("## v1.16.5"), CHANGELOG.index("## v1.16.4"))
         self.assertLess(CHANGELOG.index("## v1.16.4"), CHANGELOG.index("## v1.16.3"))
         self.assertLess(CHANGELOG.index("## v1.16.3"), CHANGELOG.index("## v1.16.2"))
         self.assertLess(CHANGELOG.index("## v1.16.2"), CHANGELOG.index("## v1.16.1"))
         self.assertLess(CHANGELOG.index("## v1.16.1"), CHANGELOG.index("## v1.16.0"))
         self.assertLess(CHANGELOG.index("## v1.16.0"), CHANGELOG.index("## v1.15.3"))
+        self.assertLess(HTML.index('version: "1.16.6"'), HTML.index('version: "1.16.5"'))
         self.assertLess(HTML.index('version: "1.16.5"'), HTML.index('version: "1.16.4"'))
         self.assertLess(HTML.index('version: "1.16.4"'), HTML.index('version: "1.16.3"'))
         self.assertLess(HTML.index('version: "1.16.3"'), HTML.index('version: "1.16.2"'))
@@ -104,12 +106,12 @@ class HourTooltipTests(unittest.TestCase):
             "}\n"
             "const known = v => v !== null && v !== undefined && v !== '';\n"
             "let batTimeline = {hours: [\n"
-            "  {start_pct: 61.9, end_pct: 61.8, delta_pct: -0.1, kwh: 0.05},\n"
-            "  {start_pct: 65.0, end_pct: 63.4, delta_pct: -1.6, kwh: 1.2},\n"
-            "  {start_pct: 80.04, end_pct: 79.96, delta_pct: -0.08, kwh: 0.04},\n"
-            "  {start_pct: 64.6, end_pct: 64.6, delta_pct: 0, kwh: 0},\n"
-            "  {start_pct: 70, end_pct: 72.5, delta_pct: 2.5, kwh: 1.5},\n"
-            "  {start_pct: 50}\n"
+            "  {start_pct: 61.9, end_pct: 61.8, use_kwh: 0.05, use_estimated: true},\n"
+            "  {start_pct: 65.0, end_pct: 63.4, use_kwh: 1.2, use_estimated: true},\n"
+            "  {start_pct: 80.04, end_pct: 79.96, use_kwh: 0.04, use_estimated: true},\n"
+            "  {start_pct: 64.6, end_pct: 64.6, use_kwh: 0},\n"
+            "  {start_pct: 70, end_pct: 72.5, charge_kwh: 1.81, use_kwh: 0.4},\n"
+            "  {start_pct: 50, charge_kwh: 1.5}\n"
             "]};\n"
             + _fn("socTenths") + _fn("socTenthsText") + _fn("socChangeText") + _fn("hourPopHtml")
             + "const out = [0,1,2,3,4,5].map(i => hourPopHtml(i, null));\n"
@@ -132,8 +134,13 @@ class HourTooltipTests(unittest.TestCase):
         self.assertNotIn("사용량", got[3])
         self.assertIn(">70% → 72.5%<", got[4])
         self.assertIn(">충전량<", got[4])
-        self.assertIn("약 1.5kWh", got[4])
+        self.assertIn(">1.81kWh<", got[4])
+        self.assertNotIn("약 1.81", got[4])
+        self.assertIn(">사용량<", got[4])
         self.assertIn(">50%<", got[5])
+        self.assertIn(">충전량<", got[5])
+        self.assertIn(">1.5kWh<", got[5])
+        self.assertNotIn("사용량", got[5])
         self.assertNotIn("%p", "".join(got))
 
 
@@ -145,7 +152,7 @@ class ChargeChartTests(unittest.TestCase):
             " return s.replace(/0+$/, '').replace(/\\.$/, ''); }\n"
             "function fmtHm(){ return '00:00'; }\n"
             "function tone(name){ return name === 'chart-axis' ? '#8aa0b5' : '#3dd68c'; }\n"
-            + _fn("decimate") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
+            + _fn("decimate") + _fn("timeMarks") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
             + body
         )
 
