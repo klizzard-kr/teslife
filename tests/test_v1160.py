@@ -316,10 +316,17 @@ class PageGraphTests(unittest.TestCase):
             + "const fan=climateSvg(model,'fan','fan',1);\n"
             + "const seats=climateSvg(model,'seats','seats',1);\n"
             + "const glass=climateSvg(model,'glass','glass',1);\n"
+            + "function deg(html){\n"
+            + "  const out=[]; const re=/>([-0-9.]+)°C</g; let m;\n"
+            + "  while((m=re.exec(html))) out.push(m[1]);\n"
+            + "  return out;\n"
+            + "}\n"
+            + "function vlines(html){ return (html.match(/<line x1=\"/g) || []).length; }\n"
             + "process.stdout.write(JSON.stringify({\n"
             + "  plot:[plot(cabin),plot(fan),plot(seats),plot(glass)],\n"
             + "  fan:labels(fan), seats:labels(seats), cabin:labels(cabin),\n"
-            + "  high: fan.indexOf(',-')\n"
+            + "  high: fan.indexOf(',-'),\n"
+            + "  deg:deg(cabin), vlines:[vlines(cabin),vlines(fan),vlines(glass)]\n"
             + "}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
@@ -328,6 +335,12 @@ class PageGraphTests(unittest.TestCase):
         self.assertEqual(got["seats"], ["0", "1", "2", "3"])
         self.assertEqual(got["cabin"], [])
         self.assertGreater(got["high"], 0)
+        self.assertIn("21", got["deg"])
+        self.assertIn("24", got["deg"])
+        self.assertEqual(got["vlines"], [3, 3, 3])
+        grid = 'y2="\' + (T + innerH) + \'" stroke="\' + tone("chart-grid") + \'"></line>'
+        for name in ("svgLine", "svgChargeBand", "svgBatteryTemp", "climateSvg"):
+            self.assertIn(grid, _fn(name))
 
     def test_crosshair_reads_real_samples_and_skips_a_gap(self) -> None:
         src = (

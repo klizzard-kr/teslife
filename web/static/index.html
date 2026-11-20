@@ -2036,7 +2036,7 @@
     }
     const APP_VERSION = "v1.16.5"; // display constant only
     const RELEASE_NOTES = [
-      { version: "1.16.5", features: ["시간별 사용: 배터리가 오른 시간은 주행이 있어도 충전 색으로 보여요"], fixes: [] },
+      { version: "1.16.5", features: ["시간별 사용: 배터리가 오른 시간은 주행이 있어도 충전 색으로 보여요", "그래프: 배터리 온도, 충전 전력, 공조에도 시각 세로선이 있어요", "공조: 온도 눈금의 맨 위와 맨 아래 숫자가 보여요"], fixes: [] },
       { version: "1.16.4", features: ["공조 그래프: 네 탭 모두 오른쪽 끝까지 채워요", "공조: 바람 세기는 0·2·4·6·8·10, 시트는 0·1·2·3을 그림 안에 붙여요"], fixes: [] },
       { version: "1.16.3", features: ["그래프: 오른쪽 눈금이 없는 그림은 오른쪽 끝까지 채워요"], fixes: [] },
       { version: "1.16.2", features: ["홈: 배터리 끝의 0은 빼요", "공조: 꺼진 탭은 흐리고 누를 수 없어요", "그래프: 세로 선 아래 시각 글자는 빼요"], fixes: ["공조: 공조가 꺼져 있으면 팬 1을 그리지 않아요", "공조: 왼쪽 온도 눈금이 시각에 가리지 않아요"] },
@@ -2701,6 +2701,10 @@
         html += '<text x="' + (L - 4) + '" y="' + (yP(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + label + "</text>";
       });
       const y0 = yP(0);
+      [t0, (t0 + t1) / 2, t1].forEach(ms => {
+        const px = L + (t1 === t0 ? innerW / 2 : ((ms - t0) / (t1 - t0)) * innerW);
+        html += '<line x1="' + px + '" y1="' + T + '" x2="' + px + '" y2="' + (T + innerH) + '" stroke="' + tone("chart-grid") + '"></line>';
+      });
       segs.forEach(seg => {
         const drawn = decimate((seg || []).filter(p => p.v != null && x(p.ts) != null), 240);
         if (drawn.length < 2) return;
@@ -2756,6 +2760,12 @@
         html += '<text x="' + (L - 4) + '" y="' + (y(v) + 4) + '" fill="' + tone("chart-axis") + '" font-size="11" text-anchor="end">' + fmt(v, dec) + "</text>";
       });
       if (ymin < 0) html += '<line x1="' + L + '" y1="' + y(0) + '" x2="' + (W - R) + '" y2="' + y(0) + '" stroke="' + tone("chart-axis") + '"></line>';
+      if (isFinite(t0) && isFinite(t1)) {
+        [t0, t1].forEach(ms => {
+          const px = x(new Date(ms).toISOString());
+          html += '<line x1="' + px + '" y1="' + T + '" x2="' + px + '" y2="' + (T + innerH) + '" stroke="' + tone("chart-grid") + '"></line>';
+        });
+      }
       const drawn = [];
       segs.forEach(seg => (seg || []).forEach(pt => { if (pt.v != null) drawn.push(pt); }));
       segs.forEach(seg => {
@@ -3054,13 +3064,26 @@
       let html = "";
       const fill = tone("chart-axis");
       const hasTemp = model.inside.length || model.outside.length || model.setDriver.length || model.setPass.length;
-      if (hasTemp) niceTicks(temps.min, temps.max).forEach(v => {
-        const y = yOn(v, temps, T, innerH);
-        if (y < T - 0.5 || y > T + innerH + 0.5) return;
-        html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
-          "' stroke='" + tone("chart-grid") + "' opacity='0.35'></line>";
-        html += "<text x='" + (L - 4) + "' y='" + (y + 4) + "' fill='" + fill +
-          "' font-size='11' text-anchor='end'>" + fmt(v, 0) + "°C</text>";
+      if (hasTemp) {
+        const ticks = niceTicks(temps.min, temps.max).slice();
+        [temps.max, temps.min].forEach(end => {
+          const ey = yOn(end, temps, T, innerH);
+          if (!ticks.some(v => Math.abs(yOn(v, temps, T, innerH) - ey) < 12)) ticks.push(end);
+        });
+        ticks.forEach(v => {
+          const y = yOn(v, temps, T, innerH);
+          if (y < T - 0.5 || y > T + innerH + 0.5) return;
+          let ty = y + 4;
+          if (Math.abs(v - temps.max) < 1e-6) ty = Math.max(T + 9, Math.min(ty, T + innerH - 2));
+          if (Math.abs(v - temps.min) < 1e-6) ty = Math.min(T + innerH - 2, Math.max(ty, T + 9));
+          html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
+            "' stroke='" + tone("chart-grid") + "' opacity='0.35'></line>";
+          html += "<text x='" + (L - 4) + "' y='" + ty + "' fill='" + fill +
+            "' font-size='11' text-anchor='end'>" + fmt(v, 0) + "°C</text>";
+        });
+      }
+      [t0, (t0 + t1) / 2, t1].forEach(ms => {
+        html += '<line x1="' + xOf(ms) + '" y1="' + T + '" x2="' + xOf(ms) + '" y2="' + (T + innerH) + '" stroke="' + tone("chart-grid") + '"></line>';
       });
       const seen = {};
       levelTicks(fromTab).forEach(v => { seen[v] = true; });
@@ -3351,6 +3374,10 @@
             drawn.map(p => xOf(p.t) + "," + yOn(p.v, scale, T, innerH)).join(" ") + "'></polyline>";
         });
       };
+      [t0, (t0 + t1) / 2, t1].forEach(ms => {
+        const px = xOf(ms);
+        html += '<line x1="' + px + '" y1="' + T + '" x2="' + px + '" y2="' + (T + innerH) + '" stroke="' + tone("chart-grid") + '"></line>';
+      });
       drawLine(model.max, "#ef8a6b");
       drawLine(model.min, "#6ba8ef");
       [t0, (t0 + t1) / 2, t1].forEach((ms, i) => {
