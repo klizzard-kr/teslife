@@ -2035,8 +2035,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.9"; // display constant only
+    const APP_VERSION = "v1.16.10"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.10", features: [], fixes: ["공조: 꺼졌다 켜지면 예전에 받은 팬 단계를 이어서 그려요", "공조: 바람, 자동, 에어컨 중 하나라도 켜지면 A/C·팬 탭을 누를 수 있어요"] },
       { version: "1.16.9", features: ["주행 상세: 회생 다음에 회생률을 보여요"], fixes: ["알림 설정: 주행·충전·보안·차량 제목을 아래 항목보다 크고 진하게 바꿨어요", "그래프: 눈금마다 가로선이 있고, 글자는 그 선 가운데에 있어요"] },
       { version: "1.16.8", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선은 그래프 밖을 누르면 닫혀요"] },
       { version: "1.16.7", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선이 스크롤하면 그래프와 함께 움직여요"] },
@@ -3014,12 +3015,16 @@
         heat: heat, cool: cool, auto: auto[0] || [], ac: ac[0] || [], bars: bars
       };
       model.any = model.inside.length || model.outside.length || model.setDriver.length || model.fan.length ||
-        model.wheel.length || Object.keys(heat).length || Object.keys(cool).length || Object.keys(bars).length;
+        model.wheel.length || Object.keys(heat).length || Object.keys(cool).length || Object.keys(bars).length ||
+        flagOn(model.auto) || flagOn(model.ac);
       return model;
+    }
+    function flagOn(points) {
+      return (points || []).some(p => p.v >= 0.5);
     }
     function climateTabs(model) {
       const cabinOn = !!(model.inside.length || model.outside.length || model.setDriver.length);
-      const fanOn = (model.fan || []).some(seg => seg.some(p => p.v > 0));
+      const fanOn = (model.fan || []).some(seg => seg.some(p => p.v > 0)) || flagOn(model.auto) || flagOn(model.ac);
       const seatOn = SEATS.some(seat => model.heat[seat.key] || model.cool[seat.key]) || (model.wheel || []).length > 0;
       const glassOn = CLIM_BARS.some(row => model.bars[row[0]]);
       return [

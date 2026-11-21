@@ -43,7 +43,7 @@ def _wall(**over) -> list[tuple]:
 
 class KindOrderTests(unittest.TestCase):
     def test_version_is_unchanged_so_stored_rows_stay(self) -> None:
-        self.assertEqual(PROCESS_VERSION, "24")
+        self.assertEqual(PROCESS_VERSION, "25")
         notes = HTML.split('version: "1.14.5"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("급속 신호가 분명하면 급속으로 먼저 판단해요", notes)
         old = HTML.split('version: "1.14.3"', 1)[1].split("fixes:", 1)[0]

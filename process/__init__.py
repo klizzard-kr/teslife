@@ -22,7 +22,7 @@ from process.geo import distance_m, locate, thin
 from ledger import ensure_schema, seed_insurance, sync_auto_charges
 from ledger.consumables import seed_consumables
 
-PROCESS_VERSION = "24"  # 24: port-open joins adjacent bouts only; a drive, a trip, or 5 min offline breaks it
+PROCESS_VERSION = "25"  # 25: fan speed carries across HVAC off->on. 24: port-open joins adjacent bouts only
 # : tire_readings is a short working window, not a history. Keep TIRE_KEEP before the
 # newest reading: enough for tire_low (latest cold, 48 h), the slow-leak check (cold value
 # 6-8 days earlier) and the trip alerts. Older rows are deleted on every process run.
@@ -1163,9 +1163,9 @@ def trip_distance_km(
 def _fan_while_hvac(ev: Events, start: datetime, end: datetime) -> tuple[float | None, float | None]:
     """Fan max and average, counting speed only while HvacPower is On or Precondition.
 
-    With no HvacPower at all, the raw fan speed is used. A speed reported while
-    the climate is off does not count. Stored rows are not rewritten here; a
-    process-version bump is what would recompute them on the next run.
+    With no HvacPower at all, the raw fan speed is used. A speed received before
+    the window or while power is off is drawn again when power turns on. The off
+    stretch itself stays 0. Version 25 recomputes stored rows on the next run.
     """
     from web.graphseries import _hvac_setpoint_on, flat_average, gate_fan, level_spans, series_high
 

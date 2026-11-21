@@ -46,7 +46,7 @@ class TariffTests(unittest.TestCase):
     def test_pluglink_bands_and_history(self) -> None:
         """Member 292/322/322/345/345 from 2026-07-31. Guest 완속 357, every faster band 528."""
         conn = _db(self)
-        self.assertEqual(PROCESS_VERSION, "24")
+        self.assertEqual(PROCESS_VERSION, "25")
         conn.execute(
             "INSERT INTO tariff_rates (vehicle_id, operator, speed, member, effective_from, krw_per_kwh, source) "
             "VALUES ('', '플러그링크', 'fast_low', 1, '2026-08-01', 322, 'official')"
@@ -484,7 +484,7 @@ class ScreenTests(unittest.TestCase):
         self.assertNotIn('" (추정)"', HTML)
         self.assertNotIn("예상보다", HTML)
         self.assertIn("할인·포인트 (원)", HTML)
-        self.assertIn('const APP_VERSION = "v1.16.9"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.10"', HTML)
 
 
 if __name__ == "__main__":
