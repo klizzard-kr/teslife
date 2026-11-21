@@ -27,7 +27,8 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.9"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.10"', HTML)
+        self.assertLess(CHANGELOG.index("## v1.16.10"), CHANGELOG.index("## v1.16.9"))
         self.assertLess(CHANGELOG.index("## v1.16.9"), CHANGELOG.index("## v1.16.8"))
         self.assertLess(CHANGELOG.index("## v1.16.8"), CHANGELOG.index("## v1.16.7"))
         self.assertLess(CHANGELOG.index("## v1.16.7"), CHANGELOG.index("## v1.16.6"))
@@ -35,9 +36,10 @@ class VersionTests(unittest.TestCase):
         self.assertLess(CHANGELOG.index("## v1.16.5"), CHANGELOG.index("## v1.16.4"))
         self.assertLess(CHANGELOG.index("## v1.16.4"), CHANGELOG.index("## v1.16.3"))
         self.assertLess(CHANGELOG.index("## v1.16.3"), CHANGELOG.index("## v1.16.2"))
-        self.assertLess(CHANGELOG.index("## v1.16.2"), CHANGELOG.index("## v1.16.1"))
+        self.assertLess(CHANGELOG.index("## v1.16.2"), CHANGELOG.index("## v1.16.1\n"))
         self.assertLess(CHANGELOG.index("## v1.16.1"), CHANGELOG.index("## v1.16.0"))
         self.assertLess(CHANGELOG.index("## v1.16.0"), CHANGELOG.index("## v1.15.3"))
+        self.assertLess(HTML.index('version: "1.16.10"'), HTML.index('version: "1.16.9"'))
         self.assertLess(HTML.index('version: "1.16.9"'), HTML.index('version: "1.16.8"'))
         self.assertLess(HTML.index('version: "1.16.8"'), HTML.index('version: "1.16.7"'))
         self.assertLess(HTML.index('version: "1.16.7"'), HTML.index('version: "1.16.6"'))

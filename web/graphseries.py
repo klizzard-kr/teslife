@@ -66,11 +66,12 @@ def gate_fan(
     end: datetime,
     power_known: bool,
 ) -> list[list[Point]]:
-    """Fan speed counts only while HvacPower is On or Precondition.
+    """Fan speed is drawn only while HvacPower is On or Precondition.
 
-    A speed reported while the climate is off is ignored, including the value
-    carried in from before the window. With no HvacPower at all, the raw speed
-    is kept. The drawn level is 0 for the whole window when power stays off.
+    The last received speed is kept even when it arrived before the window or
+    while power was off. Turning power on draws that speed, including when no
+    new fan report arrives. Turning power off draws 0. With no HvacPower at
+    all, the raw speed is kept.
     """
     if not power_known:
         return series_segments(samples, start, prior, end)
@@ -79,10 +80,8 @@ def gate_fan(
         return any(a <= ts < b for a, b in on_spans)
 
     on_at_start = on_at(start)
-    held = float(prior[1]) if on_at_start and prior is not None else 0.0
-    pts: list[Point] = [(start, held if on_at_start else 0.0)]
-    if not on_at_start:
-        held = 0.0
+    remembered = float(prior[1]) if prior is not None else 0.0
+    pts: list[Point] = [(start, remembered if on_at_start else 0.0)]
     events: list[tuple[datetime, int, float]] = []
     for ts, value in samples:
         if start <= ts <= end:
@@ -90,22 +89,24 @@ def gate_fan(
     for a, b in on_spans:
         if start <= a <= end:
             events.append((a, 0, 1.0))
-        if start < b <= end:
+        # A span that runs to the window end is still on. Only an off inside the window draws 0.
+        if start < b < end:
             events.append((b, 2, 0.0))
     events.sort()
     hvac_on = on_at_start
     for ts, kind, value in events:
         if kind == 0:
             hvac_on = True
-            pts.append((ts, held))
+            pts.append((ts, remembered))
         elif kind == 2:
             hvac_on = False
             pts.append((ts, 0.0))
-        elif hvac_on:
-            held = value
-            pts.append((ts, value))
+        else:
+            remembered = value
+            if hvac_on:
+                pts.append((ts, value))
     if not pts or pts[-1][0] < end:
-        pts.append((end, held if hvac_on else 0.0))
+        pts.append((end, remembered if hvac_on else 0.0))
     return segments(pts)
 
 

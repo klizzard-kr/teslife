@@ -119,7 +119,7 @@ class DistanceTests(unittest.TestCase):
         self.assertGreater(row[0], 0.05)
         self.assertLess(row[0], MIN_TRIP_KM)
         self.assertIsNone(row[2])
-        self.assertEqual(PROCESS_VERSION, "24")
+        self.assertEqual(PROCESS_VERSION, "25")
 
 
 class DisplayTests(unittest.TestCase):

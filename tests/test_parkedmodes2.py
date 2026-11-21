@@ -56,7 +56,7 @@ class CategoryTests(unittest.TestCase):
         return parked_state(e, t), parked_modes(e, t)
 
     def test_five_categories(self) -> None:
-        self.assertEqual(process.PROCESS_VERSION, "24")
+        self.assertEqual(process.PROCESS_VERSION, "25")
         self.assertEqual(process.PARKED_CATEGORIES, ("camp", "dog", "keep", "sentry", "parked"))
         self.assertEqual(set(LANE_LABELS), {"drive", "parked", "sentry"})
         self.assertEqual(LANE_LABELS["parked"], "주차")

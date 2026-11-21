@@ -210,7 +210,7 @@ class RelabelTests(unittest.TestCase):
         self.assertEqual([row["basis"] for row in rows], ["충전소", "충전소"])
         self.assertEqual(rows[0]["new"], "한빛센터")
         self.assertNotIn("37.5", format_line(rows[0]))
-        self.assertEqual(PROCESS_VERSION, "24")
+        self.assertEqual(PROCESS_VERSION, "25")
         self.assertIn("shownPlace", HTML)
         note = HTML.split('version: "1.14.7"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("네이버의 충전소 이름으로 깔끔하게 채워요", note)

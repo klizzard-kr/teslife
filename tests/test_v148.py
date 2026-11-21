@@ -264,7 +264,7 @@ class ChargeStartOnceTests(unittest.TestCase):
         ])
         check_charge_start(conn, VID, paused, start + timedelta(minutes=26), sender)
         self.assertEqual(len(sent), 1)
-        self.assertEqual(PROCESS_VERSION, "24")
+        self.assertEqual(PROCESS_VERSION, "25")
         note = HTML.split('version: "1.14.8"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("봇 대화로 알려요", note)
         self.assertIn("시작 알림은 한 번만 와요", note)

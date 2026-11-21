@@ -164,6 +164,50 @@ class ClimateSeriesTests(unittest.TestCase):
         self.assertTrue(all(v == 0.0 for v in vals))
         self.assertFalse(built["set_driver"])
 
+    def test_fan_keeps_the_speed_from_before_power_turns_on(self) -> None:
+        built = self._built({
+            "HvacPower": [(at(0), "Off"), (at(300), "On")],
+            "HvacAutoMode": [(at(300), "On")],
+            "HvacACEnabled": [(at(400), True), (at(500), False)],
+        }, {"HvacPower": (at(-9000), "Off"), "HvacFanSpeed": (at(-8000), 1)})
+        vals = [(ts, v) for seg in built["fan"] for ts, v in seg]
+        self.assertTrue(vals)
+        self.assertTrue(all(v == 0.0 for ts, v in vals if ts < at(300)))
+        self.assertTrue(all(v == 1.0 for ts, v in vals if ts >= at(300)))
+        self.assertEqual(built["auto"][-1][1], 1.0)
+        self.assertTrue(any(v >= 0.5 for _ts, v in built["ac"]))
+        self.assertEqual(built["ac"][-1][1], 0.0)
+
+    def test_fan_uses_a_speed_received_while_power_is_off(self) -> None:
+        built = self._built({
+            "HvacPower": [(at(0), "Off"), (at(200), "On")],
+            "HvacFanSpeed": [(at(40), 4)],
+        }, {"HvacPower": (at(-10), "Off")})
+        vals = [(ts, v) for seg in built["fan"] for ts, v in seg]
+        self.assertTrue(all(v == 0.0 for ts, v in vals if ts < at(200)))
+        self.assertTrue(all(v == 4.0 for ts, v in vals if ts >= at(200)))
+
+    def test_fan_is_zero_after_power_turns_off(self) -> None:
+        built = self._built({
+            "HvacPower": [(at(0), "On"), (at(180), "Off")],
+            "HvacFanSpeed": [(at(0), 2)],
+        }, {})
+        vals = [(ts, v) for seg in built["fan"] for ts, v in seg]
+        self.assertTrue(any(v == 2.0 for _ts, v in vals))
+        self.assertTrue(all(v == 0.0 for ts, v in vals if ts >= at(180)))
+        self.assertEqual(vals[-1], (at(26 * 60), 0.0))
+
+    def test_auto_or_ac_without_a_fan_sample_keeps_the_flags(self) -> None:
+        built = self._built({
+            "HvacPower": [(at(0), "Off"), (at(60), "On")],
+            "HvacAutoMode": [(at(60), "On")],
+            "HvacACEnabled": [(at(60), True)],
+        }, {})
+        self.assertTrue(built["fan"])
+        self.assertTrue(all(v == 0.0 for seg in built["fan"] for _ts, v in seg))
+        self.assertEqual(built["auto"][-1][1], 1.0)
+        self.assertEqual(built["ac"][-1][1], 1.0)
+
 
 class BatterySeriesTests(unittest.TestCase):
     def test_min_above_max_is_kept(self) -> None:
@@ -225,13 +269,24 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.9"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.10"', HTML)
         tabs = _fn("climateTabs")
         self.assertIn('["cabin", "실내·실외", cabinOn]', tabs)
         self.assertIn('["fan", "A/C·팬", fanOn]', tabs)
         self.assertIn('["seats", "시트·핸들", seatOn]', tabs)
         self.assertIn('["glass", "유리·와이퍼", glassOn]', tabs)
         self.assertIn("aria-disabled", _fn("mountClimate"))
+        tabs_css = HTML.split(".clim-tabs button {", 1)[1].split(".detail-block", 1)[0]
+        self.assertIn("font-weight: 400", tabs_css)
+        self.assertIn("padding: 6px 12px; min-height: 36px; font-size: 0.85rem", tabs_css)
+        selected = tabs_css.split(".clim-tabs button.on", 1)[1].split(".clim-tabs button.disabled", 1)[0]
+        self.assertIn("background: var(--accent)", selected)
+        self.assertIn("color: var(--on-accent)", selected)
+        self.assertIn("font-weight: 700", selected)
+        disabled = tabs_css.split(".clim-tabs button.disabled", 1)[1]
+        self.assertIn("opacity: 0.4", disabled)
+        self.assertNotIn("var(--accent)", disabled)
+        self.assertIn('classList.toggle("on"', _fn("mountClimate"))
         self.assertNotIn("<strong>공조</strong>", _fn("mountClimate"))
         i18n = (ROOT / "web" / "static" / "i18n.js").read_text(encoding="utf-8")
         self.assertIn('"온도": "Temp"', i18n)
@@ -292,6 +347,30 @@ class PageGraphTests(unittest.TestCase):
         self.assertIn("#ef8a6b", HTML)
         self.assertIn("#6ba8ef", HTML)
         self.assertNotIn("배터리 온도(최저~최고)", HTML.split("function svgChargeBand", 1)[1].split("function paintChargeTemps", 1)[0])
+
+    def test_fan_tab_opens_for_auto_or_ac_without_fan_speed(self) -> None:
+        src = (
+            "const SEATS = []; const CLIM_BARS = [];\n"
+            + _fn("flagOn") + _fn("climateTabs")
+            + "const base = {inside:[{v:20}], outside:[], setDriver:[], fan:[[{v:0},{v:0}]], "
+            + "wheel:[], heat:{}, cool:{}, auto:[], ac:[], bars:{}};\n"
+            + "const fanOf = (extra) => climateTabs(Object.assign({}, base, extra))[1][2];\n"
+            + "process.stdout.write(JSON.stringify({\n"
+            + "  off: fanOf({}),\n"
+            + "  fan: fanOf({fan:[[{v:1}]]}),\n"
+            + "  auto: fanOf({auto:[{v:1}]}),\n"
+            + "  ac: fanOf({ac:[{v:1}]}),\n"
+            + "  autoOff: fanOf({auto:[{v:0}]}),\n"
+            + "  acOff: fanOf({ac:[{v:0}]})\n"
+            + "}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertFalse(got["off"])
+        self.assertTrue(got["fan"])
+        self.assertTrue(got["auto"])
+        self.assertTrue(got["ac"])
+        self.assertFalse(got["autoOff"])
+        self.assertFalse(got["acOff"])
 
     def test_level_labels_stay_inside_the_shared_right_edge(self) -> None:
         start = HTML.index("    const SEATS = [")

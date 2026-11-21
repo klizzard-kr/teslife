@@ -39,7 +39,7 @@ class NetTripTests(unittest.TestCase):
             conn.close()
 
     def test_version(self) -> None:
-        self.assertEqual(PROCESS_VERSION, "24")
+        self.assertEqual(PROCESS_VERSION, "25")
 
     def test_long_trip_is_level_drop_times_per(self) -> None:
         # 40.7 km shape: gross 13.79, level 80 → 61.1, remaining at the end 49.

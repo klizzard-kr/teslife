@@ -60,7 +60,7 @@ class RateTests(unittest.TestCase):
         self.assertIsNone(choose_rate(None, None, None, False, False))
 
     def test_env_card_uses_the_cheaper_official_rate(self) -> None:
-        self.assertEqual(PROCESS_VERSION, "24")
+        self.assertEqual(PROCESS_VERSION, "25")
         self.assertEqual([row[1] for row in ENV_RATES], [295.0, 307.2, 325.6, 348.4, 393.1])
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
@@ -220,7 +220,7 @@ class SpeedTests(unittest.TestCase):
         conn.close()
         process_db(db, seed=False, now=end + timedelta(minutes=5))
         conn = connect(db)
-        self.assertEqual(conn.execute("SELECT value FROM process_meta WHERE key = ?", (f"version:{VID}",)).fetchone()[0], "24")
+        self.assertEqual(conn.execute("SELECT value FROM process_meta WHERE key = ?", (f"version:{VID}",)).fetchone()[0], "25")
         self.assertEqual(conn.execute("SELECT total_krw, operator FROM charge_meta").fetchone(), (4321, "kept"))
         self.assertEqual(conn.execute("SELECT chger_id, source FROM charge_charger").fetchone(), ("07", "user"))
         self.assertEqual(conn.execute("SELECT amount_krw, memo FROM ledger").fetchone(), (1000, "세차"))
