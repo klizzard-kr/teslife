@@ -2040,8 +2040,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.10"; // display constant only
+    const APP_VERSION = "v1.16.11"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.11", features: ["충전: 목표까지 차면 충전구가 열려 있어도 끝난 충전으로 적어요"], fixes: ["공조: 자동·에어컨이 바뀌면 그 시각부터 선 모양과 색이 바뀌어요", "공조: 단계 숫자는 그림 오른쪽 바깥에 있어요"] },
       { version: "1.16.10", features: [], fixes: ["공조: 꺼졌다 켜지면 예전에 받은 팬 단계를 이어서 그려요", "공조: 바람, 자동, 에어컨 중 하나라도 켜지면 A/C·팬 탭을 누를 수 있어요", "공조: 고른 탭은 강조색으로 채워지고 글자가 진해요"] },
       { version: "1.16.9", features: ["주행 상세: 회생 다음에 회생률을 보여요"], fixes: ["알림 설정: 주행·충전·보안·차량 제목을 아래 항목보다 크고 진하게 바꿨어요", "그래프: 눈금마다 가로선이 있고, 글자는 그 선 가운데에 있어요"] },
       { version: "1.16.8", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선은 그래프 밖을 누르면 닫혀요"] },
@@ -2729,9 +2730,9 @@
       return '<line x1="' + x1 + '" y1="' + y + '" x2="' + x2 + '" y2="' + y +
         '" stroke="' + tone("chart-grid") + '" stroke-width="1" vector-effect="non-scaling-stroke"></line>';
     }
-    function yTickText(x, y, label, size, extra) {
+    function yTickText(x, y, label, size, extra, anchor) {
       return '<text x="' + x + '" y="' + y + '" fill="' + tone("chart-axis") + '" font-size="' + (size || 11) +
-        '" text-anchor="end" dominant-baseline="middle"' + (extra || "") + ">" + label + "</text>";
+        '" text-anchor="' + (anchor || "end") + '" dominant-baseline="middle"' + (extra || "") + ">" + label + "</text>";
     }
     // Thin full-strength lines on the lowest and highest y tick. They sit on the
     // plot edge, so the stroke is kept at 1px and the svg does not crop it.
@@ -3064,6 +3065,18 @@
     }
     function hasRight(tab) { return tab === "fan" || tab === "seats"; }
     function rightMax(tab, model) { return tab === "seats" ? heatAxisMax(model) : fanAxisMax(model); }
+    function flagCuts(points, t0, t1) {
+      const cuts = [];
+      let prev = flagAt(points, t0);
+      (points || []).forEach(p => {
+        if (!(p.t > t0 && p.t < t1)) return;
+        const on = p.v >= 0.5;
+        if (on === prev) return;
+        cuts.push(p.t);
+        prev = on;
+      });
+      return cuts;
+    }
     function fanPieces(model) {
       const out = [];
       let n = 0;
@@ -3072,15 +3085,27 @@
         for (let i = 0; i < drawn.length - 1; i++) {
           const a = drawn[i];
           const b = drawn[i + 1];
-          const active = a.v > 0.05;
-          const auto = active && flagAt(model.auto, a.t);
-          out.push({
-            key: "fan" + (n++),
-            color: active && flagAt(model.ac, a.t) ? FAN_ON : FAN_OFF,
-            dash: active && !auto ? "5 4" : "",
-            hold: [a, {t: b.t, v: a.v}],
-            step: [a, {t: b.t, v: a.v}, b]
+          const cuts = [a.t].concat(flagCuts(model.auto, a.t, b.t), flagCuts(model.ac, a.t, b.t), [b.t]);
+          cuts.sort((x, y) => x - y);
+          const marks = [];
+          cuts.forEach(t => {
+            if (!marks.length || t - marks[marks.length - 1] > 0.5) marks.push(t);
           });
+          for (let k = 0; k < marks.length - 1; k++) {
+            const t0 = marks[k];
+            const t1 = marks[k + 1];
+            const left = {t: t0, v: a.v};
+            const right = {t: t1, v: k === marks.length - 2 ? b.v : a.v};
+            const active = left.v > 0.05;
+            const auto = active && flagAt(model.auto, t0);
+            out.push({
+              key: "fan" + (n++),
+              color: active && flagAt(model.ac, t0) ? FAN_ON : FAN_OFF,
+              dash: active && !auto ? "5 4" : "",
+              hold: [left, {t: t1, v: left.v}],
+              step: [left, {t: t1, v: left.v}, right]
+            });
+          }
         }
       });
       return out;
@@ -3108,7 +3133,7 @@
     function climateSvg(model, fromTab, toTab, u) {
       const bars = CLIM_BARS.filter(row => model.bars[row[0]]);
       const barStrip = bars.length ? 4 + bars.length * 10 : 0;
-      const W = 390, L = 40, R = 16, T = 12, lineH = 176;
+      const W = 390, L = 40, R = 28, T = 12, lineH = 176;
       const H = T + lineH + barStrip + 36;
       const innerW = W - L - R, innerH = lineH;
       const t0 = model.t0, t1 = model.t1;
@@ -3145,7 +3170,8 @@
         const y = y0 + (y1 - y0) * u;
         html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
           "' stroke='" + tone("chart-grid") + "' opacity='" + (op * 0.28).toFixed(3) + "'></line>";
-        html += yTickText(L + innerW - 4, y, v, 10, " opacity='" + (op * 0.75).toFixed(3) + "'");
+        const fade = op < 0.999 ? " opacity='" + op.toFixed(3) + "'" : "";
+        html += yTickText(L + innerW + 6, y, v, 11, fade, "start");
       });
       const yLevel = (tab, v) => yOn(v, {min: 0, max: rightMax(hasRight(tab) ? tab : (hasRight(fromTab) ? fromTab : toTab), model)}, T, innerH);
       const paintFill = (pts, color, op, fromS, toS) => {
