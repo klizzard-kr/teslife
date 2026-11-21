@@ -276,6 +276,17 @@ class PageGraphTests(unittest.TestCase):
         self.assertIn('["seats", "시트·핸들", seatOn]', tabs)
         self.assertIn('["glass", "유리·와이퍼", glassOn]', tabs)
         self.assertIn("aria-disabled", _fn("mountClimate"))
+        tabs_css = HTML.split(".clim-tabs button {", 1)[1].split(".detail-block", 1)[0]
+        self.assertIn("font-weight: 400", tabs_css)
+        self.assertIn("padding: 6px 12px; min-height: 36px; font-size: 0.85rem", tabs_css)
+        selected = tabs_css.split(".clim-tabs button.on", 1)[1].split(".clim-tabs button.disabled", 1)[0]
+        self.assertIn("background: var(--accent)", selected)
+        self.assertIn("color: var(--on-accent)", selected)
+        self.assertIn("font-weight: 700", selected)
+        disabled = tabs_css.split(".clim-tabs button.disabled", 1)[1]
+        self.assertIn("opacity: 0.4", disabled)
+        self.assertNotIn("var(--accent)", disabled)
+        self.assertIn('classList.toggle("on"', _fn("mountClimate"))
         self.assertNotIn("<strong>공조</strong>", _fn("mountClimate"))
         i18n = (ROOT / "web" / "static" / "i18n.js").read_text(encoding="utf-8")
         self.assertIn('"온도": "Temp"', i18n)

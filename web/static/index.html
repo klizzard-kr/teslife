@@ -591,10 +591,15 @@
     .clim-legend .leg-sep { width: 1px; align-self: stretch; min-height: 12px; background: var(--line); }
     .clim-tabs { display: flex; gap: 6px; margin: 8px 0 4px; }
     .clim-tabs button {
-      border: 1px solid var(--line); background: transparent; color: var(--muted);
-      border-radius: 999px; padding: 6px 12px; min-height: 36px; font-size: 0.85rem;
+      border: 1px solid var(--control-border); background: transparent; color: var(--text);
+      border-radius: 999px; padding: 6px 12px; min-height: 36px; font-size: 0.85rem; font-weight: 400;
     }
-    .clim-tabs button.disabled { opacity: 0.38; }
+    .clim-tabs button.on {
+      background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700;
+    }
+    .clim-tabs button.disabled {
+      background: transparent; border-color: var(--line); color: var(--muted); font-weight: 400; opacity: 0.4;
+    }
     .detail-block { margin-top: 14px; }
     .curve-box svg.bchart, .clim-plot svg.bchart { touch-action: pan-y; }
     .cross-tip {
@@ -2037,7 +2042,7 @@
     }
     const APP_VERSION = "v1.16.10"; // display constant only
     const RELEASE_NOTES = [
-      { version: "1.16.10", features: [], fixes: ["공조: 꺼졌다 켜지면 예전에 받은 팬 단계를 이어서 그려요", "공조: 바람, 자동, 에어컨 중 하나라도 켜지면 A/C·팬 탭을 누를 수 있어요"] },
+      { version: "1.16.10", features: [], fixes: ["공조: 꺼졌다 켜지면 예전에 받은 팬 단계를 이어서 그려요", "공조: 바람, 자동, 에어컨 중 하나라도 켜지면 A/C·팬 탭을 누를 수 있어요", "공조: 고른 탭은 강조색으로 채워지고 글자가 진해요"] },
       { version: "1.16.9", features: ["주행 상세: 회생 다음에 회생률을 보여요"], fixes: ["알림 설정: 주행·충전·보안·차량 제목을 아래 항목보다 크고 진하게 바꿨어요", "그래프: 눈금마다 가로선이 있고, 글자는 그 선 가운데에 있어요"] },
       { version: "1.16.8", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선은 그래프 밖을 누르면 닫혀요"] },
       { version: "1.16.7", features: [], fixes: ["배터리 사용: 시간별·모드별 말풍선이 스크롤하면 그래프와 함께 움직여요"] },
