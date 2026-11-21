@@ -737,12 +737,30 @@ def _gap_blocked(
     return _trip_between(conn, vehicle_id, start, end)
 
 
+def _ended_complete(ev: Events, stopped: datetime) -> bool:
+    """Charging stopped because the car said Complete (the target was reached).
+
+    Stopped, and the other plugged-but-waiting states, are not Complete. Those
+    pauses still join while the port stays open.
+    """
+    return charge_status(
+        ev.at("DetailedChargeState", stopped),
+        ev.at("ChargeState", stopped),
+    ) == "Complete"
+
+
 def _gap_is_one_session(
     ev: Events, stopped: datetime, resumed: datetime,
     conn: sqlite3.Connection | None = None, vehicle_id: str | None = None,
     trips: list[tuple[datetime, datetime]] | None = None,
 ) -> bool:
-    """Join only the next bout, and only while the port's last value is still open."""
+    """Join only the next bout, and only while the port's last value is still open.
+
+    A bout that ended Complete is already finished. The next bout on the same
+    cable is a new charge.
+    """
+    if _ended_complete(ev, stopped):
+        return False
     if not _port_still_open(ev, stopped, resumed):
         return False
     return not _gap_blocked(ev, stopped, resumed, conn, vehicle_id, trips)
@@ -753,7 +771,12 @@ def _session_still_open(
     conn: sqlite3.Connection | None = None, vehicle_id: str | None = None,
     trips: list[tuple[datetime, datetime]] | None = None,
 ) -> bool:
-    """The port is still open and nothing has broken that, so the session is not final."""
+    """The port is still open and nothing has broken that, so the session is not final.
+
+    Complete is final at the moment charging stopped, even while the port stays open.
+    """
+    if _ended_complete(ev, stopped):
+        return False
     end = ev.last_ts or stopped
     if end <= stopped:
         return False
@@ -794,8 +817,9 @@ def _charge_sessions(
 
     Only two adjacent bouts can join, and only when the port's last signal is
     still open, the car stayed put, and the gap has no trip, drive, or five
-    minutes offline. A joined span cannot reach across a later bout. The end
-    is the moment charging stopped, not a later signal.
+    minutes offline. A bout that ended Complete does not join and does not stay
+    open. A joined span cannot reach across a later bout. The end is the moment
+    charging stopped, not a later signal.
     """
     if trips is None:
         trips, _ignored = _find_trips(ev)
@@ -2274,6 +2298,18 @@ def process_vehicle(
     # 3 hours may be written or may absorb a sibling. A version bump or a full
     # rebuild leaves older rows alone.
     recent_spans = [(s, e) for s, e in charge_spans if charge_floor is None or s >= charge_floor]
+    # An incremental pass can still be sitting on a charge that reached Complete
+    # while the port stayed open. That row was never stored. Write it even when
+    # the start is older than the 3 hour floor. A full rebuild does not, so
+    # already stored charges are not split or rewritten.
+    if since is not None:
+        seen = set(recent_spans)
+        for span in charge_spans:
+            if span in seen or not _ended_complete(ev, span[1]):
+                continue
+            recent_spans.append(span)
+            seen.add(span)
+    recent_spans.sort(key=lambda span: span[0])
     if open_charge is not None and charge_floor is not None and open_charge < charge_floor:
         open_charge = None
     write_spans = _spans_keeping_stored_rows(conn, vehicle_id, recent_spans)

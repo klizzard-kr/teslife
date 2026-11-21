@@ -269,7 +269,7 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.10"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.11"', HTML)
         tabs = _fn("climateTabs")
         self.assertIn('["cabin", "실내·실외", cabinOn]', tabs)
         self.assertIn('["fan", "A/C·팬", fanOn]', tabs)
@@ -309,12 +309,12 @@ class PageGraphTests(unittest.TestCase):
         self.assertNotIn('"바람 세기 " + levelWord', rows)
         self.assertIn('group("자리"', legend)
         svg = _fn("climateSvg")
-        self.assertIn("const W = 390, L = 40, R = 16", svg)
+        self.assertIn("const W = 390, L = 40, R = 28", svg)
         self.assertNotIn("R = 44", svg)
         self.assertNotIn("L = 104", svg)
-        self.assertIn("L + innerW - 4", svg)
-        self.assertIn("yTickText(L + innerW - 4, y, v, 10", svg)
-        self.assertIn('text-anchor="end" dominant-baseline="middle"', _fn("yTickText"))
+        self.assertIn("yTickText(L + innerW + 6, y, v, 11", svg)
+        self.assertNotIn("L + innerW - 4", svg)
+        self.assertIn('text-anchor="\' + (anchor || "end") + \'" dominant-baseline="middle"', _fn("yTickText"))
         self.assertNotIn("innerW + 4", svg)
         self.assertIn("return [0, 2, 4, 6, 8, 10]", _fn("levelTicks"))
         self.assertIn("return [0, 1, 2, 3]", _fn("levelTicks"))
@@ -372,6 +372,37 @@ class PageGraphTests(unittest.TestCase):
         self.assertFalse(got["autoOff"])
         self.assertFalse(got["acOff"])
 
+    def test_fan_line_follows_auto_and_ac_changes(self) -> None:
+        src = (
+            "const FAN_OFF = '#7d8794'; const FAN_ON = '#12c9a0';\n"
+            + _fn("flagAt") + _fn("flagCuts") + _fn("coverWindow") + _fn("fanPieces")
+            + "const t0 = Date.parse('2026-11-21T08:00:00Z');\n"
+            + "const mid = t0 + 30*60*1000;\n"
+            + "const acAt = t0 + 50*60*1000;\n"
+            + "const t1 = t0 + 60*60*1000;\n"
+            + "const model = {t0:t0, t1:t1, fan:[[{t:t0, v:1},{t:t1, v:1}]],\n"
+            + "  auto:[{t:t0, v:0},{t:mid, v:1}], ac:[{t:t0, v:0},{t:acAt, v:1}]};\n"
+            + "const pieces = fanPieces(model);\n"
+            + "function at(t){\n"
+            + "  const piece = pieces.find(p => p.hold[0].t <= t && t < p.hold[1].t);\n"
+            + "  const auto = flagAt(model.auto, t);\n"
+            + "  const ac = flagAt(model.ac, t);\n"
+            + "  return {dash:piece.dash, color:piece.color,\n"
+            + "    lineAuto:piece.dash === '', tipAuto:auto,\n"
+            + "    lineAc:piece.color === FAN_ON, tipAc:ac};\n"
+            + "}\n"
+            + "const samples = [t0 + 1000, mid + 1000, acAt + 1000].map(at);\n"
+            + "process.stdout.write(JSON.stringify({n:pieces.length, samples:samples}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["n"], 3)
+        for sample in got["samples"]:
+            self.assertEqual(sample["lineAuto"], sample["tipAuto"])
+            self.assertEqual(sample["lineAc"], sample["tipAc"])
+        self.assertEqual(got["samples"][0]["dash"], "5 4")
+        self.assertEqual(got["samples"][1]["dash"], "")
+        self.assertEqual(got["samples"][2]["color"], "#12c9a0")
+
     def test_level_labels_stay_inside_the_shared_right_edge(self) -> None:
         start = HTML.index("    const SEATS = [")
         chunk = HTML[start:HTML.index("    function climateLegend")]
@@ -388,9 +419,14 @@ class PageGraphTests(unittest.TestCase):
             + "  fan:[[{t:t0,v:11},{t:t1,v:6}]], wheel:[],\n"
             + "  heat:{seat_left:[[{t:t0,v:2},{t:t1,v:3}]]}, cool:{}, auto:[], ac:[], bars:{}};\n"
             + "function labels(html){\n"
-            + "  const out=[]; const re=/font-size=\"10\" text-anchor=\"end\" dominant-baseline=\"middle\" opacity='([^']+)'>([^<]+)/g; let m;\n"
-            + "  while((m=re.exec(html))) out.push({op:Number(m[1]), text:m[2]});\n"
-            + "  return out.filter(t => t.op > 0.5).map(t => t.text);\n"
+            + "  const out=[];\n"
+            + "  const re=/<text x=\"([^\"]+)\" y=\"([^\"]+)\" fill=\"[^\"]+\" font-size=\"11\" text-anchor=\"start\" dominant-baseline=\"middle\"(?: opacity='([^']+)')?>([^<]+)/g;\n"
+            + "  let m;\n"
+            + "  while((m=re.exec(html))){\n"
+            + "    const op = m[3] == null ? 1 : Number(m[3]);\n"
+            + "    if (op > 0.5) out.push({x:Number(m[1]), y:Number(m[2]), text:m[4]});\n"
+            + "  }\n"
+            + "  return out;\n"
             + "}\n"
             + "function plot(html){ return Number(html.match(/data-plot='([^']+)'/)[1]); }\n"
             + "const cabin=climateSvg(model,'cabin','cabin',1);\n"
@@ -421,17 +457,25 @@ class PageGraphTests(unittest.TestCase):
             + "}\n"
             + "process.stdout.write(JSON.stringify({\n"
             + "  plot:[plot(cabin),plot(fan),plot(seats),plot(glass)],\n"
-            + "  fan:labels(fan), seats:labels(seats), cabin:labels(cabin),\n"
+            + "  fan:labels(fan).map(t => t.text), seats:labels(seats).map(t => t.text), cabin:labels(cabin).map(t => t.text),\n"
+            + "  fanX:labels(fan).map(t => t.x), seatX:labels(seats).map(t => t.x),\n"
+            + "  fanY:labels(fan).map(t => t.y),\n"
             + "  high: fan.indexOf(',-'),\n"
             + "  deg:deg(cabin), vlines:[vlines(cabin),vlines(fan),vlines(glass)],\n"
             + "  edges:[edges(cabin),edges(fan),edges(seats),edges(glass)]\n"
             + "}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(got["plot"], [334, 334, 334, 334])
+        self.assertEqual(got["plot"], [322, 322, 322, 322])
         self.assertEqual(got["fan"], ["0", "2", "4", "6", "8", "10"])
         self.assertEqual(got["seats"], ["0", "1", "2", "3"])
         self.assertEqual(got["cabin"], [])
+        right = 40 + got["plot"][1]
+        for x in got["fanX"] + got["seatX"]:
+            self.assertGreater(x, right)
+            self.assertLess(x + 16, 390)
+        self.assertEqual(got["fanY"][0], got["edges"][1]["top"] + got["edges"][1]["ih"])
+        self.assertEqual(got["fanY"][-1], got["edges"][1]["top"])
         self.assertGreater(got["high"], 0)
         self.assertEqual(got["deg"], ["20", "22.5", "25"])
         self.assertEqual(got["vlines"], [2, 2, 2])
@@ -551,8 +595,8 @@ class PageGraphTests(unittest.TestCase):
             + "const glass = climateSvg(model,'glass','glass',1);\n"
             + "const bn = svgBatteryTemp(batt);\n"
             + "function ysOf(lo, hi, n){ const out=[]; for(let i=0;i<=n;i++) out.push(lo+(hi-lo)*i/n); return out; }\n"
-            + "function labels(html, size){\n"
-            + "  const re = new RegExp('<text x=\"[^\"]+\" y=\"([^\"]+)\" fill=\"[^\"]+\" font-size=\"' + size + '\" text-anchor=\"end\" dominant-baseline=\"middle\"', 'g');\n"
+            + "function labels(html, size, anchor){\n"
+            + "  const re = new RegExp('<text x=\"[^\"]+\" y=\"([^\"]+)\" fill=\"[^\"]+\" font-size=\"' + size + '\" text-anchor=\"' + (anchor || 'end') + '\" dominant-baseline=\"middle\"', 'g');\n"
             + "  const out=[]; let m; while((m=re.exec(html))) out.push(Number(m[1])); return out;\n"
             + "}\n"
             + "function anyH(html){\n"
@@ -563,8 +607,8 @@ class PageGraphTests(unittest.TestCase):
             + "  }\n"
             + "  return out;\n"
             + "}\n"
-            + "function centered(html, size){\n"
-            + "  const labs=labels(html, size), lines=anyH(html);\n"
+            + "function centered(html, size, anchor){\n"
+            + "  const labs=labels(html, size, anchor), lines=anyH(html);\n"
             + "  const h=Number(html.match(/viewBox='0 0 390 ([0-9.]+)'/)[1]);\n"
             + "  return labs.length>0 && labs.every(y => lines.some(v => Math.abs(v-y)<0.05) && y-6>0 && y+6<h);\n"
             + "}\n"
@@ -577,7 +621,7 @@ class PageGraphTests(unittest.TestCase):
             + "const graphs={charge:charge, batt:bn, cabin:cabin, fan:fan, seats:seats, glass:glass, speed:speed, power:power};\n"
             + "const center={}; const end={};\n"
             + "Object.keys(graphs).forEach(k => { center[k]=centered(graphs[k],'11'); end[k]=ends(graphs[k]); });\n"
-            + "center.fanLevels=centered(fan,'10'); center.seatLevels=centered(seats,'10');\n"
+            + "center.fanLevels=centered(fan,'11','start'); center.seatLevels=centered(seats,'11','start');\n"
             + "process.stdout.write(JSON.stringify({\n"
             + "  charge: covered(hlines(charge), ysOf(12, 134, 2)),\n"
             + "  batt: covered(hlines(bn), ysOf(16, 134, 2)),\n"
