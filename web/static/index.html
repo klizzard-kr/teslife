@@ -2040,8 +2040,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.16.11"; // display constant only
+    const APP_VERSION = "v1.16.12"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.16.12", features: [], fixes: ["공조: 그림 크기는 그대로 두고, 단계 숫자만 그림 오른쪽 바깥에 있어요", "충전 상세: 충전 전력 그래프를 누르면 시각과 전력이 나와요"] },
       { version: "1.16.11", features: ["충전: 목표까지 차면 충전구가 열려 있어도 끝난 충전으로 적어요"], fixes: ["공조: 자동·에어컨이 바뀌면 그 시각부터 선 모양과 색이 바뀌어요", "공조: 단계 숫자는 그림 오른쪽 바깥에 있어요"] },
       { version: "1.16.10", features: [], fixes: ["공조: 꺼졌다 켜지면 예전에 받은 팬 단계를 이어서 그려요", "공조: 바람, 자동, 에어컨 중 하나라도 켜지면 A/C·팬 탭을 누를 수 있어요", "공조: 고른 탭은 강조색으로 채워지고 글자가 진해요"] },
       { version: "1.16.9", features: ["주행 상세: 회생 다음에 회생률을 보여요"], fixes: ["알림 설정: 주행·충전·보안·차량 제목을 아래 항목보다 크고 진하게 바꿨어요", "그래프: 눈금마다 가로선이 있고, 글자는 그 선 가운데에 있어요"] },
@@ -2433,7 +2434,7 @@
 
     let chargeRowsCache = [];
     let liveChargeCache = null;
-    const chargeCurveCache = new Map();  // charge_id -> svg html (finished charges do not change)
+    const chargeCurveCache = new Map();  // charge_id -> {html, segs, battery, start, end}
     let tripRowsCache = [];
 
     function fmtHm(ts) {
@@ -3133,7 +3134,7 @@
     function climateSvg(model, fromTab, toTab, u) {
       const bars = CLIM_BARS.filter(row => model.bars[row[0]]);
       const barStrip = bars.length ? 4 + bars.length * 10 : 0;
-      const W = 390, L = 40, R = 28, T = 12, lineH = 176;
+      const W = 390, L = 40, R = 16, T = 12, lineH = 176;
       const H = T + lineH + barStrip + 36;
       const innerW = W - L - R, innerH = lineH;
       const t0 = model.t0, t1 = model.t1;
@@ -3171,7 +3172,7 @@
         html += "<line x1='" + L + "' y1='" + y + "' x2='" + (L + innerW) + "' y2='" + y +
           "' stroke='" + tone("chart-grid") + "' opacity='" + (op * 0.28).toFixed(3) + "'></line>";
         const fade = op < 0.999 ? " opacity='" + op.toFixed(3) + "'" : "";
-        html += yTickText(L + innerW + 6, y, v, 11, fade, "start");
+        html += yTickText(L + innerW + 4, y, v, 11, fade, "start");
       });
       const yLevel = (tab, v) => yOn(v, {min: 0, max: rightMax(hasRight(tab) ? tab : (hasRight(fromTab) ? fromTab : toTab), model)}, T, innerH);
       const paintFill = (pts, color, op, fromS, toS) => {
@@ -4043,6 +4044,15 @@
         line.hidden = false;
       });
     }
+    function chargePowerRows(segs, ms) {
+      const v = seriesValueAt(parseSegs(segs.map(seg => seg.map(p => ({ts: p.ts, v: p.v})))), ms, "line");
+      return v == null ? [] : [{label: "충전 전력", text: fmtFixed(v, 2) + " kW"}];
+    }
+    function showChargeCurve(box, html, segs) {
+      if (!box) return;
+      box.innerHTML = html;
+      bindCrosshair(box, (ms) => chargePowerRows(segs, ms));
+    }
     async function loadChargeCurve(el, c) {
       try {
         const data = await fetchJson(apiPath("/api/charges/" + encodeURIComponent(c.charge_id) + "/curve"));
@@ -4050,16 +4060,15 @@
         if (data.avg_kw != null || data.max_kw != null) paintChargePower(data.avg_kw, data.max_kw);
         paintChargeTemps(data.battery_temp_min, data.battery_temp_max);
         const segs = (data.segments && data.segments.length) ? data.segments.map(seg => seg.map(p => ({ts: p.ts, v: p.kw}))) : [pts];
-        el.innerHTML = (pts.length > 1 || segs.length) ? svgChargeBand(pts, [], c.end_ts, data.axis_kw, segs, data.start_ts || c.start_ts) : "<p class='muted'>기록 없음</p>";
-        bindCrosshair(el, (ms) => {
-          const v = seriesValueAt(parseSegs(segs.map(seg => seg.map(p => ({ts: p.ts, v: p.v})))), ms, "line");
-          return v == null ? [] : [{label: "충전 전력", text: fmtFixed(v, 2) + " kW"}];
-        });
-        mountBattery(document.getElementById("charge-battery-slot"), data.battery, data.start_ts || c.start_ts, data.end_ts || c.end_ts);
-        return true;
+        const html = (pts.length > 1 || segs.length) ? svgChargeBand(pts, [], c.end_ts, data.axis_kw, segs, data.start_ts || c.start_ts) : "<p class='muted'>기록 없음</p>";
+        showChargeCurve(el, html, segs);
+        const start = data.start_ts || c.start_ts;
+        const end = data.end_ts || c.end_ts;
+        mountBattery(document.getElementById("charge-battery-slot"), data.battery, start, end);
+        return {html: html, segs: segs, battery: data.battery, start: start, end: end};
       } catch (e) {
         el.innerHTML = "";
-        return false;
+        return null;
       }
     }
 
@@ -5440,8 +5449,11 @@
       });
       const box = document.getElementById("charge-sheet-curve");
       if (box) {
-        if (chargeCurveCache.has(c.charge_id)) box.innerHTML = chargeCurveCache.get(c.charge_id);
-        else loadChargeCurve(box, c).then(ok => { if (ok) chargeCurveCache.set(c.charge_id, box.innerHTML); });
+        const cached = chargeCurveCache.get(c.charge_id);
+        if (cached) {
+          showChargeCurve(box, cached.html, cached.segs);
+          mountBattery(document.getElementById("charge-battery-slot"), cached.battery, cached.start, cached.end);
+        } else loadChargeCurve(box, c).then(saved => { if (saved) chargeCurveCache.set(c.charge_id, saved); });
       }
       document.getElementById("charge-detail-overlay").classList.add("show");
     }

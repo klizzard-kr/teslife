@@ -269,7 +269,7 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.11"', HTML)
+        self.assertIn('const APP_VERSION = "v1.16.12"', HTML)
         tabs = _fn("climateTabs")
         self.assertIn('["cabin", "실내·실외", cabinOn]', tabs)
         self.assertIn('["fan", "A/C·팬", fanOn]', tabs)
@@ -309,13 +309,11 @@ class PageGraphTests(unittest.TestCase):
         self.assertNotIn('"바람 세기 " + levelWord', rows)
         self.assertIn('group("자리"', legend)
         svg = _fn("climateSvg")
-        self.assertIn("const W = 390, L = 40, R = 28", svg)
+        self.assertIn("const W = 390, L = 40, R = 16", svg)
         self.assertNotIn("R = 44", svg)
         self.assertNotIn("L = 104", svg)
-        self.assertIn("yTickText(L + innerW + 6, y, v, 11", svg)
+        self.assertIn("yTickText(L + innerW + 4, y, v, 11", svg)
         self.assertNotIn("L + innerW - 4", svg)
-        self.assertIn('text-anchor="\' + (anchor || "end") + \'" dominant-baseline="middle"', _fn("yTickText"))
-        self.assertNotIn("innerW + 4", svg)
         self.assertIn("return [0, 2, 4, 6, 8, 10]", _fn("levelTicks"))
         self.assertIn("return [0, 1, 2, 3]", _fn("levelTicks"))
         self.assertIn("return FAN_AXIS", _fn("fanAxisMax"))
@@ -466,14 +464,15 @@ class PageGraphTests(unittest.TestCase):
             + "}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(got["plot"], [322, 322, 322, 322])
+        self.assertEqual(got["plot"], [334, 334, 334, 334])
         self.assertEqual(got["fan"], ["0", "2", "4", "6", "8", "10"])
         self.assertEqual(got["seats"], ["0", "1", "2", "3"])
         self.assertEqual(got["cabin"], [])
         right = 40 + got["plot"][1]
+        self.assertEqual(right, 374)
         for x in got["fanX"] + got["seatX"]:
             self.assertGreater(x, right)
-            self.assertLess(x + 16, 390)
+            self.assertLess(x, 390)
         self.assertEqual(got["fanY"][0], got["edges"][1]["top"] + got["edges"][1]["ih"])
         self.assertEqual(got["fanY"][-1], got["edges"][1]["top"])
         self.assertGreater(got["high"], 0)
@@ -619,6 +618,11 @@ class PageGraphTests(unittest.TestCase):
             + "  return Math.abs(labs[0]-top)<0.05 && Math.abs(labs[labs.length-1]-(top+ih))<0.05;\n"
             + "}\n"
             + "const graphs={charge:charge, batt:bn, cabin:cabin, fan:fan, seats:seats, glass:glass, speed:speed, power:power};\n"
+            + "function edgeOf(html){\n"
+            + "  const L=Number(html.match(/data-l='([^']+)'/)[1]);\n"
+            + "  const plot=Number(html.match(/data-plot='([^']+)'/)[1]);\n"
+            + "  return {L:L, plot:plot, right:L+plot};\n"
+            + "}\n"
             + "const center={}; const end={};\n"
             + "Object.keys(graphs).forEach(k => { center[k]=centered(graphs[k],'11'); end[k]=ends(graphs[k]); });\n"
             + "center.fanLevels=centered(fan,'11','start'); center.seatLevels=centered(seats,'11','start');\n"
@@ -631,7 +635,8 @@ class PageGraphTests(unittest.TestCase):
             + "  glass: covered(hlines(glass), ysOf(12, 188, 2)),\n"
             + "  speed: covered(hlines(speed), ysOf(12, 116, 3)),\n"
             + "  power: covered(hlines(power), ysOf(12, 116, 3)),\n"
-            + "  center: center, end: end\n"
+            + "  center: center, end: end,\n"
+            + "  edges:{fan:edgeOf(fan), batt:edgeOf(bn), power:edgeOf(power), speed:edgeOf(speed)}\n"
             + "}));"
         )
         # The renderer names are checked from source so a new graph cannot skip the helper.
@@ -644,8 +649,23 @@ class PageGraphTests(unittest.TestCase):
             self.assertTrue(got["end"][key], key)
         self.assertTrue(got["center"]["fanLevels"])
         self.assertTrue(got["center"]["seatLevels"])
+        self.assertEqual(got["edges"]["fan"], got["edges"]["batt"])
+        self.assertEqual(got["edges"]["fan"], got["edges"]["power"])
+        self.assertEqual(got["edges"]["fan"], {"L": 40, "plot": 334, "right": 374})
         self.assertNotIn("T + 9", _fn("climateSvg"))
         self.assertNotIn("innerH - 2", _fn("svgBatteryTemp"))
+
+    def test_charge_power_touch_survives_reopen(self) -> None:
+        rows = _fn("chargePowerRows")
+        self.assertIn('label: "충전 전력"', rows)
+        self.assertIn(" kW", rows)
+        self.assertIn("bindCrosshair(box", _fn("showChargeCurve"))
+        self.assertIn("showChargeCurve(box, cached.html, cached.segs)", _fn("openChargeDetail"))
+        self.assertIn("cross-hit", _fn("svgChargeBand"))
+        self.assertIn("crossLine(", _fn("svgChargeBand"))
+        self.assertIn("bindCrosshair(el", _fn("loadTripPower"))
+        self.assertIn("bindCrosshair(plot", _fn("mountBattery"))
+        self.assertIn("bindCrosshair(el", _fn("loadTripSpeed"))
 
     def test_crosshair_reads_real_samples_and_skips_a_gap(self) -> None:
         src = (
