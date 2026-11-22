@@ -43,6 +43,23 @@ class WheelAutoNameTests(unittest.TestCase):
         self.assertNotIn(REAL, fresh["fields"])
         self.assertNotIn(OLD, fresh["fields"])
 
+    def test_override_is_auto_and_front_vent_is_cooling(self) -> None:
+        built = build_climate({
+            "HvacAutoMode": [(START, "Override"), (START + timedelta(minutes=5), "Off")],
+            "ClimateSeatCoolingFrontLeft": [(START, 2)],
+            "SeatHeaterRearLeft": [(START, 3)],
+            "AutoSeatClimateRight": [(START, True)],
+        }, {}, START, END)
+        self.assertEqual(built["auto"][0][1], 1.0)
+        self.assertEqual(built["auto"][1][1], 0.0)
+        self.assertIn("seat_left", built["cool"])
+        self.assertNotIn("seat_rear_left", built["cool"])
+        self.assertIn("seat_rear_left", built["heat"])
+        self.assertIn("auto_seat_right", built["bars"])
+        src = (ROOT / "web" / "graphseries.py").read_text(encoding="utf-8")
+        self.assertNotIn("SeatHeaterRearCenter", src)
+        self.assertNotIn("SeatHeaterRearCenter", (ROOT / "web" / "__init__.py").read_text(encoding="utf-8"))
+
     def test_defrost_normal_and_autodefog_are_on(self) -> None:
         for raw in ("Normal", "DefrostModeStateNormal", "AutoDefog", "DefrostModeStateAutoDefog", "Max"):
             built = build_climate({"DefrostMode": [(START, raw)]}, {}, START, END)
@@ -257,7 +274,10 @@ class ClimateFiveCasesTests(unittest.TestCase):
         self.assertNotIn("(실선)", got["autoOn"]["legend"])
         self.assertNotIn(">팬<", got["autoOn"]["legend"])
         self.assertNotIn("시트 열선", got["autoOn"]["legend"])
-        self.assertNotIn("오토", got["autoOn"]["legend"])
+        self.assertNotIn("좌석", got["autoOn"]["legend"])
+        self.assertNotIn("유리", got["autoOn"]["legend"])
+        self.assertIn("오토", got["autoOn"]["legend"])
+        self.assertIn("수동", got["autoOn"]["legend"])
         self.assertFalse(got["autoOn"]["dashed"])
 
         self.assertEqual(colors("autoOff"), {inside, outside, pink})
@@ -270,7 +290,8 @@ class ClimateFiveCasesTests(unittest.TestCase):
             self.assertFalse(got[name]["rightAxis"])
             self.assertNotIn(">팬<", got[name]["legend"])
             self.assertIn("설정 온도", got[name]["legend"])
-            self.assertNotIn("오토", got[name]["legend"])
+            self.assertIn("오토", got[name]["legend"])
+            self.assertIn("수동", got[name]["legend"])
             self.assertIn("실내", got[name]["legend"])
             self.assertIn("실외", got[name]["legend"])
             self.assertFalse(got[name]["filled"])
@@ -305,14 +326,16 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "        seat_right:[[{t:t0,v:1},{t:late,v:0}]],\n"
             + "        seat_rear_left:[[{t:t0,v:2},{t:t1,v:2}]]},\n"
             + "  cool:{seat_left:[[{t:t0,v:2},{t:t1,v:2}]]},\n"
-            + "  auto:[], ac:[], bars:{defrost:[{t0:t0,t1:mid,level:1}], wheel_auto:[{t0:late,t1:t1,level:1}]}};\n"
+            + "  auto:[], ac:[], bars:{defrost:[{t0:t0,t1:mid,level:1}], wheel_auto:[{t0:late,t1:t1,level:1}],\n"
+            + "       auto_seat_left:[{t0:t0,t1:mid,level:1}]}};\n"
             + "const rows = climateRuns(model);\n"
-            + "const legend = climateLegend(model, rows);\n"
+            + "const legend = climateLegend(model);\n"
             + "const lanes = climateLaneHtml(model, rows);\n"
-            + "const seat = rows.filter(r => r.label === '시트')[0];\n"
+            + "const seat = rows.filter(r => r.label === '좌석')[0];\n"
+            + "const glass = rows.filter(r => r.label === '유리')[0];\n"
             + "const fanModel = {t0:t0, t1:t1, inside:[], outside:[], setDriver:[], setPass:[],\n"
             + "  fan:[[{t:t0,v:6},{t:mid,v:3},{t:late,v:3}]], wheel:[], heat:{}, cool:{},\n"
-            + "  auto:[{t:t0,v:0},{t:late,v:1}], ac:[], bars:{}};\n"
+            + "  auto:[{t:t0,v:0},{t:late,v:1}], ac:[{t:t0,v:1},{t:mid,v:0}], bars:{}};\n"
             + "const fanRows = climateRuns(fanModel);\n"
             + "const park = popCard('주차 · 캠핑', '#f0b429', [['시간','10:02–10:14 (12분)'],['사용량','약 0.42 kWh (2.1%)']]);\n"
             + "process.stdout.write(JSON.stringify({\n"
@@ -320,8 +343,9 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "  seatBars: seat.spans.length,\n"
             + "  seatColors: [...new Set(seat.spans.map(s => s.color))],\n"
             + "  tip: climateTip(seat.spans[0]),\n"
+            + "  glassTip: climateTip(glass.spans[0]),\n"
             + "  fanBars: fanRows[0].spans.length,\n"
-            + "  fanTip: climateTip(fanRows[0].spans[0]),\n"
+            + "  fanTips: fanRows[0].spans.map(s => climateTip(s)).join('\\n'),\n"
             + "  legend: legend,\n"
             + "  hatch: lanes.indexOf('tl-hatch') >= 0,\n"
             + "  text: lanes.indexOf('tl-bar-txt') >= 0,\n"
@@ -330,31 +354,44 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(got["labels"], ["시트", "핸들"])
-        self.assertEqual(got["seatBars"], 1)
+        self.assertEqual(got["labels"], ["공조", "좌석", "유리"])
+        self.assertGreaterEqual(got["seatBars"], 2)
         self.assertEqual(got["seatColors"], ["#e39a4a"])
-        self.assertIn(">시트<", got["tip"])
+        self.assertIn(">좌석<", got["tip"])
         self.assertIn(">시간<", got["tip"])
-        self.assertIn("운전석", got["tip"])
-        self.assertIn("3단", got["tip"])
-        self.assertIn("1단", got["tip"])
-        self.assertIn("조수석", got["tip"])
-        self.assertIn("꺼짐", got["tip"])
+        self.assertIn("운전석 열선 3단", got["tip"])
+        self.assertIn("운전석 통풍 2단", got["tip"])
+        self.assertIn("운전석 오토", got["tip"])
+        self.assertIn("조수석 열선 1단", got["tip"])
+        self.assertIn("핸들 열선 2단", got["tip"])
+        self.assertNotIn("꺼짐", got["tip"])
+        self.assertIn("뒷좌석 왼쪽 열선 2단", got["tip"])
+        self.assertNotIn("뒷좌석 가운데", got["tip"])
+        self.assertNotIn("뒷좌석 오른쪽", got["tip"])
+        self.assertNotIn("seat_rear_center", HTML)
         self.assertIn("<ul>", got["tip"])
         self.assertIn("<h3>", got["park"])
         self.assertIn("<dl>", got["park"])
         self.assertNotIn("<ul>", got["park"])
         self.assertIn("<h3>", got["tip"])
         self.assertIn("<dl>", got["tip"])
-        self.assertEqual(got["fanBars"], 1)
-        self.assertIn("6단", got["fanTip"])
-        self.assertIn("3단", got["fanTip"])
-        self.assertIn("오토", got["fanTip"])
-        self.assertIn(">팬<", got["fanTip"])
-        for foreign in ("실내", "실외", "설정", "시트", "핸들", "°C", "A/C"):
-            self.assertNotIn(foreign, got["fanTip"])
-        for foreign in ("실내", "실외", "설정", ">팬<", "핸들", "°C", "A/C"):
+        self.assertEqual(got["fanBars"], 3)
+        self.assertIn("팬 6단 · A/C", got["fanTips"])
+        self.assertIn("팬 3단", got["fanTips"])
+        self.assertNotIn("팬 3단 · A/C", got["fanTips"])
+        self.assertIn("오토</li>", got["fanTips"])
+        self.assertNotIn("오토 · A/C", got["fanTips"])
+        self.assertNotIn("A/C 꺼짐", got["fanTips"])
+        self.assertNotIn("켜짐", got["fanTips"])
+        self.assertIn(">공조<", got["fanTips"])
+        for foreign in ("실내", "실외", "설정", "좌석", "핸들", "°C", "유리"):
+            self.assertNotIn(foreign, got["fanTips"])
+        for foreign in ("실내", "실외", "설정", ">공조<", "°C", "유리", "팬 "):
             self.assertNotIn(foreign, got["tip"])
+        self.assertIn("앞 김서림 제거", got["glassTip"])
+        self.assertNotIn("꺼짐", got["glassTip"])
+        self.assertNotIn("뒷유리", got["glassTip"])
+        self.assertNotIn("와이퍼", got["glassTip"])
         self.assertNotIn("시트 열선", got["legend"])
         self.assertNotIn("핸들 열선", got["legend"])
         self.assertNotIn(">팬<", got["legend"])
@@ -362,8 +399,9 @@ class ClimateFiveCasesTests(unittest.TestCase):
         self.assertNotIn("통풍", got["legend"])
         self.assertFalse(got["hatch"])
         self.assertFalse(got["text"])
-        self.assertIn(">시트<", "".join(got["labs"]))
-        self.assertIn(">핸들<", "".join(got["labs"]))
+        self.assertIn(">공조<", "".join(got["labs"]))
+        self.assertIn(">좌석<", "".join(got["labs"]))
+        self.assertIn(">유리<", "".join(got["labs"]))
         placed = HTML[HTML.index("function placePop("):HTML.index("function showTlPop(")]
         self.assertIn("window.innerWidth", placed)
         self.assertIn("popCard(", HTML[HTML.index("function barPopHtml"):HTML.index("function hourPopHtml")])
@@ -387,7 +425,7 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "const t1 = t0 + 20*60*1000;\n"
             + "const model = {t0:t0, t1:t1,\n"
             + "  inside:[[{t:t0,v:21},{t:t1,v:23}]], outside:[[{t:t0,v:8},{t:t1,v:9}]],\n"
-            + "  setDriver:[[{t:t0,v:22},{t:mid,v:22}]], setPass:[[{t:t0,v:19.5},{t:mid,v:19.5}]],\n"
+            + "  setDriver:[[{t:t0,v:22},{t:t1,v:22}]], setPass:[[{t:t0,v:19.5},{t:t1,v:19.5}]],\n"
             + "  fan:[[{t:t0,v:6},{t:mid,v:0},{t:t1,v:0}]],\n"
             + "  wheel:[[{t:t0,v:2},{t:mid,v:0}]],\n"
             + "  heat:{seat_left:[[{t:t0,v:3},{t:mid,v:0}]], seat_right:[[{t:t0,v:0}]]},\n"
@@ -396,18 +434,21 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "const early = climateRows(model, t0 + 60*1000);\n"
             + "const late = climateRows(model, mid + 60*1000);\n"
             + "const text = (rows, label) => (rows.find(r => r.label === label) || {}).text || '';\n"
+            + "const sub = (rows, label) => rows.find(r => r.label === label) || {};\n"
             + "process.stdout.write(JSON.stringify({early:early, late:late,\n"
-            + "  eSet:text(early,'설정 온도'), eAc:text(early,'A/C'),\n"
+            + "  eSet:text(early,'설정 온도'), eDriver:text(early,'운전석'), ePass:text(early,'조수석'),\n"
+            + "  eIndent:!!sub(early,'운전석').indent, eAc:text(early,'A/C'),\n"
             + "  lSet:text(late,'설정 온도'), lAc:text(late,'A/C')}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertIn("운전석", got["eSet"])
-        self.assertIn("22", got["eSet"])
-        self.assertIn("조수석", got["eSet"])
-        self.assertIn("19.5", got["eSet"])
-        self.assertNotIn("A/C", got["eSet"])
+        self.assertEqual(got["eSet"], "")
+        self.assertEqual(got["eDriver"], "22°C")
+        self.assertEqual(got["ePass"], "19.5°C")
+        self.assertTrue(got["eIndent"])
+        self.assertNotIn("팬", "".join(r["label"] for r in got["early"]))
         self.assertEqual(got["eAc"], "켜짐")
-        self.assertEqual([r["label"] for r in got["early"]], ["실내", "실외", "설정 온도", "A/C"])
-        self.assertEqual([r["label"] for r in got["late"]], ["실내", "실외"])
+        self.assertEqual([r["label"] for r in got["early"]], ["실내 온도", "실외 온도", "설정 온도", "운전석", "조수석", "A/C"])
+        self.assertEqual([r["label"] for r in got["late"]], ["실내 온도", "실외 온도", "설정 온도", "운전석", "조수석"])
+        self.assertNotIn("A/C", [r["label"] for r in got["late"]])
         self.assertEqual(got["lSet"], "")
         self.assertEqual(got["lAc"], "")

@@ -634,6 +634,7 @@
       font-size: 0.75rem; pointer-events: none;
     }
     .cross-tip .kv-row { padding: 2px 0; }
+    .cross-tip .kv-sub span:first-child { padding-left: 12px; }
     #battery-card { position: relative; }
     .bat-day-title.tl-title { margin: 10px 0 4px; }
     /* Gantt-style 모드별 사용: the plot uses the hourly chart's plot area (viewBox 390: left 76,
@@ -663,6 +664,7 @@
     }
     .tl-bar::before { content: ""; position: absolute; inset: -3px -2px; }
     .tl-bar.on { outline: 2px solid var(--text); outline-offset: 1px; z-index: 1; }
+    .tl-empty { position: absolute; left: 6px; top: 0; bottom: 0; display: flex; align-items: center; color: var(--muted); font-size: 0.62rem; }
     /* 감시 경보 record: a light tick on the 감시 lane, record only (alerts go to chat) */
     .tl-alarm { position: absolute; top: 1px; bottom: 1px; width: 3px; margin-left: -1.5px; padding: 0; border: 0;
       border-radius: 1px; background: var(--text); box-shadow: 0 0 0 1px var(--bg); cursor: pointer; z-index: 2; }
@@ -2686,7 +2688,7 @@
       }
       const whenText = fmtSeoulTime(when);
       const rows = [{label: "시각", text: whenText}].concat(box._crossRows(when) || []);
-      tip.innerHTML = rows.map(r => "<div class='kv-row'><span>" + r.label + "</span><span>" + r.text + "</span></div>").join("");
+      tip.innerHTML = rows.map(r => "<div class='kv-row" + (r.indent ? " kv-sub" : "") + "'><span>" + r.label + "</span><span>" + (r.text || "") + "</span></div>").join("");
       tip.hidden = false;
       tip.style.top = "8px";
       tip.style.right = "auto";
@@ -3097,6 +3099,9 @@
     const SET_ON = "#12c9a0";
     const SET_OFF = "#c2749e";
     const FAN_COLOR = "#3d9ccc";
+    const AUTO_COLOR = "#7c6ae0";
+    const SEAT_ROW_COLOR = "#e39a4a";
+    const GLASS_COLOR = "#c4a15a";
     const WHEEL_COLOR = "#c45c26";
     const CLIM_BARS = [
       ["defrost", "성에 제거", "#d4a24a"],
@@ -3314,60 +3319,130 @@
       });
       return out;
     }
-    function seatPieces(model) {
-      const leftSegs = (model.heat || {}).seat_left || [];
-      const rightSegs = (model.heat || {}).seat_right || [];
-      const times = [model.t0, model.t1];
-      [leftSegs, rightSegs].forEach(segs => (segs || []).forEach(seg => (seg || []).forEach(p => {
-        if (p.t > model.t0 && p.t < model.t1) times.push(p.t);
-      })));
+    function markTimes(times) {
       times.sort((a, b) => a - b);
       const marks = [];
       times.forEach(t => { if (!marks.length || t - marks[marks.length - 1] > 0.5) marks.push(t); });
-      const bits = [];
+      return marks;
+    }
+    function pushTime(times, t, t0, t1) {
+      if (t > t0 && t < t1) times.push(t);
+    }
+    function hvacPieces(model) {
+      const times = [model.t0, model.t1];
+      (model.fan || []).forEach(seg => (seg || []).forEach(p => pushTime(times, p.t, model.t0, model.t1)));
+      (model.auto || []).forEach(p => pushTime(times, p.t, model.t0, model.t1));
+      (model.ac || []).forEach(p => pushTime(times, p.t, model.t0, model.t1));
+      const marks = markTimes(times);
+      const out = [];
       for (let i = 0; i < marks.length - 1; i++) {
         const t0 = marks[i], t1 = marks[i + 1];
         if (!(t1 > t0)) continue;
-        const left = stepLevel(leftSegs, t0);
-        const right = stepLevel(rightSegs, t0);
-        if (!(left > 0) && !(right > 0)) continue;
-        bits.push({t0: t0, t1: t1, left: left, right: right});
-      }
-      const groups = [];
-      bits.forEach(b => {
-        const prev = groups[groups.length - 1];
-        if (prev && b.t0 - prev.t1 < 1500) { prev.t1 = b.t1; prev.bits.push(b); }
-        else groups.push({t0: b.t0, t1: b.t1, bits: [b]});
-      });
-      return groups.map(g => {
-        const changes = [];
-        [["운전석", "left"], ["조수석", "right"]].forEach(side => {
-          let cur = null;
-          g.bits.forEach(b => {
-            const text = side[0] + " " + seatText(b[side[1]]);
-            if (cur && cur.text === text) cur.t1 = b.t1;
-            else { cur = {t0: b.t0, t1: b.t1, text: text}; changes.push(cur); }
-          });
+        const auto = flagAt(model.auto, t0);
+        const level = stepLevel(model.fan, t0);
+        if (!auto && !(level > 0)) continue;
+        const mode = auto ? "오토" : "팬 " + level + "단";
+        const text = flagAt(model.ac, t0) ? mode + " · A/C" : mode;
+        const prev = out[out.length - 1];
+        if (prev && prev.text === text && t0 - prev.t1 < 1500) { prev.t1 = t1; continue; }
+        out.push({
+          t0: t0, t1: t1, color: auto ? AUTO_COLOR : FAN_COLOR, tip: "공조", bare: true,
+          changes: [{t0: t0, t1: t1, text: text}]
         });
-        return {t0: g.t0, t1: g.t1, color: SEAT_COLOR, tip: "시트", changes: changes};
-      });
+      }
+      return out;
+    }
+    function spanOn(spans, t) {
+      return (spans || []).some(span => t >= span.t0 && t < span.t1);
+    }
+    function seatRowPieces(model) {
+      const heatL = (model.heat || {}).seat_left || [];
+      const heatR = (model.heat || {}).seat_right || [];
+      const coolL = (model.cool || {}).seat_left || [];
+      const coolR = (model.cool || {}).seat_right || [];
+      const rear = [
+        ["seat_rear_left", "뒷좌석 왼쪽 열선"],
+        ["seat_rear_right", "뒷좌석 오른쪽 열선"]
+      ].map(row => [(model.heat || {})[row[0]] || [], row[1]]);
+      const times = [model.t0, model.t1];
+      const autoL = (model.bars || {}).auto_seat_left || [];
+      const autoR = (model.bars || {}).auto_seat_right || [];
+      [heatL, heatR, coolL, coolR, model.wheel || []].concat(rear.map(row => row[0])).forEach(segs => (segs || []).forEach(seg => (seg || []).forEach(p => pushTime(times, p.t, model.t0, model.t1))));
+      [model.bars.wheel_auto || [], autoL, autoR].forEach(spans => spans.forEach(span => {
+        pushTime(times, span.t0, model.t0, model.t1);
+        pushTime(times, span.t1, model.t0, model.t1);
+      }));
+      const marks = markTimes(times);
+      const out = [];
+      for (let i = 0; i < marks.length - 1; i++) {
+        const t0 = marks[i], t1 = marks[i + 1];
+        if (!(t1 > t0)) continue;
+        const items = [];
+        const hl = stepLevel(heatL, t0), hr = stepLevel(heatR, t0);
+        const cl = stepLevel(coolL, t0), cr = stepLevel(coolR, t0);
+        const wheel = stepLevel(model.wheel, t0);
+        if (hl > 0) items.push("운전석 열선 " + hl + "단");
+        if (cl > 0) items.push("운전석 통풍 " + cl + "단");
+        if (spanOn(autoL, t0)) items.push("운전석 오토");
+        if (hr > 0) items.push("조수석 열선 " + hr + "단");
+        if (cr > 0) items.push("조수석 통풍 " + cr + "단");
+        if (spanOn(autoR, t0)) items.push("조수석 오토");
+        if (wheel > 0) items.push("핸들 열선 " + wheel + "단");
+        if (spanOn(model.bars.wheel_auto, t0) && !(wheel > 0)) items.push("핸들 열선 오토");
+        rear.forEach(row => {
+          const level = stepLevel(row[0], t0);
+          if (level > 0) items.push(row[1] + " " + level + "단");
+        });
+        if (!items.length) continue;
+        const key = items.join("|");
+        const prev = out[out.length - 1];
+        if (prev && prev.key === key && t0 - prev.t1 < 1500) { prev.t1 = t1; continue; }
+        out.push({
+          key: key, t0: t0, t1: t1, color: SEAT_ROW_COLOR, tip: "좌석", bare: true,
+          changes: items.map(text => ({t0: t0, t1: t1, text: text}))
+        });
+      }
+      return out;
+    }
+    function glassPieces(model) {
+      const kinds = [
+        ["defrost", "앞 김서림 제거"],
+        ["rear_defrost", "뒷유리 열선"],
+        ["wiper_heat", "와이퍼 열선"]
+      ];
+      const times = [model.t0, model.t1];
+      kinds.forEach(kind => (model.bars[kind[0]] || []).forEach(span => {
+        pushTime(times, span.t0, model.t0, model.t1);
+        pushTime(times, span.t1, model.t0, model.t1);
+      }));
+      const marks = markTimes(times);
+      const out = [];
+      for (let i = 0; i < marks.length - 1; i++) {
+        const t0 = marks[i], t1 = marks[i + 1];
+        if (!(t1 > t0)) continue;
+        const items = kinds.filter(kind => spanOn(model.bars[kind[0]], t0)).map(kind => kind[1]);
+        if (!items.length) continue;
+        const key = items.join("|");
+        const prev = out[out.length - 1];
+        if (prev && prev.key === key && t0 - prev.t1 < 1500) { prev.t1 = t1; continue; }
+        out.push({
+          key: key, t0: t0, t1: t1, color: GLASS_COLOR, tip: "유리", bare: true,
+          changes: items.map(text => ({t0: t0, t1: t1, text: text}))
+        });
+      }
+      return out;
     }
     function climateRuns(model) {
-      const rows = [];
-      const fan = mergeOn(fanPieces(model).map(span => ({
-        t0: span.t0, t1: span.t1, text: span.kind === "auto" ? "오토" : span.level + "단"
-      })), FAN_COLOR, "팬");
-      if (fan.length) rows.push({label: "팬", legend: "팬", spans: fan});
-      const seats = seatPieces(model);
-      if (seats.length) rows.push({label: "시트", legend: "시트 열선", spans: seats});
-      const wheelLevels = valueRuns(model.wheel, model.t0, model.t1);
-      const wheelBits = wheelLevels.map(span => ({t0: span.t0, t1: span.t1, text: span.level + "단"}));
-      (model.bars.wheel_auto || []).forEach(span => {
-        subtractSpans(span, wheelLevels).forEach(part => wheelBits.push({t0: part.t0, t1: part.t1, text: "켬"}));
-      });
-      const wheel = mergeOn(wheelBits, WHEEL_COLOR, "핸들");
-      if (wheel.length) rows.push({label: "핸들", legend: "핸들 열선", spans: wheel});
-      return rows;
+      const hvacKnown = (model.fan || []).length || (model.auto || []).length || (model.ac || []).length;
+      const seatKnown = ["seat_left", "seat_right", "seat_rear_left", "seat_rear_right"].some(key => ((model.heat || {})[key] || []).length || ((model.cool || {})[key] || []).length)
+        || (model.wheel || []).length
+        || ["wheel_auto", "auto_seat_left", "auto_seat_right"].some(key => (model.bars[key] || []).length);
+      const glassKnown = ["defrost", "rear_defrost", "wiper_heat"].some(key => (model.bars[key] || []).length);
+      return [
+        {label: "공조", color: FAN_COLOR, known: !!hvacKnown, spans: hvacPieces(model)},
+        {label: "좌석", color: SEAT_ROW_COLOR, known: !!seatKnown, spans: seatRowPieces(model)},
+        {label: "유리", color: GLASS_COLOR, known: !!glassKnown, spans: glassPieces(model)}
+      ];
     }
     function flatRuns(rows) {
       const out = [];
@@ -3444,6 +3519,10 @@
           "<span class='leg-pair'>" + legendSwatch({line: SET_ON}) + "켜짐</span>" +
           "<span class='leg-pair'>" + legendSwatch({line: SET_OFF}) + "꺼짐</span></span>");
       }
+      parts.push("<span class='leg-sep' aria-hidden='true'></span>");
+      parts.push("<span class='leg-group'><span class='leg-name'>공조</span>" +
+        "<span class='leg-pair'>" + legendSwatch({fill: AUTO_COLOR, fillOpacity: 1}) + "오토</span>" +
+        "<span class='leg-pair'>" + legendSwatch({fill: FAN_COLOR, fillOpacity: 1}) + "수동</span></span>");
       return parts.filter(Boolean).join("");
     }
     function climateRows(model, ms) {
@@ -3454,17 +3533,18 @@
         if (v == null) return;
         rows.push({label: label, text: fmt(v, 1) + "°C"});
       };
-      if (model.inside && model.inside.length) add("실내", model.inside, "line");
-      add("실외", model.outside, "line");
+      if (model.inside && model.inside.length) add("실내 온도", model.inside, "line");
+      add("실외 온도", model.outside, "line");
       const driver = seriesValueAt(model.setDriver || [], ms, "step");
       const pass = seriesValueAt(model.setPass || [], ms, "step");
       if (driver != null || pass != null) {
-        const bits = [];
-        if (driver != null) bits.push("운전석 " + fmt(driver, 1) + "°C");
-        if (pass != null && (driver == null || Math.abs(pass - driver) > 0.05)) bits.push("조수석 " + fmt(pass, 1) + "°C");
-        rows.push({label: "설정 온도", text: bits.join(" · ")});
-        rows.push({label: "A/C", text: flagAt(model.ac, ms) ? "켜짐" : "꺼짐"});
+        rows.push({label: "설정 온도", text: ""});
+        if (driver != null) rows.push({label: "운전석", text: fmt(driver, 1) + "°C", indent: true});
+        if (pass != null && (driver == null || Math.abs(pass - driver) > 0.05)) {
+          rows.push({label: "조수석", text: fmt(pass, 1) + "°C", indent: true});
+        }
       }
+      if (flagAt(model.ac, ms)) rows.push({label: "A/C", text: "켜짐"});
       return rows;
     }
     function climDur(ms) {
@@ -3486,7 +3566,7 @@
       const when = fmtHm(run.t0) + "–" + fmtHm(run.t1) + " (" + tlSpan((run.t1 - run.t0) / 60000) + ")";
       const items = (run.changes || []).map(ch => ({
         color: run.color,
-        text: fmtHm(ch.t0) + "–" + fmtHm(ch.t1) + " " + ch.text
+        text: run.bare ? ch.text : (fmtHm(ch.t0) + "–" + fmtHm(ch.t1) + " " + ch.text)
       }));
       return popCard(run.tip, run.color, [["시간", when]], items);
     }
@@ -3498,7 +3578,8 @@
       const lanes = runs.map((row, ri) => ({
         key: "c" + ri,
         label: row.label,
-        swatch: row.spans[0].color,
+        swatch: (row.spans[0] && row.spans[0].color) || row.color,
+        emptyText: row.known ? "" : "기록 없음",
         bars: row.spans.map(span => {
           const x = pct(span.t0);
           const w = Math.max(0, pct(span.t1) - x);
@@ -4065,6 +4146,7 @@
       (lanes || []).forEach(l => {
         html += "<div class='tl-row' data-tl-lane='" + escHtml(String(l.key)) + "'><span class='tl-lab' title='" + escHtml(l.label) + "'><i style='background:" +
           l.swatch + "'></i><span>" + escHtml(l.label) + "</span></span><div class='tl-track' role='group' aria-label='" + escHtml(l.label) + "'>";
+        if (!(l.bars || []).length && l.emptyText) html += "<span class='tl-empty'>" + escHtml(l.emptyText) + "</span>";
         (l.bars || []).forEach((b, i) => {
           const cls = "tl-bar" + (b.hatch ? " tl-hatch" : "");
           const bg = b.hatch ? "" : "background:" + b.color + ";";
