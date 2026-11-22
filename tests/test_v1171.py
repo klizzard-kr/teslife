@@ -146,10 +146,10 @@ class ReverseSpeedTests(unittest.TestCase):
 
     def test_regen_is_only_below_zero_and_not_the_reverse_color(self) -> None:
         power = _fn("loadTripPower")
-        self.assertIn('unit: "kW"', power)
-        self.assertNotIn("−는 회생", power)
-        self.assertIn(', "전력")', power)
-        self.assertIn(', "회생")', power)
+        self.assertIn('unit: "kW (-는 회생)"', power)
+        self.assertNotIn("chart-legend", power)
+        self.assertNotIn(', "전력")', power)
+        self.assertNotIn(', "회생")', power)
         self.assertIn("below: regenColor", power)
         self.assertIn('tone("chart-charge")', power)
         src = (

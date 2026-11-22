@@ -2757,14 +2757,17 @@
     function legendSwatch(spec) {
       const fill = spec && spec.fill;
       const line = spec && spec.line;
+      const dash = spec && spec.dash ? " stroke-dasharray='" + spec.dash + "'" : "";
       let body = "";
-      if (fill) {
+      if (fill && line) {
+        const op = spec.fillOpacity == null ? 0.35 : spec.fillOpacity;
+        body += "<rect x='4' y='2' width='8' height='8' fill='" + fill + "' fill-opacity='" + op + "'></rect>";
+        body += "<line x1='4' y1='2' x2='12' y2='2' stroke='" + line + "' stroke-width='2'" + dash + "></line>";
+      } else if (fill) {
         body += "<rect x='0' y='2' width='16' height='6' fill='" + fill + "' fill-opacity='" +
           (spec.fillOpacity == null ? 0.35 : spec.fillOpacity) + "'></rect>";
-      }
-      if (line) {
-        body += "<line x1='0' y1='5' x2='16' y2='5' stroke='" + line + "' stroke-width='2'" +
-          (spec.dash ? " stroke-dasharray='" + spec.dash + "'" : "") + "></line>";
+      } else if (line) {
+        body += "<line x1='0' y1='5' x2='16' y2='5' stroke='" + line + "' stroke-width='2'" + dash + "></line>";
       }
       if (!body) return "";
       return "<svg class='leg' viewBox='0 0 16 10' aria-hidden='true'>" + body + "</svg>";
@@ -2840,11 +2843,8 @@
       html += '<rect class="cross-hit" x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="transparent"></rect>';
       html += crossLine(T, innerH);
       const chargeColor = tone("chart-charge");
-      const chargeKey = "<svg class='leg' viewBox='0 0 16 10' aria-hidden='true'><rect x='0' y='2' width='16' height='6' fill='" +
-        chargeColor + "' fill-opacity='0.15'></rect><line x1='0' y1='5' x2='16' y2='5' stroke='" + chargeColor +
-        "' stroke-width='2'></line></svg>";
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH) +
-        "<p class='chart-legend'><span>" + chargeKey + "충전 전력</span></p>";
+        "<p class='chart-legend'><span>" + legendSwatch({line: chargeColor, fill: chargeColor, fillOpacity: 0.15}) + "충전 전력</span></p>";
     }
 
     function paintChargeTemps(minC, maxC) {
@@ -3033,15 +3033,8 @@
         const reverse = (data.reverse || []).map(span => ({t0: Date.parse(span.start), t1: Date.parse(span.end)}))
           .filter(span => isFinite(span.t0) && isFinite(span.t1) && span.t1 > span.t0);
         const speedColor = tone("chart-trip");
-        const chart = pts.length > 1 ? svgLine(pts, { unit: "km/h", h: 150, color: speedColor, marks: marks, segments: segs, t0: data.start_ts, t1: data.end_ts, reverse: reverse }) : "";
-        let legend = "";
-        if (chart) {
-          const area = Number(tone("chart-area")) || 0.15;
-          legend = "<p class='chart-legend'>" + legendSpan({line: speedColor, fill: speedColor, fillOpacity: area}, "속도");
-          if (reverse.length) legend += legendSpan({line: "#e07a5f", fill: "#e07a5f", fillOpacity: area}, "후진");
-          legend += "</p>";
-        }
-        el.innerHTML = chart ? chart + legend : "<p class='muted'>기록 없음</p>";
+        const chart = pts.length > 1 ? svgLine(pts, { unit: "km/h (-는 후진)", h: 150, color: speedColor, marks: marks, segments: segs, t0: data.start_ts, t1: data.end_ts, reverse: reverse }) : "";
+        el.innerHTML = chart ? chart : "<p class='muted'>기록 없음</p>";
         el.querySelectorAll(".speed-mark").forEach(node => {
           node.addEventListener("click", (ev) => {
             ev.stopPropagation();
@@ -3068,16 +3061,8 @@
         const segs = (data.segments && data.segments.length) ? data.segments.map(seg => seg.map(p => ({ts: p.ts, v: p.kw}))) : [pts];
         const powerColor = tone("chart-trip");
         const regenColor = tone("chart-charge");
-        const chart = pts.length > 1 ? svgLine(pts, { unit: "kW", h: 150, color: powerColor, below: regenColor, segments: segs, t0: data.start_ts, t1: data.end_ts }) : "";
-        const regen = pts.some(p => Number(p.v) < 0);
-        let legend = "";
-        if (chart) {
-          const area = Number(tone("chart-area")) || 0.15;
-          legend = "<p class='chart-legend'>" + legendSpan({line: powerColor, fill: powerColor, fillOpacity: area}, "전력");
-          if (regen) legend += legendSpan({line: regenColor, fill: regenColor, fillOpacity: area}, "회생");
-          legend += "</p>";
-        }
-        el.innerHTML = chart ? chart + legend : "<p class='muted'>기록 없음</p>";
+        const chart = pts.length > 1 ? svgLine(pts, { unit: "kW (-는 회생)", h: 150, color: powerColor, below: regenColor, segments: segs, t0: data.start_ts, t1: data.end_ts }) : "";
+        el.innerHTML = chart ? chart : "<p class='muted'>기록 없음</p>";
         bindCrosshair(el, (ms) => {
           const v = seriesValueAt(parseSegs(segs.map(seg => seg.map(p => ({ts: p.ts, v: p.v})))), ms, "line");
           return v == null ? [] : [{label: "전력", text: fmtFixed(v, 2) + " kW"}];
@@ -3702,11 +3687,10 @@
       html += marks.labels;
       html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
       html += crossLine(T, innerH);
-      const lineKey = (color) => "<svg class='leg' viewBox='0 0 16 10' aria-hidden='true'><line x1='0' y1='5' x2='16' y2='5' stroke='" +
-        color + "' stroke-width='2'></line></svg>";
+      const lineKey = (color) => legendSwatch({line: color});
       let legend = "<p class='chart-legend'><span>" + lineKey("#ef8a6b") + "최고</span><span>" + lineKey("#6ba8ef") + "최저</span>";
       if (model.heater && model.heater.length) {
-        legend += "<span><svg class='leg' viewBox='0 0 16 10' aria-hidden='true'><rect x='0' y='2' width='16' height='6' fill='#e39a4a' fill-opacity='0.4'></rect></svg>배터리 히터</span>"; // opacity:0.4
+        legend += "<span>" + legendSwatch({fill: "#e39a4a", fillOpacity: 0.4}) + "배터리 히터</span>"; // opacity:0.4
       }
       legend += "</p>";
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH) + legend;

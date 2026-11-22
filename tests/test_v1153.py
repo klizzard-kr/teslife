@@ -164,7 +164,7 @@ class ChargeChartTests(unittest.TestCase):
             " return s.replace(/0+$/, '').replace(/\\.$/, ''); }\n"
             "function fmtHm(){ return '00:00'; }\n"
             "function tone(name){ return name === 'chart-axis' ? '#8aa0b5' : '#3dd68c'; }\n"
-            + _fn("decimate") + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
+            + _fn("decimate") + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("legendSwatch") + _fn("svgChargeBand")
             + body
         )
 
@@ -184,6 +184,42 @@ class ChargeChartTests(unittest.TestCase):
         self.assertIn("<polygon", got["html"])
         self.assertIn('fill-opacity="0.15"', got["html"])
         self.assertIn("충전 전력", got["html"])
+        legend = got["html"].split("chart-legend", 1)[1]
+        self.assertIn("height='8'", legend)
+        self.assertIn("y1='2'", legend)
+        self.assertNotIn("y1='5'", legend)
+
+    def test_area_swatch_line_sits_on_the_top_edge(self) -> None:
+        src = (
+            _fn("legendSwatch")
+            + "const area = legendSwatch({line:'#3dd68c', fill:'#3dd68c', fillOpacity:0.15});\n"
+            + "const line = legendSwatch({line:'#9aa6b2', dash:'4 3'});\n"
+            + "const fill = legendSwatch({fill:'#7c6ae0', fillOpacity:1});\n"
+            + "process.stdout.write(JSON.stringify({area:area, line:line, fill:fill}));"
+        )
+        got = _node(src)
+        self.assertIn("width='8'", got["area"])
+        self.assertIn("height='8'", got["area"])
+        self.assertIn("y1='2'", got["area"])
+        self.assertIn("y2='2'", got["area"])
+        self.assertNotIn("y1='5'", got["area"])
+        self.assertIn("y1='5'", got["line"])
+        self.assertIn("stroke-dasharray='4 3'", got["line"])
+        self.assertNotIn("<line", got["fill"])
+        charge = _fn("svgChargeBand")
+        self.assertIn("legendSwatch({line: chargeColor, fill: chargeColor, fillOpacity: 0.15})", charge)
+        speed = _fn("loadTripSpeed")
+        power = _fn("loadTripPower")
+        self.assertIn('unit: "km/h (-는 후진)"', speed)
+        self.assertNotIn("chart-legend", speed)
+        self.assertNotIn("legendSpan(", speed)
+        self.assertIn('unit: "kW (-는 회생)"', power)
+        self.assertNotIn("chart-legend", power)
+        self.assertNotIn("legendSpan(", power)
+        self.assertIn("below: regenColor", power)
+        battery = _fn("svgBatteryTemp")
+        self.assertIn("legendSwatch({line: color})", battery)
+        self.assertIn("legendSwatch({fill: \"#e39a4a\", fillOpacity: 0.4})", battery)
 
     def test_power_chart_has_no_temperature_band(self) -> None:
         src = self._src(

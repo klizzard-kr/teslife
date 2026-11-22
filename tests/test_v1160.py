@@ -486,7 +486,7 @@ class PageGraphTests(unittest.TestCase):
             "function tone(){ return '#8aa0b5'; }\n"
             + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
             + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("decimate") + _fn("coverWindow")
-            + _fn("yOn") + _fn("crossLine") + _fn("chartSvg") + _fn("svgBatteryTemp")
+            + _fn("yOn") + _fn("crossLine") + _fn("chartSvg") + _fn("legendSwatch") + _fn("svgBatteryTemp")
             + _fn("svgLine") + _fn("svgChargeBand")
             + "function pack(lo, hi){ const a = tempAxis(lo, hi);"
             + " return {min:a.min, max:a.max, ticks:a.ticks, labels:a.ticks.map(v => fmt(v, 1))}; }\n"
@@ -549,7 +549,7 @@ class PageGraphTests(unittest.TestCase):
             "function tone(){ return '#8aa0b5'; }\n"
             + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
             + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("decimate")
-            + _fn("coverWindow") + _fn("yOn") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg")
+            + _fn("coverWindow") + _fn("yOn") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg") + _fn("legendSwatch")
             + _fn("svgLine") + _fn("svgChargeBand") + _fn("svgBatteryTemp")
             + chunk
             + "function hlines(html){\n"
