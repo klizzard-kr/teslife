@@ -593,6 +593,7 @@
     .clim-band .tl-plot, .clim-band .tl-row.tl-axis { margin: 0 calc(100% * 8 / 390) 0 calc(100% * 76 / 390); }
     .tl-bar-txt {
       position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      max-width: calc(100% - 2px); overflow: hidden;
       font-size: 0.62rem; line-height: 1.2; color: #102433; pointer-events: none; white-space: nowrap;
     }
     .tl-bar.tl-hatch {
@@ -3266,46 +3267,86 @@
       });
       return parts.filter(p => p.t1 - p.t0 > 1);
     }
+    const SEAT_COLOR = "#e39a4a";
+    function stepLevel(segs, t) {
+      let level = 0;
+      (segs || []).forEach(seg => (seg || []).forEach(p => {
+        if (p.t <= t + 0.5) level = p.v > 0.05 ? Math.max(1, Math.round(p.v)) : 0;
+      }));
+      return level;
+    }
+    function seatText(level) {
+      return level > 0 ? level + "단" : "꺼짐";
+    }
+    function mergeOn(pieces, color, title) {
+      const out = [];
+      pieces.slice().sort((a, b) => a.t0 - b.t0).forEach(p => {
+        if (!(p.t1 > p.t0)) return;
+        const prev = out[out.length - 1];
+        if (prev && p.t0 - prev.t1 < 1500) {
+          prev.t1 = Math.max(prev.t1, p.t1);
+          const last = prev.changes[prev.changes.length - 1];
+          if (last && last.text === p.text && p.t0 - last.t1 < 1500) last.t1 = Math.max(last.t1, p.t1);
+          else prev.changes.push({t0: p.t0, t1: p.t1, text: p.text});
+          return;
+        }
+        out.push({t0: p.t0, t1: p.t1, color: color, tip: title, changes: [{t0: p.t0, t1: p.t1, text: p.text}]});
+      });
+      return out;
+    }
+    function seatPieces(model) {
+      const leftSegs = (model.heat || {}).seat_left || [];
+      const rightSegs = (model.heat || {}).seat_right || [];
+      const times = [model.t0, model.t1];
+      [leftSegs, rightSegs].forEach(segs => (segs || []).forEach(seg => (seg || []).forEach(p => {
+        if (p.t > model.t0 && p.t < model.t1) times.push(p.t);
+      })));
+      times.sort((a, b) => a - b);
+      const marks = [];
+      times.forEach(t => { if (!marks.length || t - marks[marks.length - 1] > 0.5) marks.push(t); });
+      const bits = [];
+      for (let i = 0; i < marks.length - 1; i++) {
+        const t0 = marks[i], t1 = marks[i + 1];
+        if (!(t1 > t0)) continue;
+        const left = stepLevel(leftSegs, t0);
+        const right = stepLevel(rightSegs, t0);
+        if (!(left > 0) && !(right > 0)) continue;
+        bits.push({t0: t0, t1: t1, left: left, right: right});
+      }
+      const groups = [];
+      bits.forEach(b => {
+        const prev = groups[groups.length - 1];
+        if (prev && b.t0 - prev.t1 < 1500) { prev.t1 = b.t1; prev.bits.push(b); }
+        else groups.push({t0: b.t0, t1: b.t1, bits: [b]});
+      });
+      return groups.map(g => {
+        const changes = [];
+        [["운전석", "left"], ["조수석", "right"]].forEach(side => {
+          let cur = null;
+          g.bits.forEach(b => {
+            const text = side[0] + " " + seatText(b[side[1]]);
+            if (cur && cur.text === text) cur.t1 = b.t1;
+            else { cur = {t0: b.t0, t1: b.t1, text: text}; changes.push(cur); }
+          });
+        });
+        return {t0: g.t0, t1: g.t1, color: SEAT_COLOR, tip: "시트", changes: changes};
+      });
+    }
     function climateRuns(model) {
       const rows = [];
-      const fan = fanPieces(model).map(span => Object.assign({}, span, {
-        hatch: span.kind === "auto",
-        text: span.kind === "auto" ? "오토" : String(span.level),
-        tip: span.kind === "auto" ? "오토" : "팬 " + span.level + "단"
-      }));
-      if (fan.length) rows.push({label: "팬", short: "팬", spans: fan});
-      SEATS.forEach(seat => {
-        [["heat", seat.label, seat.heatColor], ["cool", seat.cool, seat.coolColor]].forEach(spec => {
-          const runs = valueRuns(model[spec[0]][seat.key], model.t0, model.t1);
-          if (!runs.length) return;
-          rows.push({label: spec[1], spans: runs.map(span => Object.assign({}, span, {
-            color: heatShade(spec[2], span.level, 3),
-            text: String(span.level),
-            tip: spec[1] + " " + span.level + "단"
-          }))});
-        });
-      });
-      const wheelLevels = valueRuns(model.wheel, model.t0, model.t1).map(span => Object.assign({}, span, {
-        color: heatShade(WHEEL_COLOR, span.level, 3),
-        text: String(span.level),
-        tip: "핸들 열선 " + span.level + "단"
-      }));
-      const wheelAuto = [];
+      const fan = mergeOn(fanPieces(model).map(span => ({
+        t0: span.t0, t1: span.t1, text: span.kind === "auto" ? "오토" : span.level + "단"
+      })), FAN_COLOR, "팬");
+      if (fan.length) rows.push({label: "팬", legend: "팬", spans: fan});
+      const seats = seatPieces(model);
+      if (seats.length) rows.push({label: "시트", legend: "시트 열선", spans: seats});
+      const wheelLevels = valueRuns(model.wheel, model.t0, model.t1);
+      const wheelBits = wheelLevels.map(span => ({t0: span.t0, t1: span.t1, text: span.level + "단"}));
       (model.bars.wheel_auto || []).forEach(span => {
-        subtractSpans(span, wheelLevels).forEach(part => {
-          wheelAuto.push({kind: "auto", level: null, t0: part.t0, t1: part.t1, color: "#f0d2c2", hatch: true, text: "자동", tip: "핸들 열선 켬"});
-        });
+        subtractSpans(span, wheelLevels).forEach(part => wheelBits.push({t0: part.t0, t1: part.t1, text: "켬"}));
       });
-      const wheel = wheelLevels.concat(wheelAuto).sort((a, b) => a.t0 - b.t0);
-      if (wheel.length) rows.push({label: "핸들 열선", spans: wheel});
-      CLIM_BARS.forEach(row => {
-        if (row[0] === "wheel_auto") return;
-        const spans = model.bars[row[0]];
-        if (!spans || !spans.length) return;
-        rows.push({label: row[1], spans: spans.map(span => ({
-          kind: "flag", level: null, t0: span.t0, t1: span.t1, color: row[2], text: "", tip: row[1] + " 켜짐"
-        }))});
-      });
+      const wheel = mergeOn(wheelBits, WHEEL_COLOR, "핸들");
+      if (wheel.length) rows.push({label: "핸들", legend: "핸들 열선", spans: wheel});
       return rows;
     }
     function flatRuns(rows) {
@@ -3379,13 +3420,9 @@
           "A/C: 켬(초록)/끔(분홍)</span>");
       }
       const fanRow = runs.filter(row => row.label === "팬")[0];
-      if (fanRow && fanRow.spans.some(span => span.kind === "fan")) parts.push(legendSpan({fill: FAN_COLOR, fillOpacity: 1}, "팬"));
-      if (fanRow && fanRow.spans.some(span => span.kind === "auto")) {
-        parts.push("<span><svg class='leg' viewBox='0 0 16 10' aria-hidden='true'><rect width='16' height='10' fill='#eef6fb'></rect><path d='M0,10 l8,-10 M8,10 l8,-10' stroke='#8eb4c6' stroke-width='1' fill='none'></path></svg>오토</span>");
-      }
+      if (fanRow) parts.push(legendSpan({fill: FAN_COLOR, fillOpacity: 1}, "팬"));
       runs.filter(row => row.label !== "팬").forEach(row => {
-        const swatch = row.spans[0].hatch ? "#eef6fb" : row.spans[0].color;
-        parts.push(legendSpan({fill: swatch, fillOpacity: 1}, row.label));
+        parts.push(legendSpan({fill: row.spans[0].color, fillOpacity: 1}, row.legend || row.label));
       });
       return parts.filter(Boolean).join("<span class='leg-sep' aria-hidden='true'></span>");
     }
@@ -3408,12 +3445,23 @@
       if (sec < 60) return sec + "초";
       return fmtMin(sec);
     }
+    function popCard(title, color, rows, items) {
+      let html = "<h3><i style='background:" + color + "'></i>" + escHtml(title) + "</h3>";
+      if (rows && rows.length) {
+        html += "<dl>" + rows.filter(r => r[1]).map(r => "<dt>" + r[0] + "</dt><dd>" + r[1] + "</dd>").join("") + "</dl>";
+      }
+      if (items && items.length) {
+        html += "<ul>" + items.map(it => "<li><i style='background:" + (it.color || color) + "'></i>" + escHtml(it.text) + "</li>").join("") + "</ul>";
+      }
+      return html;
+    }
     function climateTip(run) {
-      const swatch = run.hatch ? "#9ec5d6" : run.color;
-      return "<h3><i style='background:" + swatch + "'></i>" + escHtml(run.tip) + "</h3><dl>" +
-        "<dt>시작</dt><dd>" + fmtHm(run.t0) + "</dd>" +
-        "<dt>끝</dt><dd>" + fmtHm(run.t1) + "</dd>" +
-        "<dt>시간</dt><dd>" + climDur(run.t1 - run.t0) + "</dd></dl>";
+      const when = fmtHm(run.t0) + "–" + fmtHm(run.t1) + " (" + tlSpan((run.t1 - run.t0) / 60000) + ")";
+      const items = (run.changes || []).map(ch => ({
+        color: run.color,
+        text: fmtHm(ch.t0) + "–" + fmtHm(ch.t1) + " " + ch.text
+      }));
+      return popCard(run.tip, run.color, [["시간", when]], items);
     }
     function climateLaneHtml(model, runs) {
       if (!Array.isArray(runs)) runs = climateRuns(model);
@@ -3423,13 +3471,12 @@
       const lanes = runs.map((row, ri) => ({
         key: "c" + ri,
         label: row.label,
-        swatch: row.spans.some(span => span.kind === "fan") ? FAN_COLOR : (row.spans[0].hatch ? "#9ec5d6" : row.spans[0].color),
+        swatch: row.spans[0].color,
         bars: row.spans.map(span => {
           const x = pct(span.t0);
           const w = Math.max(0, pct(span.t1) - x);
           const bar = {
-            x: x, w: w, color: span.color, hatch: !!span.hatch,
-            text: span.text && w >= 6 ? span.text : "",
+            x: x, w: w, color: span.color,
             aria: span.tip + " " + fmtHm(span.t0) + "–" + fmtHm(span.t1),
             flat: n
           };
@@ -3944,8 +3991,7 @@
       // web/estimates.py gives a prior or this car's parked average; both read "약 … kWh".
       if (!known(b.kwh) && known(b.kwh_estimate)) rows.push(["사용량", tlKwhPct(b.kwh_estimate)]);
       if (known(b.kwh)) rows.push(["사용량", lane.key === "drive" ? driveKwhText(b) : tlKwhPct(b.kwh)]);
-      return "<h3><i style='background:" + barColor(lane, b) + "'></i>" + escHtml(barTitle(lane, b)) + "</h3><dl>" +
-        rows.filter(r => r[1]).map(r => "<dt>" + r[0] + "</dt><dd>" + r[1] + "</dd>").join("") + "</dl>";
+      return popCard(barTitle(lane, b), barColor(lane, b), rows);
     }
     function hourPopHtml(i, hb) {
       const t = batTimeline && batTimeline.hours ? batTimeline.hours[i] : null;
@@ -3996,15 +4042,25 @@
       const limit = Math.max(120, navTop - 8);
       pop.style.maxHeight = Math.min(window.innerHeight * 0.46, limit - 8) + "px";
       const base = host.getBoundingClientRect();
+      const edge = 8;
+      const room = Math.max(120, Math.min(base.width, window.innerWidth) - edge * 2);
+      pop.style.maxWidth = room + "px";
+      pop.style.width = Math.min(260, room) + "px";
       const ar = anchor.getBoundingClientRect();
-      const pw = pop.offsetWidth || 220;
-      const maxLeft = Math.max(8, base.width - pw - 8);
+      const pw = Math.min(pop.offsetWidth || 220, room);
+      const minLeft = Math.max(edge, edge - base.left);
+      const maxLeft = Math.min(base.width - pw - edge, window.innerWidth - edge - pw - base.left);
       let left = ar.left - base.left + ar.width / 2 - pw / 2;
-      if (left < 8) left = 8;
-      if (left > maxLeft) left = maxLeft;
+      if (left < minLeft) left = minLeft;
+      if (left > maxLeft) left = Math.max(minLeft, maxLeft);
       let top = ar.bottom - base.top + 6;
       const ph = pop.offsetHeight;
-      if (ar.bottom + 6 + ph > limit) top = ar.top - base.top - ph - 6;
+      const screenBottom = Math.min(window.innerHeight - edge, limit);
+      if (base.top + top + ph > screenBottom) {
+        const above = ar.top - base.top - ph - 6;
+        top = base.top + above >= edge ? above : Math.max(edge - base.top, screenBottom - ph - base.top);
+      }
+      if (base.top + top < edge) top = edge - base.top;
       pop.style.left = left + "px";
       pop.style.top = top + "px";
     }

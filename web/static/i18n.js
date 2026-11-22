@@ -345,6 +345,7 @@
     "히터": "Heater",
     "팬": "Fan",
     "운전석 열선": "Driver seat heat",
+    "시트 열선": "Seat heat",
     "조수석 열선": "Passenger seat heat",
     "핸들 열선": "Steering wheel heat",
     "선택 안 함": "Not selected",

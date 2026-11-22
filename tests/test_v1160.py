@@ -291,7 +291,7 @@ class PageGraphTests(unittest.TestCase):
         self.assertNotIn("운전석 · A/C", legend)
         self.assertIn("legendSpan({fill: FAN_COLOR, fillOpacity: 1}, \"팬\")", legend)
         tip = _fn("climateTip")
-        self.assertIn("시작", tip)
+        self.assertIn("popCard(", tip)
         self.assertIn("시간", tip)
         self.assertIn("bindClimateSelect(", _fn("mountClimate"))
         self.assertNotIn("bindCrosshair(plot", _fn("mountClimate"))

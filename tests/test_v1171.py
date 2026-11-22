@@ -244,21 +244,21 @@ class ClimateFiveCasesTests(unittest.TestCase):
 
         self.assertEqual(colors("autoOn"), {inside, outside, green})
         self.assertNotIn(pink, colors("autoOn"))
-        self.assertTrue(got["autoOn"]["hatch"])
-        self.assertIn("오토", got["autoOn"]["labels"])
-        self.assertNotIn("6", got["autoOn"]["labels"])
+        self.assertFalse(got["autoOn"]["hatch"])
+        self.assertEqual(got["autoOn"]["labels"], [])
         self.assertFalse(got["autoOn"]["rightAxis"])
         self.assertIn("설정 온도: 운전석(실선)/조수석(점선)", got["autoOn"]["legend"])
         self.assertIn("A/C: 켬(초록)/끔(분홍)", got["autoOn"]["legend"])
-        self.assertIn("오토", got["autoOn"]["legend"])
+        self.assertIn(">팬<", got["autoOn"]["legend"])
+        self.assertNotIn("오토", got["autoOn"]["legend"])
         self.assertFalse(got["autoOn"]["dashed"])
 
         self.assertEqual(colors("autoOff"), {inside, outside, pink})
         self.assertNotIn(green, colors("autoOff"))
-        self.assertIn("오토", got["autoOff"]["labels"])
+        self.assertEqual(got["autoOff"]["labels"], [])
 
         for name in ("manOn", "manOff"):
-            self.assertEqual(got[name]["labels"], ["6"])
+            self.assertEqual(got[name]["labels"], [])
             self.assertFalse(got[name]["hatch"])
             self.assertFalse(got[name]["rightAxis"])
             self.assertIn(">팬<", got[name]["legend"])
@@ -272,3 +272,86 @@ class ClimateFiveCasesTests(unittest.TestCase):
         self.assertNotIn(green, colors("manOff"))
         self.assertIn(green, got["pass"]["dashed"])
         self.assertNotIn("운전석 · A/C", got["pass"]["legend"])
+
+    def test_seat_row_combines_driver_and_passenger(self) -> None:
+        start = HTML.index("    const SEATS = [")
+        chunk = HTML[start:HTML.index("    function climateRows")]
+        src = (
+            "function tone(){ return '#8aa0b5'; }\n"
+            + "function known(v){ return v !== null && v !== undefined && v !== '' && isFinite(Number(v)); }\n"
+            + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("fmtMin") + _fn("escHtml")
+            + _fn("tlSpan") + _fn("popCard") + _fn("climateTip")
+            + _fn("niceTicks") + _fn("tempAxis") + _fn("timeMarks")
+            + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines")
+            + _fn("decimate") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg")
+            + _fn("legendSwatch") + _fn("legendSpan") + _fn("lanePlotHtml")
+            + _fn("climateLaneHtml")
+            + chunk
+            + "const t0 = Date.parse('2026-11-22T01:00:00Z');\n"
+            + "const mid = t0 + 8*60*1000;\n"
+            + "const late = t0 + 14*60*1000;\n"
+            + "const t1 = t0 + 20*60*1000;\n"
+            + "const model = {t0:t0, t1:t1, inside:[], outside:[], setDriver:[], setPass:[], fan:[],\n"
+            + "  wheel:[[{t:t0,v:2},{t:late,v:0}]],\n"
+            + "  heat:{seat_left:[[{t:t0,v:3},{t:mid,v:0}]],\n"
+            + "        seat_right:[[{t:t0,v:1},{t:late,v:0}]],\n"
+            + "        seat_rear_left:[[{t:t0,v:2},{t:t1,v:2}]]},\n"
+            + "  cool:{seat_left:[[{t:t0,v:2},{t:t1,v:2}]]},\n"
+            + "  auto:[], ac:[], bars:{defrost:[{t0:t0,t1:mid,level:1}], wheel_auto:[{t0:late,t1:t1,level:1}]}};\n"
+            + "const rows = climateRuns(model);\n"
+            + "const legend = climateLegend(model, rows);\n"
+            + "const lanes = climateLaneHtml(model, rows);\n"
+            + "const seat = rows.filter(r => r.label === '시트')[0];\n"
+            + "const fanModel = {t0:t0, t1:t1, inside:[], outside:[], setDriver:[], setPass:[],\n"
+            + "  fan:[[{t:t0,v:6},{t:mid,v:3},{t:late,v:3}]], wheel:[], heat:{}, cool:{},\n"
+            + "  auto:[{t:t0,v:0},{t:late,v:1}], ac:[], bars:{}};\n"
+            + "const fanRows = climateRuns(fanModel);\n"
+            + "const park = popCard('주차 · 캠핑', '#f0b429', [['시간','10:02–10:14 (12분)'],['사용량','약 0.42 kWh (2.1%)']]);\n"
+            + "process.stdout.write(JSON.stringify({\n"
+            + "  labels: rows.map(r => r.label),\n"
+            + "  seatBars: seat.spans.length,\n"
+            + "  seatColors: [...new Set(seat.spans.map(s => s.color))],\n"
+            + "  tip: climateTip(seat.spans[0]),\n"
+            + "  fanBars: fanRows[0].spans.length,\n"
+            + "  fanTip: climateTip(fanRows[0].spans[0]),\n"
+            + "  legend: legend,\n"
+            + "  hatch: lanes.indexOf('tl-hatch') >= 0,\n"
+            + "  text: lanes.indexOf('tl-bar-txt') >= 0,\n"
+            + "  labs: (lanes.match(/<span>[^<]+<\\/span>/g) || []),\n"
+            + "  park: park\n"
+            + "}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["labels"], ["시트", "핸들"])
+        self.assertEqual(got["seatBars"], 1)
+        self.assertEqual(got["seatColors"], ["#e39a4a"])
+        self.assertIn(">시트<", got["tip"])
+        self.assertIn(">시간<", got["tip"])
+        self.assertIn("운전석", got["tip"])
+        self.assertIn("3단", got["tip"])
+        self.assertIn("1단", got["tip"])
+        self.assertIn("조수석", got["tip"])
+        self.assertIn("꺼짐", got["tip"])
+        self.assertIn("<ul>", got["tip"])
+        self.assertIn("<h3>", got["park"])
+        self.assertIn("<dl>", got["park"])
+        self.assertNotIn("<ul>", got["park"])
+        self.assertIn("<h3>", got["tip"])
+        self.assertIn("<dl>", got["tip"])
+        self.assertEqual(got["fanBars"], 1)
+        self.assertIn("6단", got["fanTip"])
+        self.assertIn("3단", got["fanTip"])
+        self.assertIn("오토", got["fanTip"])
+        self.assertIn(">팬<", got["fanTip"])
+        self.assertIn("시트 열선", got["legend"])
+        self.assertIn("핸들 열선", got["legend"])
+        self.assertNotIn("오토", got["legend"])
+        self.assertNotIn("뒷좌석", got["legend"])
+        self.assertNotIn("통풍", got["legend"])
+        self.assertFalse(got["hatch"])
+        self.assertFalse(got["text"])
+        self.assertIn(">시트<", "".join(got["labs"]))
+        self.assertIn(">핸들<", "".join(got["labs"]))
+        placed = HTML[HTML.index("function placePop("):HTML.index("function showTlPop(")]
+        self.assertIn("window.innerWidth", placed)
+        self.assertIn("popCard(", HTML[HTML.index("function barPopHtml"):HTML.index("function hourPopHtml")])
