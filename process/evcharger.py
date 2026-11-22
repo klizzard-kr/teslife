@@ -1170,12 +1170,13 @@ def fill_charge_place(
             named = resolve_place(stations, search)
         except Exception:
             named = None
+        # Several names cannot be one place. Leave the field empty.
         if named == "":
             return None
         if named:
             _write_location_text(conn, vid, charge_id, named)
             return named
-        return None
+        # No catalog station to name. Reverse geocoding is only this last step.
     if lookup is None:
         return None
     try:
@@ -2353,10 +2354,11 @@ def choose_charger(conn: sqlite3.Connection, vid: str, body: dict[str, Any]) -> 
             "output_kw": row["output_kw"], "chger_type": row["chger_type"], "stat_nm": row["stat_nm"],
             "addr": row["addr"],
         }
-        _write_choice(conn, vid, charge_id, item, "station", float(loc["lat"]), float(loc["lon"]), force_operator=True)
+        # The owner picked this station. source user keeps it ahead of a later auto match.
+        _write_choice(conn, vid, charge_id, item, "user", float(loc["lat"]), float(loc["lon"]), force_operator=True)
         return {
             "ok": True, "charge_id": charge_id, "stat_id": row["stat_id"],
-            "operator": _operator_label(item), "output_kw": item.get("output_kw"), "source": "station",
+            "operator": _operator_label(item), "output_kw": item.get("output_kw"), "source": "user",
         }
     if not chger_id:
         now = _iso(datetime.now(timezone.utc))

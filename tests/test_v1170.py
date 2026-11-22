@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from process import connect
-from process.evcharger import pick_station
+from process.evcharger import _locked_user, choose_charger, fill_charge_place, pick_station
 from process.operators import display_name, group_keys, same_operator
 from process.placefill import city_stem, name_from_hits, resolve_place, roads_match, strip_operator_tail
 from process.telemetry_delta import apply_delta
@@ -79,6 +79,126 @@ class OperatorTests(unittest.TestCase):
         chosen, rest = pick_station([near, far], "AC", 7, "PW")
         self.assertEqual(chosen["stat_id"], "far")
         self.assertIsNone(pick_station([near], "DC", 100, "PW")[0])
+
+
+class PlaceFillOrderTests(unittest.TestCase):
+    def _conn(self):
+        folder = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(folder, ignore_errors=True))
+        conn = connect(Path(folder) / "signals.db")
+        self.addCleanup(conn.close)
+        conn.execute(
+            "INSERT INTO charges (vehicle_id, start_ts, end_ts, kind, kwh_added) "
+            "VALUES ('car', 'new', 'new-end', 'AC', 1)"
+        )
+        conn.execute(
+            "INSERT INTO charge_locations (vehicle_id, charge_id, lat, lon, source) "
+            "VALUES ('car', 'new', 1, 1, 'car')"
+        )
+        conn.commit()
+        return conn
+
+    def test_saved_place_within_150m_comes_before_search(self) -> None:
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO charge_meta (vehicle_id, charge_id, location_text) VALUES ('car', 'old', '저장한곳')"
+        )
+        conn.execute(
+            "INSERT INTO charge_locations (vehicle_id, charge_id, lat, lon, source) "
+            "VALUES ('car', 'old', 1, 1, 'car')"
+        )
+        conn.commit()
+        calls = []
+        got = fill_charge_place(
+            conn, "car", "new", 1, 1,
+            stations=[{"stat_nm": "예시충전소", "addr": "예시시 예시로 1"}],
+            search=lambda query: calls.append(query) or [],
+            lookup=lambda _a, _b: "역지오",
+        )
+        self.assertEqual(got, "저장한곳")
+        self.assertEqual(calls, [])
+
+    def test_search_then_catalog_name_and_reverse_only_without_a_station(self) -> None:
+        conn = self._conn()
+        queries = []
+
+        def search(query: str):
+            queries.append(query)
+            if query == "예시 예시충전소":
+                return [{
+                    "title": "가게",
+                    "category": "음식",
+                    "roadAddress": "예시시 예시로 1",
+                }]
+            if "전기차충전소" in query:
+                return [{
+                    "title": "예시충전소 파워큐브 2",
+                    "category": "교통>전기차충전소",
+                    "roadAddress": "경기 예시시 예시로 1",
+                }]
+            return []
+
+        got = fill_charge_place(
+            conn, "car", "new", 1, 1,
+            stations=[{"stat_nm": "예시충전소", "addr": "경기도 예시시 예시로 1"}],
+            search=search,
+            lookup=lambda _a, _b: "역지오",
+        )
+        self.assertEqual(queries[0], "예시 예시충전소")
+        self.assertIn("전기차충전소", queries[1])
+        self.assertEqual(got, "예시충전소")
+        self.assertEqual(
+            conn.execute("SELECT location_text FROM charge_meta WHERE charge_id = 'new'").fetchone()[0],
+            "예시충전소",
+        )
+
+        conn.execute("DELETE FROM charge_meta WHERE charge_id = 'new'")
+        conn.execute("DELETE FROM process_meta")
+        conn.commit()
+        empty = fill_charge_place(
+            conn, "car", "new", 1, 1,
+            stations=[{"stat_nm": "예시충전소", "addr": "경기도 예시시 예시로 1"}],
+            search=lambda _q: [
+                {"title": "가", "category": "전기차충전소", "roadAddress": "경기 예시시 예시로 1"},
+                {"title": "나", "category": "전기차충전소", "roadAddress": "경기 예시시 예시로 1"},
+            ],
+            lookup=lambda _a, _b: "역지오",
+        )
+        self.assertIsNone(empty)
+        self.assertIsNone(conn.execute(
+            "SELECT location_text FROM charge_meta WHERE charge_id = 'new'"
+        ).fetchone())
+
+        conn.execute("DELETE FROM process_meta")
+        conn.commit()
+        none = fill_charge_place(
+            conn, "car", "new", 1, 1,
+            stations=[{"stat_nm": "예시충전소", "addr": "경기도 예시시 예시로 1"}],
+            search=lambda _q: [],
+            lookup=lambda _a, _b: "역지오",
+        )
+        self.assertEqual(none, "예시충전소")
+
+        conn.execute("DELETE FROM charge_meta WHERE charge_id = 'new'")
+        conn.execute("DELETE FROM process_meta")
+        conn.commit()
+        reverse = fill_charge_place(
+            conn, "car", "new", 1, 1, stations=[], lookup=lambda _a, _b: "역지오",
+        )
+        self.assertEqual(reverse, "역지오")
+
+    def test_owner_station_is_kept_ahead_of_a_later_match(self) -> None:
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO ev_chargers (stat_id, chger_id, lat, lng, chger_type, output_kw, busi_nm, busi_id, bnm, stat_nm, addr, updated_ts) "
+            "VALUES ('ST-A', '1', 1, 1, '02', 7, '파워큐브코리아', 'PW', '파워큐브', '예시충전소', '예시시 예시로 1', '2026-01-01T00:00:00Z')"
+        )
+        conn.commit()
+        got = choose_charger(conn, "car", {"charge_id": "new", "stat_id": "ST-A"})
+        self.assertEqual(got["source"], "user")
+        self.assertEqual(got["operator"], "파워큐브")
+        self.assertTrue(_locked_user(conn, "car", "new"))
+        self.assertEqual(tuple(conn.execute("SELECT stat_id, source FROM charge_charger").fetchone()), ("ST-A", "user"))
 
 
 class PlaceNameTests(unittest.TestCase):
