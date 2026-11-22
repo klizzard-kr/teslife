@@ -185,7 +185,8 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
             + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines")
             + _fn("decimate") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg")
-            + _fn("legendSwatch") + _fn("legendSpan")
+            + _fn("legendSwatch") + _fn("legendSpan") + _fn("escHtml") + _fn("lanePlotHtml")
+            + _fn("climateLaneHtml")
             + chunk
             + "const t0 = Date.parse('2026-11-22T01:00:00Z');\n"
             + "const t1 = t0 + 20*60*1000;\n"
@@ -206,6 +207,7 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "};\n"
             + "function view(m){\n"
             + "  const html = climateSvg(m);\n"
+            + "  const lanes = climateLaneHtml(m);\n"
             + "  const legend = climateLegend(m);\n"
             + "  const strokes = [];\n"
             + "  const re = /<polyline fill='none' stroke='([^']+)' stroke-width='[^']+'(?: stroke-dasharray='([^']*)')?/g;\n"
@@ -216,10 +218,11 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "  const tr = /text-anchor=\"start\" dominant-baseline=\"middle\">([^<]+)/g;\n"
             + "  while ((hit = tr.exec(html))) ticks.push(hit[1]);\n"
             + "  const labels = [];\n"
-            + "  const lr = /text-anchor='middle'[^>]*>([^<]+)/g;\n"
-            + "  while ((hit = lr.exec(html))) labels.push(hit[1]);\n"
+            + "  const lr = /tl-bar-txt'>([^<]+)/g;\n"
+            + "  while ((hit = lr.exec(lanes))) labels.push(hit[1]);\n"
             + "  return {strokes: strokes, dashed: dashed, ticks: ticks, legend: legend, labels: labels,\n"
-            + "    hatch: html.indexOf('url(#climHatch)') >= 0,\n"
+            + "    hatch: lanes.indexOf('tl-hatch') >= 0,\n"
+            + "    rows: (lanes.match(/tl-lab/g) || []).length,\n"
             + "    rightAxis: html.indexOf('text-anchor=\"start\" dominant-baseline') >= 0,\n"
             + "    filled: html.indexOf(\"<polygon\") >= 0 || html.indexOf(\"fill='#12c9a0'\") >= 0 || html.indexOf(\"fill='#c2749e'\") >= 0};\n"
             + "}\n"

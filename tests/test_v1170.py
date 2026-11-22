@@ -292,4 +292,4 @@ class VersionTests(unittest.TestCase):
     def test_screen_version(self) -> None:
         self.assertIn('const APP_VERSION = "v1.17.1"', HTML)
         self.assertIn("후진", HTML)
-        self.assertIn("시트·열선", HTML)
+        self.assertIn("운전석 열선", HTML)
