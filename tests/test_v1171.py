@@ -351,6 +351,10 @@ class ClimateFiveCasesTests(unittest.TestCase):
         self.assertIn("3단", got["fanTip"])
         self.assertIn("오토", got["fanTip"])
         self.assertIn(">팬<", got["fanTip"])
+        for foreign in ("실내", "실외", "설정", "시트", "핸들", "°C", "A/C"):
+            self.assertNotIn(foreign, got["fanTip"])
+        for foreign in ("실내", "실외", "설정", ">팬<", "핸들", "°C", "A/C"):
+            self.assertNotIn(foreign, got["tip"])
         self.assertNotIn("시트 열선", got["legend"])
         self.assertNotIn("핸들 열선", got["legend"])
         self.assertNotIn(">팬<", got["legend"])
@@ -393,10 +397,8 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "const late = climateRows(model, mid + 60*1000);\n"
             + "const text = (rows, label) => (rows.find(r => r.label === label) || {}).text || '';\n"
             + "process.stdout.write(JSON.stringify({early:early, late:late,\n"
-            + "  eSet:text(early,'설정 온도'), eAc:text(early,'A/C'), eFan:text(early,'팬'),\n"
-            + "  eSeat:text(early,'시트'), eWheel:text(early,'핸들'),\n"
-            + "  lSet:text(late,'설정 온도'), lAc:text(late,'A/C'), lFan:text(late,'팬'),\n"
-            + "  lSeat:text(late,'시트'), lWheel:text(late,'핸들')}));"
+            + "  eSet:text(early,'설정 온도'), eAc:text(early,'A/C'),\n"
+            + "  lSet:text(late,'설정 온도'), lAc:text(late,'A/C')}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
         self.assertIn("운전석", got["eSet"])
@@ -405,12 +407,7 @@ class ClimateFiveCasesTests(unittest.TestCase):
         self.assertIn("19.5", got["eSet"])
         self.assertNotIn("A/C", got["eSet"])
         self.assertEqual(got["eAc"], "켜짐")
-        self.assertEqual(got["eFan"], "6단")
-        self.assertIn("운전석 3단", got["eSeat"])
-        self.assertIn("조수석 꺼짐", got["eSeat"])
-        self.assertEqual(got["eWheel"], "2단")
+        self.assertEqual([r["label"] for r in got["early"]], ["실내", "실외", "설정 온도", "A/C"])
+        self.assertEqual([r["label"] for r in got["late"]], ["실내", "실외"])
         self.assertEqual(got["lSet"], "")
         self.assertEqual(got["lAc"], "")
-        self.assertEqual(got["lFan"], "오토")
-        self.assertIn("운전석 꺼짐", got["lSeat"])
-        self.assertEqual(got["lWheel"], "켬")

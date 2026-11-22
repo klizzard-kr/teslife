@@ -588,10 +588,15 @@
     .cross-tip .kv-row:last-child, .speed-tip .kv-row:last-child { border-bottom: 0; }
     .clim-legend { align-items: center; row-gap: 6px; }
     .clim-legend > span { white-space: nowrap; }
+    .clim-legend svg.leg { margin-right: 2px; }
     .clim-legend .leg-group {
-      display: inline-flex; align-items: center; flex-wrap: nowrap; gap: 2px 6px; white-space: nowrap;
+      display: inline-flex; align-items: center; flex-wrap: nowrap; gap: 6px; white-space: nowrap;
     }
-    .clim-legend .leg-name { margin-right: 2px; }
+    .clim-legend .leg-pair { gap: 2px; }
+    .clim-legend .leg-pair svg.leg { margin-right: 0; }
+    .clim-legend .leg-name { margin-right: 0; }
+    .clim-legend .leg-sep { width: 1px; height: 12px; align-self: center; background: var(--line); flex: 0 0 1px; }
+    .clim-legend .leg-sep[hidden] { display: none !important; }
     .clim-band { container-type: inline-size; margin-top: 10px; position: relative; }
     .clim-band .tl-plot, .clim-band .tl-row.tl-axis { margin: 0 calc(100% * 8 / 390) 0 calc(100% * 76 / 390); }
     .tl-bar-txt {
@@ -3430,26 +3435,16 @@
       if (model.inside.length) parts.push(legendSpan({line: INSIDE_COLOR}, "실내"));
       if (model.outside.length) parts.push(legendSpan({line: OUTSIDE_COLOR}, "실외"));
       if (model.setDriver.length || model.setPass.length) {
+        parts.push("<span class='leg-sep' aria-hidden='true'></span>");
         parts.push("<span class='leg-group'><span class='leg-name'>설정 온도</span>" +
-          legendSwatch({line: "#9aa6b2"}) + "운전석" +
-          legendSwatch({line: "#9aa6b2", dash: "4 3"}) + "조수석</span>");
+          "<span class='leg-pair'>" + legendSwatch({line: "#9aa6b2"}) + "운전석</span>" +
+          "<span class='leg-pair'>" + legendSwatch({line: "#9aa6b2", dash: "4 3"}) + "조수석</span></span>");
+        parts.push("<span class='leg-sep' aria-hidden='true'></span>");
         parts.push("<span class='leg-group'><span class='leg-name'>A/C</span>" +
-          legendSwatch({line: SET_ON}) + "켜짐" +
-          legendSwatch({line: SET_OFF}) + "꺼짐</span>");
+          "<span class='leg-pair'>" + legendSwatch({line: SET_ON}) + "켜짐</span>" +
+          "<span class='leg-pair'>" + legendSwatch({line: SET_OFF}) + "꺼짐</span></span>");
       }
       return parts.filter(Boolean).join("");
-    }
-    function fanState(model, ms) {
-      if (flagAt(model.auto, ms)) return "오토";
-      const v = seriesValueAt(model.fan || [], ms, "step");
-      if (v != null && v > 0.05) return Math.max(1, Math.round(v)) + "단";
-      return "꺼짐";
-    }
-    function wheelState(model, ms) {
-      const v = seriesValueAt(model.wheel || [], ms, "step");
-      if (v != null && v > 0.05) return Math.max(1, Math.round(v)) + "단";
-      const auto = (model.bars.wheel_auto || []).some(span => ms >= span.t0 && ms < span.t1);
-      return auto ? "켬" : "꺼짐";
     }
     function climateRows(model, ms) {
       const rows = [];
@@ -3470,11 +3465,6 @@
         rows.push({label: "설정 온도", text: bits.join(" · ")});
         rows.push({label: "A/C", text: flagAt(model.ac, ms) ? "켜짐" : "꺼짐"});
       }
-      rows.push({label: "팬", text: fanState(model, ms)});
-      const left = stepLevel((model.heat || {}).seat_left, ms);
-      const right = stepLevel((model.heat || {}).seat_right, ms);
-      rows.push({label: "시트", text: "운전석 " + seatText(left) + " · 조수석 " + seatText(right)});
-      rows.push({label: "핸들", text: wheelState(model, ms)});
       return rows;
     }
     function climDur(ms) {
@@ -3573,9 +3563,25 @@
       const block = slot.querySelector(".clim-block");
       const plot = block.querySelector(".clim-plot");
       plot.innerHTML = climateSvg(model);
-      block.querySelector(".clim-legend").innerHTML = climateLegend(model, runs);
+      const legend = block.querySelector(".clim-legend");
+      legend.innerHTML = climateLegend(model);
+      fitLegendDividers(legend);
       bindCrosshair(plot, (ms) => climateRows(model, ms));
       bindClimateSelect(block, runs);
+    }
+    function fitLegendDividers(legend) {
+      if (!legend) return;
+      legend.querySelectorAll(".leg-sep").forEach(sep => {
+        const prev = sep.previousElementSibling;
+        const next = sep.nextElementSibling;
+        sep.hidden = !(prev && next && prev.offsetTop === next.offsetTop);
+      });
+    }
+    if (!window.__climLegendFit) {
+      window.__climLegendFit = true;
+      window.addEventListener("resize", () => {
+        document.querySelectorAll(".clim-legend").forEach(fitLegendDividers);
+      });
     }
     function tempSummary(rows) {
       const html = (rows || []).filter(row => row[1] != null && isFinite(Number(row[1]))).map(row =>
