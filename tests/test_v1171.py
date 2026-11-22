@@ -127,6 +127,49 @@ class ReverseSpeedTests(unittest.TestCase):
         self.assertTrue(all(y >= y0 - 0.6 for y in got["reverseFill"]))
         self.assertTrue(all(y <= y0 + 0.6 for y in got["forwardFill"]))
 
+    def test_regen_is_only_below_zero_and_not_the_reverse_color(self) -> None:
+        power = _fn("loadTripPower")
+        self.assertIn('unit: "kW"', power)
+        self.assertNotIn("−는 회생", power)
+        self.assertIn(', "전력")', power)
+        self.assertIn(', "회생")', power)
+        self.assertIn("below: regenColor", power)
+        self.assertIn('tone("chart-charge")', power)
+        src = (
+            "function tone(){ return '#5b9fd6'; }\n"
+            "function fmt(n){ return String(Math.round(n * 10) / 10); }\n"
+            "function fmtHm(){ return '00:00'; }\n"
+            + _fn("niceTicks") + _fn("decimate") + _fn("timeMarks")
+            + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines")
+            + _fn("crossLine") + _fn("chartSvg") + _fn("svgLine")
+            + "const t0 = Date.parse('2026-11-22T01:00:00Z');\n"
+            + "const pts = [\n"
+            + "  {ts: new Date(t0).toISOString(), v: 12},\n"
+            + "  {ts: new Date(t0 + 60000).toISOString(), v: -8},\n"
+            + "  {ts: new Date(t0 + 120000).toISOString(), v: 20}\n"
+            + "];\n"
+            + "const html = svgLine(pts, {h:150, color:'#5b9fd6', below:'#3dd68c', unit:'kW'});\n"
+            + "function ys(color){\n"
+            + "  const re = new RegExp('<polyline[^>]*stroke=\"' + color + '\"[^>]*points=\"([^\"]+)\"', 'g');\n"
+            + "  const out = []; let m;\n"
+            + "  while ((m = re.exec(html))) m[1].split(' ').forEach(p => out.push(Number(p.split(',')[1])));\n"
+            + "  return out;\n"
+            + "}\n"
+            + "const y0 = Number(html.match(/y=\"([^\"]+)\"[^>]*>0</)[1]);\n"
+            + "process.stdout.write(JSON.stringify({y0:y0, use:ys('#5b9fd6'), regen:ys('#3dd68c'), orange:html.indexOf('#e07a5f')>=0, unit:html.indexOf('>kW<')>=0}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        y0 = got["y0"]
+        self.assertFalse(got["orange"])
+        self.assertTrue(got["unit"])
+        self.assertTrue(got["regen"])
+        self.assertTrue(all(y >= y0 - 0.6 for y in got["regen"]))
+        self.assertTrue(any(y > y0 + 1 for y in got["regen"]))
+        self.assertTrue(all(y <= y0 + 0.6 for y in got["use"]))
+        self.assertTrue(any(y < y0 - 1 for y in got["use"]))
+        self.assertTrue(any(abs(y - y0) < 0.6 for y in got["regen"]))
+        self.assertTrue(any(abs(y - y0) < 0.6 for y in got["use"]))
+
 
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class ClimateFiveCasesTests(unittest.TestCase):

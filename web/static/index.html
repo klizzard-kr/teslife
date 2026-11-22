@@ -2043,7 +2043,7 @@
     }
     const APP_VERSION = "v1.17.1"; // display constant only
     const RELEASE_NOTES = [
-      { version: "1.17.1", features: [], fixes: ["공조: 핸들 열선 자동 막대가 차에서 오는 신호를 읽어요", "속도: 후진 구간은 0 아래 음수로 그려요", "공조: A/C 끔은 분홍, 수동 팬은 하늘색이고 범례는 기준별로 묶여요"] },
+      { version: "1.17.1", features: [], fixes: ["공조: 핸들 열선 자동 막대가 차에서 오는 신호를 읽어요", "속도: 후진 구간은 0 아래 음수로 그려요", "전력: 회생은 0 아래만 초록이고 범례로 구분해요", "공조: A/C 끔은 분홍, 수동 팬은 하늘색이고 범례는 기준별로 묶여요"] },
       { version: "1.17.0", features: ["공조: 실내·실외·설정 온도·팬을 그래프 하나에 모아요", "속도: 후진 구간을 구분해요", "충전: 같은 주소의 충전소를 한 줄로 묶고 사업자는 그 주소의 것만 보여요"], fixes: ["공기압: 이전 값이 없으면 현재 값만 보여요", "그래프: 범례가 선 모양과 배경색을 그대로 보여요", "그래프: 값 선이 눈금선보다 위에 있어요"] },
       { version: "1.16.12", features: [], fixes: ["공조: 그림 크기는 그대로 두고, 단계 숫자만 그림 오른쪽 바깥에 있어요", "충전 상세: 충전 전력 그래프를 누르면 시각과 전력이 나와요"] },
       { version: "1.16.11", features: ["충전: 목표까지 차면 충전구가 열려 있어도 끝난 충전으로 적어요"], fixes: ["공조: 자동·에어컨이 바뀌면 그 시각부터 선 모양과 색이 바뀌어요", "공조: 단계 숫자는 그림 오른쪽 바깥에 있어요"] },
@@ -2860,18 +2860,18 @@
       const drawn = [];
       segs.forEach(seg => (seg || []).forEach(pt => { if (pt.v != null) drawn.push(pt); }));
       const lineColor = opts.color || tone("chart-trip");
-      const backColor = "#e07a5f";
+      const belowColor = opts.below || (reverseSpans.length ? "#e07a5f" : "");
       segs.forEach(seg => {
         const part = decimate((seg || []).filter(pt => pt.v != null).map(pt => ({ts: pt.ts, v: signedV(pt.ts, pt.v)})), 240);
         if (part.length < 2) return;
         const base = y(0);
         const pieces = [];
-        const colorFor = (a, b) => (reverseSpans.length && (a.v < 0 || b.v < 0)) ? backColor : lineColor;
+        const colorFor = (a, b) => (belowColor && (a.v < 0 || b.v < 0)) ? belowColor : lineColor;
         for (let i = 1; i < part.length; i++) {
           const a = part[i - 1];
           const b = part[i];
           const hops = [];
-          if (reverseSpans.length && ((a.v < 0 && b.v > 0) || (a.v > 0 && b.v < 0))) {
+          if (belowColor && ((a.v < 0 && b.v > 0) || (a.v > 0 && b.v < 0))) {
             const ta = Date.parse(a.ts), tb = Date.parse(b.ts);
             const f = a.v / (a.v - b.v);
             hops.push({ts: new Date(ta + (tb - ta) * f).toISOString(), v: 0});
@@ -3029,7 +3029,18 @@
         const data = await fetchJson(apiPath("/api/trips/" + encodeURIComponent(startTs) + "/power"));
         const pts = (data.points || []).map(p => ({ ts: p.ts, v: p.kw }));
         const segs = (data.segments && data.segments.length) ? data.segments.map(seg => seg.map(p => ({ts: p.ts, v: p.kw}))) : [pts];
-        el.innerHTML = pts.length > 1 ? svgLine(pts, { unit: "kW (−는 회생)", h: 150, color: tone("chart-trip"), segments: segs, t0: data.start_ts, t1: data.end_ts }) : "<p class='muted'>기록 없음</p>";
+        const powerColor = tone("chart-trip");
+        const regenColor = tone("chart-charge");
+        const chart = pts.length > 1 ? svgLine(pts, { unit: "kW", h: 150, color: powerColor, below: regenColor, segments: segs, t0: data.start_ts, t1: data.end_ts }) : "";
+        const regen = pts.some(p => Number(p.v) < 0);
+        let legend = "";
+        if (chart) {
+          const area = Number(tone("chart-area")) || 0.15;
+          legend = "<p class='chart-legend'>" + legendSpan({line: powerColor, fill: powerColor, fillOpacity: area}, "전력");
+          if (regen) legend += legendSpan({line: regenColor, fill: regenColor, fillOpacity: area}, "회생");
+          legend += "</p>";
+        }
+        el.innerHTML = chart ? chart + legend : "<p class='muted'>기록 없음</p>";
         bindCrosshair(el, (ms) => {
           const v = seriesValueAt(parseSegs(segs.map(seg => seg.map(p => ({ts: p.ts, v: p.v})))), ms, "line");
           return v == null ? [] : [{label: "전력", text: fmtFixed(v, 2) + " kW"}];
