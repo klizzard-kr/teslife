@@ -586,7 +586,8 @@
     .chart-legend i.box { background: currentColor; }
     .chart-legend i.hollow { background: transparent; border: 1.5px solid currentColor; box-sizing: border-box; }
     .cross-tip .kv-row:last-child, .speed-tip .kv-row:last-child { border-bottom: 0; }
-    .clim-legend { align-items: center; row-gap: 6px; }
+    .clim-legend { align-items: center; row-gap: 6px; margin-left: calc(100% * 76 / 390); }
+    .bat-temp-legend { margin-left: calc(100% * 40 / 390); }
     .clim-legend > span { white-space: nowrap; }
     .clim-legend svg.leg { margin-right: 2px; }
     .clim-legend .leg-group {
@@ -3079,7 +3080,7 @@
     ];
     const INSIDE_COLOR = "#d5dee8";
     const OUTSIDE_COLOR = "#6ba8ef";
-    const SET_COLOR = "#9aa6b2";
+    const SET_COLOR = "#12c9a0";
     const FAN_COLOR = "#3d9ccc";
     const AUTO_COLOR = "#7c6ae0";
     const SEAT_ROW_COLOR = "#e39a4a";
@@ -3413,7 +3414,7 @@
         {label: "공조", color: FAN_COLOR, known: !!hvacKnown, spans: hvacPieces(model)},
         {label: "좌석", color: SEAT_ROW_COLOR, known: !!seatKnown, spans: seatRowPieces(model)},
         {label: "유리", color: GLASS_COLOR, known: !!glassKnown, spans: glassPieces(model)}
-      ];
+      ].filter(row => (row.spans || []).length);
     }
     function flatRuns(rows) {
       const out = [];
@@ -3481,15 +3482,11 @@
       if (model.inside.length) parts.push(legendSpan({line: INSIDE_COLOR}, "실내"));
       if (model.outside.length) parts.push(legendSpan({line: OUTSIDE_COLOR}, "실외"));
       if (model.setDriver.length || model.setPass.length) {
-        parts.push("<span class='leg-sep' aria-hidden='true'></span>");
+        if (parts.length) parts.push("<span class='leg-sep' aria-hidden='true'></span>");
         parts.push("<span class='leg-group'><span class='leg-name'>설정 온도</span>" +
           "<span class='leg-pair'>" + legendSwatch({line: SET_COLOR}) + "운전석</span>" +
           "<span class='leg-pair'>" + legendSwatch({line: SET_COLOR, dash: "4 3"}) + "조수석</span></span>");
       }
-      parts.push("<span class='leg-sep' aria-hidden='true'></span>");
-      parts.push("<span class='leg-group'><span class='leg-name'>공조</span>" +
-        "<span class='leg-pair'>" + legendSwatch({fill: AUTO_COLOR, fillOpacity: 1}) + "오토</span>" +
-        "<span class='leg-pair'>" + legendSwatch({fill: FAN_COLOR, fillOpacity: 1}) + "수동</span></span>");
       return parts.filter(Boolean).join("");
     }
     function climateRows(model, ms) {
@@ -3504,12 +3501,13 @@
       add("실외 온도", model.outside, "line");
       const driver = seriesValueAt(model.setDriver || [], ms, "step");
       const pass = seriesValueAt(model.setPass || [], ms, "step");
-      if (driver != null || pass != null) {
+      const split = driver != null && pass != null && Math.abs(pass - driver) > 0.05;
+      if (split) {
         rows.push({label: "설정 온도", text: ""});
-        if (driver != null) rows.push({label: "운전석", text: fmt(driver, 1) + "°C", indent: true});
-        if (pass != null && (driver == null || Math.abs(pass - driver) > 0.05)) {
-          rows.push({label: "조수석", text: fmt(pass, 1) + "°C", indent: true});
-        }
+        rows.push({label: "운전석", text: fmt(driver, 1) + "°C", indent: true});
+        rows.push({label: "조수석", text: fmt(pass, 1) + "°C", indent: true});
+      } else if (driver != null || pass != null) {
+        rows.push({label: "설정 온도", text: fmt(driver != null ? driver : pass, 1) + "°C"});
       }
       return rows;
     }
@@ -3545,7 +3543,6 @@
         key: "c" + ri,
         label: row.label,
         swatch: (row.spans[0] && row.spans[0].color) || row.color,
-        emptyText: row.known ? "" : "기록 없음",
         bars: row.spans.map(span => {
           const x = pct(span.t0);
           const w = Math.max(0, pct(span.t1) - x);
@@ -3558,6 +3555,7 @@
           return bar;
         })
       }));
+      if (!lanes.length) return "";
       const axis = "<span style='left:0'>" + fmtHm(model.t0) + "</span><span style='left:100%'>" + fmtHm(model.t1) + "</span>";
       return lanePlotHtml(lanes, axis, "");
     }
@@ -3601,18 +3599,22 @@
       const model = climateModel(data);
       if (!isFinite(model.t0) || !isFinite(model.t1) || !model.any) { slot.innerHTML = ""; return; }
       const runs = climateRuns(model);
+      const tempLegend = climateLegend(model);
+      const showBars = runs.length > 0;
       slot.innerHTML = "<div class='detail-block clim-block'>" +
         tempSummary([["평균 실내 온도", data.avg_inside], ["평균 실외 온도", data.avg_outside]]) +
         "<div class='curve-box clim-plot'></div>" +
-        "<div class='clim-band'>" + climateLaneHtml(model, runs) + "</div>" +
-        "<p class='chart-legend clim-legend'></p>" +
+        (tempLegend ? "<p class='chart-legend clim-legend clim-legend-temp'></p>" : "") +
+        (showBars ? "<div class='clim-band'>" + climateLaneHtml(model, runs) + "</div>" : "") +
         "<div class='tl-pop' hidden></div></div>";
       const block = slot.querySelector(".clim-block");
       const plot = block.querySelector(".clim-plot");
       plot.innerHTML = climateSvg(model);
-      const legend = block.querySelector(".clim-legend");
-      legend.innerHTML = climateLegend(model);
-      fitLegendDividers(legend);
+      const legend = block.querySelector(".clim-legend-temp");
+      if (legend) {
+        legend.innerHTML = tempLegend;
+        fitLegendDividers(legend);
+      }
       bindCrosshair(plot, (ms) => climateRows(model, ms));
       bindClimateSelect(block, runs);
     }
@@ -3691,7 +3693,7 @@
       if (seriesDrawn(model.max)) items.push("<span>" + lineKey("#ef8a6b") + "최고</span>");
       if (seriesDrawn(model.min)) items.push("<span>" + lineKey("#6ba8ef") + "최저</span>");
       if (model.heater && model.heater.length) items.push("<span>" + legendSwatch({fill: "#e39a4a", fillOpacity: 0.4}) + "배터리 히터</span>"); // opacity:0.4
-      const legend = items.length >= 2 ? "<p class='chart-legend'>" + items.join("") + "</p>" : "";
+      const legend = items.length >= 2 ? "<p class='chart-legend bat-temp-legend'>" + items.join("") + "</p>" : "";
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH) + legend;
     }
     function mountBattery(slot, battery, startTs, endTs) {
