@@ -229,6 +229,18 @@ def _number(value: Any) -> float | None:
     return None
 
 
+def _defrost_on(value: Any) -> bool:
+    """DefrostMode is Off, Normal, Max, or AutoDefog. Only Off stays dark."""
+    if _on_flag(value):
+        return True
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if text.endswith(("Off", "Unknown")) or text in ("Unknown", "0"):
+        return False
+    return text.endswith(("Normal", "AutoDefog")) or text in ("Normal", "AutoDefog")
+
+
 def _hvac_setpoint_on(value: Any) -> bool:
     """Set-temperature is drawn while HvacPower is On or Precondition."""
     if not isinstance(value, str):
@@ -239,15 +251,24 @@ def _hvac_setpoint_on(value: Any) -> bool:
     return text in ("On", "Precondition") or text.endswith(("On", "Precondition"))
 
 
+def _auto_on(value: Any) -> bool:
+    """HvacAutoMode is On or Override. Both mean the fan is in auto."""
+    if _on_flag(value):
+        return True
+    return isinstance(value, str) and value.strip().endswith("Override")
+
+
 def _flag_points(
     samples: list[tuple[datetime, Any]],
     start: datetime,
     prior: tuple[datetime, Any] | None,
+    is_on: Callable[[Any], bool] | None = None,
 ) -> list[Point]:
-    numeric = [(ts, 1.0 if _on_flag(value) else 0.0) for ts, value in samples if start <= ts]
+    check = is_on or _on_flag
+    numeric = [(ts, 1.0 if check(value) else 0.0) for ts, value in samples if start <= ts]
     prior_point = None
     if prior is not None and prior[0] < start:
-        prior_point = (prior[0], 1.0 if _on_flag(prior[1]) else 0.0)
+        prior_point = (prior[0], 1.0 if check(prior[1]) else 0.0)
     return with_start_value(numeric, start, prior_point)
 
 
@@ -347,7 +368,6 @@ SEAT_KEYS = (
     ("seat_left", "SeatHeaterLeft"),
     ("seat_right", "SeatHeaterRight"),
     ("seat_rear_left", "SeatHeaterRearLeft"),
-    ("seat_rear_center", "SeatHeaterRearCenter"),
     ("seat_rear_right", "SeatHeaterRearRight"),
 )
 FLAG_BARS = (
@@ -356,7 +376,7 @@ FLAG_BARS = (
     ("wiper_heat", "WiperHeatEnabled"),
     ("auto_seat_left", "AutoSeatClimateLeft"),
     ("auto_seat_right", "AutoSeatClimateRight"),
-    ("wheel_auto", "SteeringWheelHeatAuto"),
+    ("wheel_auto", "HvacSteeringWheelHeatAuto"),
     ("rear_hvac", "RearDisplayHvacEnabled"),
 )
 
@@ -373,6 +393,14 @@ def _cool_level(value: Any) -> float | None:
     if number is None:
         return None
     return abs(number) if number < 0 else 0.0
+
+
+def _vent_level(value: Any) -> float | None:
+    """Positive seat-cooling reports. Zero is off. Unknown values are skipped."""
+    number = _number(value)
+    if number is None:
+        return None
+    return number if number > 0 else 0.0
 
 
 def build_climate(
@@ -437,12 +465,26 @@ def build_climate(
             heat[key] = heated
         if cooled:
             cool[key] = cooled
+    # Optional per-seat vent fields. Negative SeatHeater* already fills cool.
+    # These names are read only when a stored signal uses them. Telemetry config is unchanged.
+    for key, names in (
+        ("seat_left", ("ClimateSeatCoolingFrontLeft", "HvacSeatCoolingLeft", "SeatCoolingLeft")),
+        ("seat_right", ("ClimateSeatCoolingFrontRight", "HvacSeatCoolingRight", "SeatCoolingRight")),
+    ):
+        if key in cool:
+            continue
+        for name in names:
+            vent = level_series(name, _vent_level)
+            if vent:
+                cool[key] = vent
+                break
     wheel = level_series("HvacSteeringWheelHeatLevel", _heat_level)
     bars: dict[str, list[tuple[datetime, datetime, float]]] = {}
     for key, name in FLAG_BARS:
         spans = level_spans(
             samples(name), start, end, prior(name),
-            lambda value: 1.0 if _on_flag(value) else 0.0,
+            (lambda value: 1.0 if _defrost_on(value) else 0.0) if key == "defrost"
+            else (lambda value: 1.0 if _on_flag(value) else 0.0),
         )
         if spans:
             bars[key] = spans
@@ -455,7 +497,7 @@ def build_climate(
         "heat": heat,
         "cool": cool,
         "wheel": wheel,
-        "auto": _flag_points(samples("HvacAutoMode"), start, prior("HvacAutoMode")),
+        "auto": _flag_points(samples("HvacAutoMode"), start, prior("HvacAutoMode"), _auto_on),
         "ac": _flag_points(samples("HvacACEnabled"), start, prior("HvacACEnabled")),
         "bars": bars,
         "avg_inside": flat_average(inside, end),

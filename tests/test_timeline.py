@@ -218,7 +218,10 @@ class TimelineUiTests(unittest.TestCase):
         self.assertNotIn('position = "fixed"', fn)
         self.assertNotIn("document.body.appendChild", fn)
         self.assertIn('getElementById("battery-card")', fn)
-        self.assertIn('pop.style.position = ""', fn)
+        self.assertIn("placePop(", fn)
+        placed = self.html[self.html.index("function placePop("):self.html.index("function showTlPop(")]
+        self.assertIn('pop.style.position = ""', placed)
+        self.assertNotIn('position = "fixed"', placed)
         for kind in (".cross-tip {", ".speed-tip {"):
             block = self.html[self.html.index(kind):self.html.index(kind) + 80]
             self.assertIn("position: absolute", block)

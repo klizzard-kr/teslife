@@ -41,7 +41,6 @@ SPEED_INTERVAL_S = 1
 CLIMATE_FIELDS = {
     "AutoSeatClimateLeft": {"interval_seconds": 10},
     "AutoSeatClimateRight": {"interval_seconds": 10},
-    "SteeringWheelHeatAuto": {"interval_seconds": 10},
     "RearDisplayHvacEnabled": {"interval_seconds": 10},
     "SeatHeaterRearLeft": {"interval_seconds": 10},
     "SeatHeaterRearRight": {"interval_seconds": 10},

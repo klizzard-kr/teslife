@@ -269,10 +269,12 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.17.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.17.1"', HTML)
         self.assertNotIn("function climateTabs(", HTML)
         self.assertNotIn("<strong>공조</strong>", _fn("mountClimate"))
         self.assertIn("climateSvg(model)", _fn("mountClimate"))
+        self.assertIn("climateLaneHtml(model, runs)", _fn("mountClimate"))
+        self.assertIn("lanePlotHtml(", _fn("climateLaneHtml"))
         i18n = (ROOT / "web" / "static" / "i18n.js").read_text(encoding="utf-8")
         self.assertIn('"온도": "Temp"', i18n)
         self.assertIn('"시트·핸들": "Seats and wheel"', i18n)
@@ -281,25 +283,55 @@ class PageGraphTests(unittest.TestCase):
         self.assertIn('"성에 제거": "Defrost"', i18n)
         fan = _fn("fanPieces")
         self.assertIn("flagAt(model.auto", fan)
-        self.assertIn("FAN_COLOR", fan)
+        self.assertIn("fanBlue(level)", fan)
         legend = _fn("climateLegend")
-        self.assertIn("A/C 켬", legend)
-        self.assertIn("A/C 끔", legend)
-        self.assertIn("legendSpan({line: FAN_COLOR}", legend)
-        rows = _fn("climateRows")
-        self.assertIn('label: "바람 세기"', rows)
-        self.assertNotIn('"바람 세기 " + levelWord', rows)
-        self.assertIn("시트·열선", legend)
+        self.assertNotIn("켜짐", legend)
+        self.assertNotIn("꺼짐", legend)
+        self.assertNotIn(">A/C<", legend)
+        self.assertNotIn("오토", legend)
+        self.assertNotIn("수동", legend)
+        self.assertNotIn("function climateBarLegend(", HTML)
+        mount = _fn("mountClimate")
+        self.assertLess(mount.index("clim-legend-temp"), mount.index("clim-band"))
+        self.assertNotIn("clim-legend-bars", mount)
+        hvac = _fn("hvacPieces")
+        self.assertIn("AUTO_COLOR", hvac)
+        self.assertIn("FAN_COLOR", hvac)
+        self.assertIn("SET_COLOR", legend)
+        self.assertIn("설정 온도", legend)
+        self.assertIn("운전석", legend)
+        self.assertIn("조수석", legend)
+        self.assertNotIn("(실선)", legend)
+        self.assertNotIn("(점선)", legend)
+        self.assertNotIn("켬(초록)", legend)
+        self.assertNotIn("팬 단계(하늘색", legend)
+        self.assertNotIn("운전석 · A/C", legend)
+        self.assertNotIn("legendSpan({fill: FAN_COLOR", legend)
+        self.assertNotIn("시트 열선", legend)
+        self.assertNotIn("핸들 열선", legend)
+        self.assertIn("leg-sep", legend)
+        clim_css = HTML[HTML.index(".clim-legend {") : HTML.index(".clim-legend > span")]
+        self.assertIn("margin-left: calc(100% * 76 / 390)", clim_css)
+        self.assertIn("bat-temp-legend", _fn("svgBatteryTemp"))
+        self.assertIn(".bat-temp-legend { margin-left: calc(100% * 40 / 390);", HTML)
+        self.assertIn("fitLegendDividers", _fn("mountClimate"))
+        self.assertNotIn('label: "팬"', _fn("climateRows"))
+        tip = _fn("climateTip")
+        self.assertIn("popCard(", tip)
+        self.assertIn("시간", tip)
+        self.assertIn("bindClimateSelect(", _fn("mountClimate"))
+        self.assertIn("bindCrosshair(plot", _fn("mountClimate"))
+        self.assertIn("climateRows(model, ms)", _fn("mountClimate"))
+        self.assertNotIn("시트·열선", legend)
+        self.assertNotIn("<em>", legend)
         svg = _fn("climateSvg")
-        self.assertIn("const W = 390, L = 40, R = 16", svg)
+        self.assertIn("const W = 390, L = 76, R = 8", svg)
         self.assertNotIn("R = 44", svg)
         self.assertNotIn("L = 104", svg)
-        self.assertIn("yTickText(L + innerW + 4, y, v, 11", svg)
+        self.assertNotIn("yTickText(L + innerW + 4", svg)
         self.assertNotIn("L + innerW - 4", svg)
-        self.assertIn("return [0, 2, 4, 6, 8, 10]", _fn("levelTicks"))
-        self.assertIn("return FAN_AXIS", _fn("fanAxisMax"))
-        self.assertIn("return HEAT_AXIS", _fn("heatAxisMax"))
-        self.assertIn("barStrip + 36", svg)
+        self.assertNotIn("barStrip", svg)
+        self.assertIn("class='clim-range'", svg)
         self.assertNotIn("polygon", svg)
         self.assertIn("polyline fill='none'", svg)
         self.assertNotIn("cross-xlabel", HTML)
@@ -315,7 +347,7 @@ class PageGraphTests(unittest.TestCase):
         self.assertNotIn("laneY", batt)
         self.assertIn("opacity:0.4", batt)
         self.assertNotIn('oneRow("히터"', HTML)
-        self.assertIn("시트·열선", HTML)
+        self.assertIn("운전석 열선", HTML)
         self.assertIn("function seriesValueAt(", HTML)
         self.assertIn("touch-action: pan-y", HTML)
         self.assertIn("#ef8a6b", HTML)
@@ -324,8 +356,9 @@ class PageGraphTests(unittest.TestCase):
 
     def test_fan_tab_opens_for_auto_or_ac_without_fan_speed(self) -> None:
         src = (
-            "const SEATS = []; const CLIM_BARS = []; const FAN_COLOR = '#c9a24a';\n"
-            + _fn("flagAt") + _fn("flagCuts") + _fn("coverWindow") + _fn("fanPieces")
+            "const SEATS = []; const CLIM_BARS = []; const FAN_COLOR = '#3d9ccc';\n"
+            + _fn("flagAt") + _fn("flagCuts") + _fn("coverWindow")
+            + _fn("fanBlue") + _fn("mergeSpan") + _fn("onSpans") + _fn("fanPieces")
             + "const t0 = 0, t1 = 60000;\n"
             + "const base = {t0:t0, t1:t1, fan:[[{t:t0,v:0},{t:t1,v:0}]], auto:[], ac:[]};\n"
             + "const n = (extra) => fanPieces(Object.assign({}, base, extra)).length;\n"
@@ -339,13 +372,14 @@ class PageGraphTests(unittest.TestCase):
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(got["off"], 0)
         self.assertGreater(got["fan"], 0)
-        self.assertEqual(got["auto"], 0)
+        self.assertGreater(got["auto"], 0)
         self.assertGreater(got["manual"], 0)
 
     def test_fan_line_follows_auto_and_ac_changes(self) -> None:
         src = (
-            "const FAN_OFF = '#7d8794'; const FAN_ON = '#12c9a0'; const FAN_COLOR = '#c9a24a';\n"
-            + _fn("flagAt") + _fn("flagCuts") + _fn("coverWindow") + _fn("fanPieces")
+            "const FAN_COLOR = '#3d9ccc';\n"
+            + _fn("flagAt") + _fn("flagCuts") + _fn("coverWindow")
+            + _fn("fanBlue") + _fn("mergeSpan") + _fn("onSpans") + _fn("fanPieces")
             + "const t0 = Date.parse('2026-11-21T08:00:00Z');\n"
             + "const mid = t0 + 30*60*1000;\n"
             + "const acAt = t0 + 50*60*1000;\n"
@@ -361,12 +395,11 @@ class PageGraphTests(unittest.TestCase):
             + "    lineAuto:piece.dash === '', tipAuto:auto,\n"
             + "    lineAc:piece.color === FAN_ON, tipAc:ac};\n"
             + "}\n"
-            + "process.stdout.write(JSON.stringify({n:pieces.length, colors:pieces.map(p => p.color), dashes:pieces.map(p => p.dash)}));"
+            + "process.stdout.write(JSON.stringify({n:pieces.length, kinds:pieces.map(p => p.kind), levels:pieces.map(p => p.level)}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(got["n"], 1)
-        self.assertEqual(got["colors"], ["#c9a24a"])
-        self.assertEqual(got["dashes"], [""])
+        self.assertEqual(got["kinds"], ["fan", "auto"])
+        self.assertEqual(got["levels"], [1, None])
 
     def test_level_labels_stay_inside_the_shared_right_edge(self) -> None:
         start = HTML.index("    const SEATS = [")
@@ -431,18 +464,11 @@ class PageGraphTests(unittest.TestCase):
             + "}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(got["plot"], [334, 334, 334, 334])
-        self.assertEqual(got["fan"], ["0", "2", "4", "6", "8", "10"])
-        self.assertEqual(got["seats"], ["0", "2", "4", "6", "8", "10"])
-        self.assertEqual(got["cabin"], ["0", "2", "4", "6", "8", "10"])
-        right = 40 + got["plot"][1]
-        self.assertEqual(right, 374)
-        for x in got["fanX"] + got["seatX"]:
-            self.assertGreater(x, right)
-            self.assertLess(x, 390)
-        self.assertEqual(got["fanY"][0], got["edges"][1]["top"] + got["edges"][1]["ih"])
-        self.assertEqual(got["fanY"][-1], got["edges"][1]["top"])
-        self.assertGreater(got["high"], 0)
+        self.assertEqual(got["plot"], [306, 306, 306, 306])
+        self.assertEqual(got["fan"], [])
+        self.assertEqual(got["seats"], [])
+        self.assertEqual(got["cabin"], [])
+        self.assertEqual(76 + got["plot"][1], 382)
         self.assertEqual(got["deg"], ["20", "22.5", "25"])
         self.assertEqual(got["vlines"], [2, 2, 2])
         for edge in got["edges"]:
@@ -471,7 +497,7 @@ class PageGraphTests(unittest.TestCase):
             "function tone(){ return '#8aa0b5'; }\n"
             + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
             + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("decimate") + _fn("coverWindow")
-            + _fn("yOn") + _fn("crossLine") + _fn("chartSvg") + _fn("svgBatteryTemp")
+            + _fn("yOn") + _fn("crossLine") + _fn("chartSvg") + _fn("legendSwatch") + _fn("svgBatteryTemp")
             + _fn("svgLine") + _fn("svgChargeBand")
             + "function pack(lo, hi){ const a = tempAxis(lo, hi);"
             + " return {min:a.min, max:a.max, ticks:a.ticks, labels:a.ticks.map(v => fmt(v, 1))}; }\n"
@@ -534,7 +560,7 @@ class PageGraphTests(unittest.TestCase):
             "function tone(){ return '#8aa0b5'; }\n"
             + _fn("fmtTrim") + _fn("fmt") + _fn("fmtHm") + _fn("niceTicks") + _fn("tempAxis")
             + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("decimate")
-            + _fn("coverWindow") + _fn("yOn") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg")
+            + _fn("coverWindow") + _fn("yOn") + _fn("flagAt") + _fn("crossLine") + _fn("chartSvg") + _fn("legendSwatch")
             + _fn("svgLine") + _fn("svgChargeBand") + _fn("svgBatteryTemp")
             + chunk
             + "function hlines(html){\n"
@@ -614,11 +640,11 @@ class PageGraphTests(unittest.TestCase):
             self.assertTrue(got[key], key)
             self.assertTrue(got["center"][key], key)
             self.assertTrue(got["end"][key], key)
-        self.assertTrue(got["center"]["fanLevels"])
-        self.assertTrue(got["center"]["seatLevels"])
-        self.assertEqual(got["edges"]["fan"], got["edges"]["batt"])
-        self.assertEqual(got["edges"]["fan"], got["edges"]["power"])
-        self.assertEqual(got["edges"]["fan"], {"L": 40, "plot": 334, "right": 374})
+        self.assertFalse(got["center"]["fanLevels"])
+        self.assertFalse(got["center"]["seatLevels"])
+        self.assertEqual(got["edges"]["batt"], got["edges"]["power"])
+        self.assertEqual(got["edges"]["batt"], {"L": 40, "plot": 334, "right": 374})
+        self.assertEqual(got["edges"]["fan"], {"L": 76, "plot": 306, "right": 382})
         self.assertNotIn("T + 9", _fn("climateSvg"))
         self.assertNotIn("innerH - 2", _fn("svgBatteryTemp"))
 

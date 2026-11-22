@@ -27,7 +27,7 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.17.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.17.1"', HTML)
         self.assertLess(CHANGELOG.index("## v1.16.12"), CHANGELOG.index("## v1.16.11"))
         self.assertLess(CHANGELOG.index("## v1.16.11"), CHANGELOG.index("## v1.16.10"))
         self.assertLess(CHANGELOG.index("## v1.16.10"), CHANGELOG.index("## v1.16.9"))
@@ -164,7 +164,7 @@ class ChargeChartTests(unittest.TestCase):
             " return s.replace(/0+$/, '').replace(/\\.$/, ''); }\n"
             "function fmtHm(){ return '00:00'; }\n"
             "function tone(name){ return name === 'chart-axis' ? '#8aa0b5' : '#3dd68c'; }\n"
-            + _fn("decimate") + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("svgChargeBand")
+            + _fn("decimate") + _fn("timeMarks") + _fn("yTickLine") + _fn("yTickText") + _fn("axisBaselines") + _fn("crossLine") + _fn("chartSvg") + _fn("legendSwatch") + _fn("svgChargeBand")
             + body
         )
 
@@ -183,7 +183,44 @@ class ChargeChartTests(unittest.TestCase):
         self.assertNotIn("fill-opacity=\"0.18\"", got["html"])
         self.assertIn("<polygon", got["html"])
         self.assertIn('fill-opacity="0.15"', got["html"])
-        self.assertIn("충전 전력", got["html"])
+        self.assertNotIn("chart-legend", got["html"])
+        self.assertNotIn("충전 전력", got["html"])
+
+    def test_area_swatch_line_sits_on_the_top_edge(self) -> None:
+        src = (
+            _fn("legendSwatch")
+            + "const area = legendSwatch({line:'#3dd68c', fill:'#3dd68c', fillOpacity:0.15});\n"
+            + "const line = legendSwatch({line:'#9aa6b2', dash:'4 3'});\n"
+            + "const fill = legendSwatch({fill:'#7c6ae0', fillOpacity:1});\n"
+            + "process.stdout.write(JSON.stringify({area:area, line:line, fill:fill}));"
+        )
+        got = _node(src)
+        self.assertIn("width='8'", got["area"])
+        self.assertIn("height='8'", got["area"])
+        self.assertIn("y1='2'", got["area"])
+        self.assertIn("y2='2'", got["area"])
+        self.assertNotIn("y1='5'", got["area"])
+        self.assertIn("y1='5'", got["line"])
+        self.assertIn("stroke-dasharray='4 3'", got["line"])
+        self.assertNotIn("<line", got["fill"])
+        charge = _fn("svgChargeBand")
+        self.assertNotIn("chart-legend", charge)
+        self.assertNotIn("legendSwatch(", charge)
+        battery = _fn("svgBatteryTemp")
+        self.assertIn("items.length >= 2", battery)
+        speed = _fn("loadTripSpeed")
+        power = _fn("loadTripPower")
+        self.assertIn('unit: "km/h (-는 후진)"', speed)
+        self.assertNotIn("chart-legend", speed)
+        self.assertNotIn("legendSpan(", speed)
+        self.assertIn('unit: "kW (-는 회생)"', power)
+        self.assertNotIn("chart-legend", power)
+        self.assertNotIn("legendSpan(", power)
+        self.assertIn("below: regenColor", power)
+        battery = _fn("svgBatteryTemp")
+        self.assertIn("legendSwatch({line: color})", battery)
+        self.assertIn("legendSwatch({fill: \"#e39a4a\", fillOpacity: 0.4})", battery)
+        self.assertIn("mapBits.length >= 2", HTML)
 
     def test_power_chart_has_no_temperature_band(self) -> None:
         src = self._src(
@@ -197,7 +234,7 @@ class ChargeChartTests(unittest.TestCase):
         self.assertIn("<polygon", got["html"])
         self.assertIn('fill-opacity="0.15"', got["html"])
         self.assertIn(">11<", got["html"])
-        self.assertIn("충전 전력", got["html"])
+        self.assertNotIn("chart-legend", got["html"])
 
 
 class HourBoundaryTests(unittest.TestCase):
