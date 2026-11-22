@@ -191,10 +191,11 @@ class ReverseSpeedTests(unittest.TestCase):
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class ClimateFiveCasesTests(unittest.TestCase):
     def test_five_hvac_cases_match_the_confirmed_lines(self) -> None:
-        self.assertIn('const SET_OFF = "#c2749e"', HTML)
+        self.assertIn('const SET_COLOR = "#9aa6b2"', HTML)
         self.assertIn('const FAN_COLOR = "#3d9ccc"', HTML)
         self.assertNotIn("운전석 · A/C", HTML)
-        self.assertNotIn('const SET_OFF = "#7d8794"', HTML)
+        self.assertNotIn("const SET_ON", HTML)
+        self.assertNotIn("const SET_OFF", HTML)
         start = HTML.index("    const SEATS = [")
         chunk = HTML[start:HTML.index("    function climateRows")]
         src = (
@@ -247,8 +248,7 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "process.stdout.write(JSON.stringify(out));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        inside, outside = "#d5dee8", "#6ba8ef"
-        green, pink = "#12c9a0", "#c2749e"
+        inside, outside, gray = "#d5dee8", "#6ba8ef", "#9aa6b2"
 
         def colors(name: str) -> set[str]:
             return set(got[name]["strokes"])
@@ -259,18 +259,19 @@ class ClimateFiveCasesTests(unittest.TestCase):
         self.assertNotIn("설정 온도", got["off"]["legend"])
         self.assertNotIn(">팬<", got["off"]["legend"])
 
-        self.assertEqual(colors("autoOn"), {inside, outside, green})
-        self.assertNotIn(pink, colors("autoOn"))
+        self.assertEqual(colors("autoOn"), {inside, outside, gray})
+        self.assertNotIn("#12c9a0", colors("autoOn"))
+        self.assertNotIn("#c2749e", colors("autoOn"))
         self.assertFalse(got["autoOn"]["hatch"])
         self.assertEqual(got["autoOn"]["labels"], [])
         self.assertFalse(got["autoOn"]["rightAxis"])
         self.assertIn("설정 온도", got["autoOn"]["legend"])
         self.assertIn("운전석", got["autoOn"]["legend"])
         self.assertIn("조수석", got["autoOn"]["legend"])
-        self.assertIn("켜짐", got["autoOn"]["legend"])
-        self.assertIn("꺼짐", got["autoOn"]["legend"])
-        self.assertIn("#12c9a0", got["autoOn"]["legend"])
-        self.assertIn("#c2749e", got["autoOn"]["legend"])
+        self.assertNotIn("켜짐", got["autoOn"]["legend"])
+        self.assertNotIn("꺼짐", got["autoOn"]["legend"])
+        self.assertNotIn(">A/C<", got["autoOn"]["legend"])
+        self.assertIn("#9aa6b2", got["autoOn"]["legend"])
         self.assertNotIn("(실선)", got["autoOn"]["legend"])
         self.assertNotIn(">팬<", got["autoOn"]["legend"])
         self.assertNotIn("시트 열선", got["autoOn"]["legend"])
@@ -280,8 +281,9 @@ class ClimateFiveCasesTests(unittest.TestCase):
         self.assertIn("수동", got["autoOn"]["legend"])
         self.assertFalse(got["autoOn"]["dashed"])
 
-        self.assertEqual(colors("autoOff"), {inside, outside, pink})
-        self.assertNotIn(green, colors("autoOff"))
+        self.assertEqual(colors("autoOff"), {inside, outside, gray})
+        self.assertNotIn("#12c9a0", colors("autoOff"))
+        self.assertNotIn("#c2749e", colors("autoOff"))
         self.assertEqual(got["autoOff"]["labels"], [])
 
         for name in ("manOn", "manOff"):
@@ -295,11 +297,11 @@ class ClimateFiveCasesTests(unittest.TestCase):
             self.assertIn("실내", got[name]["legend"])
             self.assertIn("실외", got[name]["legend"])
             self.assertFalse(got[name]["filled"])
-        self.assertIn(green, colors("manOn"))
-        self.assertNotIn(pink, colors("manOn"))
-        self.assertIn(pink, colors("manOff"))
-        self.assertNotIn(green, colors("manOff"))
-        self.assertIn(green, got["pass"]["dashed"])
+        self.assertEqual(colors("manOn"), {inside, outside, gray})
+        self.assertEqual(colors("manOff"), {inside, outside, gray})
+        self.assertNotIn("#12c9a0", colors("manOn"))
+        self.assertNotIn("#c2749e", colors("manOff"))
+        self.assertEqual(got["pass"]["dashed"], [gray])
         self.assertNotIn("운전석 · A/C", got["pass"]["legend"])
 
     def test_seat_row_combines_driver_and_passenger(self) -> None:
@@ -437,8 +439,8 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "const sub = (rows, label) => rows.find(r => r.label === label) || {};\n"
             + "process.stdout.write(JSON.stringify({early:early, late:late,\n"
             + "  eSet:text(early,'설정 온도'), eDriver:text(early,'운전석'), ePass:text(early,'조수석'),\n"
-            + "  eIndent:!!sub(early,'운전석').indent, eAc:text(early,'A/C'),\n"
-            + "  lSet:text(late,'설정 온도'), lAc:text(late,'A/C')}));"
+            + "  eIndent:!!sub(early,'운전석').indent,\n"
+            + "  lSet:text(late,'설정 온도')}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(got["eSet"], "")
@@ -446,9 +448,8 @@ class ClimateFiveCasesTests(unittest.TestCase):
         self.assertEqual(got["ePass"], "19.5°C")
         self.assertTrue(got["eIndent"])
         self.assertNotIn("팬", "".join(r["label"] for r in got["early"]))
-        self.assertEqual(got["eAc"], "켜짐")
-        self.assertEqual([r["label"] for r in got["early"]], ["실내 온도", "실외 온도", "설정 온도", "운전석", "조수석", "A/C"])
+        self.assertEqual([r["label"] for r in got["early"]], ["실내 온도", "실외 온도", "설정 온도", "운전석", "조수석"])
         self.assertEqual([r["label"] for r in got["late"]], ["실내 온도", "실외 온도", "설정 온도", "운전석", "조수석"])
+        self.assertNotIn("A/C", [r["label"] for r in got["early"]])
         self.assertNotIn("A/C", [r["label"] for r in got["late"]])
         self.assertEqual(got["lSet"], "")
-        self.assertEqual(got["lAc"], "")

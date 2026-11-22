@@ -3096,8 +3096,7 @@
     ];
     const INSIDE_COLOR = "#d5dee8";
     const OUTSIDE_COLOR = "#6ba8ef";
-    const SET_ON = "#12c9a0";
-    const SET_OFF = "#c2749e";
+    const SET_COLOR = "#9aa6b2";
     const FAN_COLOR = "#3d9ccc";
     const AUTO_COLOR = "#7c6ae0";
     const SEAT_ROW_COLOR = "#e39a4a";
@@ -3232,19 +3231,8 @@
         for (let i = 0; i < drawn.length - 1; i++) {
           const a = drawn[i];
           const b = drawn[i + 1];
-          const cuts = [a.t].concat(flagCuts(model.ac, a.t, b.t), [b.t]);
-          cuts.sort((x, y) => x - y);
-          const marks = [];
-          cuts.forEach(t => { if (!marks.length || t - marks[marks.length - 1] > 0.5) marks.push(t); });
-          for (let k = 0; k < marks.length - 1; k++) {
-            const t0 = marks[k];
-            const t1 = marks[k + 1];
-            const ac = flagAt(model.ac, t0);
-            const left = {t: t0, v: a.v};
-            const mid = {t: t1, v: a.v};
-            const right = {t: t1, v: k === marks.length - 2 ? b.v : a.v};
-            out.push({color: ac ? SET_ON : SET_OFF, dash: dash, step: [left, mid, right]});
-          }
+          if (!(b.t > a.t)) continue;
+          out.push({color: SET_COLOR, dash: dash, step: [a, {t: b.t, v: a.v}, b]});
         }
       });
       return out;
@@ -3512,12 +3500,8 @@
       if (model.setDriver.length || model.setPass.length) {
         parts.push("<span class='leg-sep' aria-hidden='true'></span>");
         parts.push("<span class='leg-group'><span class='leg-name'>설정 온도</span>" +
-          "<span class='leg-pair'>" + legendSwatch({line: "#9aa6b2"}) + "운전석</span>" +
-          "<span class='leg-pair'>" + legendSwatch({line: "#9aa6b2", dash: "4 3"}) + "조수석</span></span>");
-        parts.push("<span class='leg-sep' aria-hidden='true'></span>");
-        parts.push("<span class='leg-group'><span class='leg-name'>A/C</span>" +
-          "<span class='leg-pair'>" + legendSwatch({line: SET_ON}) + "켜짐</span>" +
-          "<span class='leg-pair'>" + legendSwatch({line: SET_OFF}) + "꺼짐</span></span>");
+          "<span class='leg-pair'>" + legendSwatch({line: SET_COLOR}) + "운전석</span>" +
+          "<span class='leg-pair'>" + legendSwatch({line: SET_COLOR, dash: "4 3"}) + "조수석</span></span>");
       }
       parts.push("<span class='leg-sep' aria-hidden='true'></span>");
       parts.push("<span class='leg-group'><span class='leg-name'>공조</span>" +
@@ -3544,7 +3528,6 @@
           rows.push({label: "조수석", text: fmt(pass, 1) + "°C", indent: true});
         }
       }
-      if (flagAt(model.ac, ms)) rows.push({label: "A/C", text: "켜짐"});
       return rows;
     }
     function climDur(ms) {
