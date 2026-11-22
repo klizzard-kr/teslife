@@ -175,7 +175,7 @@ class ReverseSpeedTests(unittest.TestCase):
 class ClimateFiveCasesTests(unittest.TestCase):
     def test_five_hvac_cases_match_the_confirmed_lines(self) -> None:
         self.assertIn('const SET_OFF = "#c2749e"', HTML)
-        self.assertIn('const FAN_COLOR = "#5ec8f0"', HTML)
+        self.assertIn('const FAN_COLOR = "#3d9ccc"', HTML)
         self.assertNotIn("운전석 · A/C", HTML)
         self.assertNotIn('const SET_OFF = "#7d8794"', HTML)
         start = HTML.index("    const SEATS = [")
@@ -215,7 +215,12 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "  const ticks = [];\n"
             + "  const tr = /text-anchor=\"start\" dominant-baseline=\"middle\">([^<]+)/g;\n"
             + "  while ((hit = tr.exec(html))) ticks.push(hit[1]);\n"
-            + "  return {strokes: strokes, dashed: dashed, ticks: ticks, legend: legend,\n"
+            + "  const labels = [];\n"
+            + "  const lr = /text-anchor='middle'[^>]*>([^<]+)/g;\n"
+            + "  while ((hit = lr.exec(html))) labels.push(hit[1]);\n"
+            + "  return {strokes: strokes, dashed: dashed, ticks: ticks, legend: legend, labels: labels,\n"
+            + "    hatch: html.indexOf('url(#climHatch)') >= 0,\n"
+            + "    rightAxis: html.indexOf('text-anchor=\"start\" dominant-baseline') >= 0,\n"
             + "    filled: html.indexOf(\"<polygon\") >= 0 || html.indexOf(\"fill='#12c9a0'\") >= 0 || html.indexOf(\"fill='#c2749e'\") >= 0};\n"
             + "}\n"
             + "const out = {}; Object.keys(cases).forEach(k => out[k] = view(cases[k]));\n"
@@ -223,33 +228,38 @@ class ClimateFiveCasesTests(unittest.TestCase):
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
         inside, outside = "#d5dee8", "#6ba8ef"
-        green, pink, sky = "#12c9a0", "#c2749e", "#5ec8f0"
+        green, pink = "#12c9a0", "#c2749e"
 
         def colors(name: str) -> set[str]:
             return set(got[name]["strokes"])
 
         self.assertEqual(colors("off"), {inside, outside})
-        self.assertEqual(got["off"]["ticks"], [])
+        self.assertEqual(got["off"]["labels"], [])
+        self.assertFalse(got["off"]["rightAxis"])
         self.assertNotIn("설정 온도", got["off"]["legend"])
-        self.assertNotIn("팬 단계", got["off"]["legend"])
+        self.assertNotIn(">팬<", got["off"]["legend"])
 
         self.assertEqual(colors("autoOn"), {inside, outside, green})
         self.assertNotIn(pink, colors("autoOn"))
-        self.assertNotIn(sky, colors("autoOn"))
-        self.assertEqual(got["autoOn"]["ticks"], [])
+        self.assertTrue(got["autoOn"]["hatch"])
+        self.assertIn("오토", got["autoOn"]["labels"])
+        self.assertNotIn("6", got["autoOn"]["labels"])
+        self.assertFalse(got["autoOn"]["rightAxis"])
         self.assertIn("설정 온도: 운전석(실선)/조수석(점선)", got["autoOn"]["legend"])
         self.assertIn("A/C: 켬(초록)/끔(분홍)", got["autoOn"]["legend"])
-        self.assertNotIn("팬 단계", got["autoOn"]["legend"])
+        self.assertIn("오토", got["autoOn"]["legend"])
         self.assertFalse(got["autoOn"]["dashed"])
 
         self.assertEqual(colors("autoOff"), {inside, outside, pink})
         self.assertNotIn(green, colors("autoOff"))
-        self.assertNotIn(sky, colors("autoOff"))
+        self.assertIn("오토", got["autoOff"]["labels"])
 
         for name in ("manOn", "manOff"):
-            self.assertIn(sky, colors(name))
-            self.assertEqual(got[name]["ticks"], ["0", "2", "4", "6", "8", "10"])
-            self.assertIn("팬 단계(하늘색, 수동일 때만)", got[name]["legend"])
+            self.assertEqual(got[name]["labels"], ["6"])
+            self.assertFalse(got[name]["hatch"])
+            self.assertFalse(got[name]["rightAxis"])
+            self.assertIn(">팬<", got[name]["legend"])
+            self.assertNotIn("오토", got[name]["legend"])
             self.assertIn("실내", got[name]["legend"])
             self.assertIn("실외", got[name]["legend"])
             self.assertFalse(got[name]["filled"])
