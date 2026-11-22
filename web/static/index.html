@@ -2041,8 +2041,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.17.0"; // display constant only
+    const APP_VERSION = "v1.17.1"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.17.1", features: [], fixes: ["공조: 핸들 열선 자동 막대가 차에서 오는 신호를 읽어요", "속도: 후진 구간은 0 아래 음수로 그려요", "공조: A/C 끔은 분홍, 수동 팬은 하늘색이고 범례는 기준별로 묶여요"] },
       { version: "1.17.0", features: ["공조: 실내·실외·설정 온도·팬을 그래프 하나에 모아요", "속도: 후진 구간을 구분해요", "충전: 같은 주소의 충전소를 한 줄로 묶고 사업자는 그 주소의 것만 보여요"], fixes: ["공기압: 이전 값이 없으면 현재 값만 보여요", "그래프: 범례가 선 모양과 배경색을 그대로 보여요", "그래프: 값 선이 눈금선보다 위에 있어요"] },
       { version: "1.16.12", features: [], fixes: ["공조: 그림 크기는 그대로 두고, 단계 숫자만 그림 오른쪽 바깥에 있어요", "충전 상세: 충전 전력 그래프를 누르면 시각과 전력이 나와요"] },
       { version: "1.16.11", features: ["충전: 목표까지 차면 충전구가 열려 있어도 끝난 충전으로 적어요"], fixes: ["공조: 자동·에어컨이 바뀌면 그 시각부터 선 모양과 색이 바뀌어요", "공조: 단계 숫자는 그림 오른쪽 바깥에 있어요"] },
@@ -2831,7 +2832,14 @@
       if (opts.t1) xs.push(Date.parse(opts.t1));
       const finite = xs.filter(n => isFinite(n));
       const t0 = Math.min.apply(null, finite), t1 = Math.max.apply(null, finite);
-      const vals = points.map(p => p.v).filter(v => v != null);
+      const reverseSpans = opts.reverse || [];
+      const signedV = (ts, v) => {
+        const ms = typeof ts === "number" ? ts : Date.parse(ts);
+        const back = reverseSpans.some(span => ms >= span.t0 && ms < span.t1);
+        const n = Number(v);
+        return back ? -Math.abs(n) : n;
+      };
+      const vals = points.map(p => signedV(p.ts, p.v)).filter(v => v != null && isFinite(v));
       if (!vals.length) vals.push(0);
       const ticks = niceTicks(Math.min(0, Math.min.apply(null, vals)), Math.max(0, Math.max.apply(null, vals)));
       const ymin = ticks[0], ymax = ticks[ticks.length - 1];
@@ -2853,29 +2861,21 @@
       segs.forEach(seg => (seg || []).forEach(pt => { if (pt.v != null) drawn.push(pt); }));
       const lineColor = opts.color || tone("chart-trip");
       const backColor = "#e07a5f";
-      const inReverse = (ts) => (opts.reverse || []).some(span => {
+      const inReverse = (ts) => reverseSpans.some(span => {
         const ms = Date.parse(ts);
         return ms >= span.t0 && ms < span.t1;
       });
-      (opts.reverse || []).forEach(span => {
-        const x0 = xMs(span.t0), x1 = xMs(span.t1);
-        if (!isFinite(x0) || !isFinite(x1) || x1 <= x0) return;
-        html += "<rect x='" + x0 + "' y='" + T + "' width='" + (x1 - x0) + "' height='" + innerH +
-          "' fill='" + backColor + "' fill-opacity='0.16'></rect>";
-      });
       segs.forEach(seg => {
-        const part = decimate((seg || []).filter(pt => pt.v != null), 240);
+        const part = decimate((seg || []).filter(pt => pt.v != null).map(pt => ({ts: pt.ts, v: signedV(pt.ts, pt.v)})), 240);
         if (part.length < 2) return;
-        const base = y(Math.max(0, ymin));
+        const base = y(0);
         let run = [part[0]];
         let color = inReverse(part[0].ts) ? backColor : lineColor;
         const flush = (pts, col) => {
           if (pts.length < 2) return;
-          if (col === lineColor) {
-            const area = pts.map(pt => x(pt.ts) + "," + y(pt.v)).join(" ") + " " +
-              x(pts[pts.length - 1].ts) + "," + base + " " + x(pts[0].ts) + "," + base;
-            html += '<polygon points="' + area + '" fill="' + col + '" fill-opacity="' + (tone("chart-area") || "0.15") + '"></polygon>';
-          }
+          const area = pts.map(pt => x(pt.ts) + "," + y(pt.v)).join(" ") + " " +
+            x(pts[pts.length - 1].ts) + "," + base + " " + x(pts[0].ts) + "," + base;
+          html += '<polygon points="' + area + '" fill="' + col + '" fill-opacity="' + (tone("chart-area") || "0.15") + '"></polygon>';
           html += '<polyline fill="none" stroke="' + col + '" stroke-width="1.8" points="' +
             pts.map(pt => x(pt.ts) + "," + y(pt.v)).join(" ") + '"></polyline>';
         };
@@ -2922,10 +2922,10 @@
         });
         const sample = prev || next;
         if (!sample || sample.v == null) return;
-        let vy = sample.v;
-        if (prev && next && prev !== next && Date.parse(next.ts) !== Date.parse(prev.ts)) {
+        let vy = signedV(sample.ts, sample.v);
+          if (prev && next && prev !== next && Date.parse(next.ts) !== Date.parse(prev.ts)) {
           const f = (mt - Date.parse(prev.ts)) / (Date.parse(next.ts) - Date.parse(prev.ts));
-          vy = prev.v + (next.v - prev.v) * f;
+          vy = signedV(prev.ts, prev.v) + (signedV(next.ts, next.v) - signedV(prev.ts, prev.v)) * f;
         }
         const color = m.kind === "brake" ? "#e85d5d" : "#f0b429";
         const cx = x(m.ts), cy = y(vy);
@@ -2993,8 +2993,9 @@
         const chart = pts.length > 1 ? svgLine(pts, { unit: "km/h", h: 150, color: speedColor, marks: marks, segments: segs, t0: data.start_ts, t1: data.end_ts, reverse: reverse }) : "";
         let legend = "";
         if (chart) {
-          legend = "<p class='chart-legend'>" + legendSpan({line: speedColor, fill: speedColor, fillOpacity: 0.15}, "속도");
-          if (reverse.length) legend += legendSpan({line: "#e07a5f", fill: "#e07a5f", fillOpacity: 0.16}, "후진");
+          const area = Number(tone("chart-area")) || 0.15;
+          legend = "<p class='chart-legend'>" + legendSpan({line: speedColor, fill: speedColor, fillOpacity: area}, "속도");
+          if (reverse.length) legend += legendSpan({line: "#e07a5f", fill: "#e07a5f", fillOpacity: area}, "후진");
           legend += "</p>";
         }
         el.innerHTML = chart ? chart + legend : "<p class='muted'>기록 없음</p>";
@@ -3004,8 +3005,13 @@
             showSpeedTip(el, node, marks[Number(node.getAttribute("data-i"))]);
           });
         });
+        const signedSegs = segs.map(seg => seg.map(p => {
+          const ms = Date.parse(p.ts);
+          const back = reverse.some(span => ms >= span.t0 && ms < span.t1);
+          return {ts: p.ts, v: back ? -Math.abs(Number(p.v)) : Number(p.v)};
+        }));
         bindCrosshair(el, (ms) => {
-          const v = seriesValueAt(parseSegs(segs.map(seg => seg.map(p => ({ts: p.ts, v: p.v})))), ms, "line");
+          const v = seriesValueAt(parseSegs(signedSegs.map(seg => seg.map(p => ({ts: p.ts, v: p.v})))), ms, "line");
           return v == null ? [] : [{label: "속도", text: fmt(v, 1) + " km/h"}];
         });
       } catch (e) {
@@ -3037,10 +3043,8 @@
     const INSIDE_COLOR = "#d5dee8";
     const OUTSIDE_COLOR = "#6ba8ef";
     const SET_ON = "#12c9a0";
-    const SET_OFF = "#7d8794";
-    const FAN_COLOR = "#c9a24a";
-    const FAN_OFF = "#7d8794";
-    const FAN_ON = "#12c9a0";
+    const SET_OFF = "#f072b6";
+    const FAN_COLOR = "#5ec8f0";
     const WHEEL_COLOR = "#c45c26";
     const CLIM_BARS = [
       ["defrost", "성에 제거", "#d4a24a"],
@@ -3283,17 +3287,13 @@
       const parts = [];
       if (model.inside.length) parts.push(legendSpan({line: INSIDE_COLOR}, "실내"));
       if (model.outside.length) parts.push(legendSpan({line: OUTSIDE_COLOR}, "실외"));
-      const setBits = [];
-      if (model.setDriver.length) {
-        setBits.push(legendSpan({line: SET_ON}, "운전석 · A/C 켬"));
-        setBits.push(legendSpan({line: SET_OFF}, "운전석 · A/C 끔"));
+      if (model.setDriver.length || model.setPass.length) {
+        parts.push("<span>" + legendSwatch({line: "#9aa6b2"}) + legendSwatch({line: "#9aa6b2", dash: "4 3"}) +
+          "설정 온도: 운전석(실선)/조수석(점선)</span>");
+        parts.push("<span>" + legendSwatch({line: SET_ON}) + legendSwatch({line: SET_OFF}) +
+          "A/C: 켬(초록)/끔(분홍)</span>");
       }
-      if (model.setPass.length) {
-        setBits.push(legendSpan({line: SET_ON, dash: "4 3"}, "조수석 · A/C 켬"));
-        setBits.push(legendSpan({line: SET_OFF, dash: "4 3"}, "조수석 · A/C 끔"));
-      }
-      if (setBits.length) parts.push(setBits.join(""));
-      if (fanPieces(model).length) parts.push(legendSpan({line: FAN_COLOR}, "팬"));
+      if (fanPieces(model).length) parts.push(legendSpan({line: FAN_COLOR}, "팬 단계(하늘색, 수동일 때만)"));
       const lanes = climateLanes(model);
       const seat = lanes.filter(lane => lane.label.indexOf("열선") >= 0 || lane.label.indexOf("통풍") >= 0);
       if (seat.length) {

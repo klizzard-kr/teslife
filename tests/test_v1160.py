@@ -269,7 +269,7 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.17.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.17.1"', HTML)
         self.assertNotIn("function climateTabs(", HTML)
         self.assertNotIn("<strong>공조</strong>", _fn("mountClimate"))
         self.assertIn("climateSvg(model)", _fn("mountClimate"))
@@ -283,8 +283,10 @@ class PageGraphTests(unittest.TestCase):
         self.assertIn("flagAt(model.auto", fan)
         self.assertIn("FAN_COLOR", fan)
         legend = _fn("climateLegend")
-        self.assertIn("A/C 켬", legend)
-        self.assertIn("A/C 끔", legend)
+        self.assertIn("A/C: 켬(초록)/끔(분홍)", legend)
+        self.assertIn("설정 온도: 운전석(실선)/조수석(점선)", legend)
+        self.assertIn("팬 단계(하늘색, 수동일 때만)", legend)
+        self.assertNotIn("운전석 · A/C", legend)
         self.assertIn("legendSpan({line: FAN_COLOR}", legend)
         rows = _fn("climateRows")
         self.assertIn('label: "바람 세기"', rows)
@@ -324,7 +326,7 @@ class PageGraphTests(unittest.TestCase):
 
     def test_fan_tab_opens_for_auto_or_ac_without_fan_speed(self) -> None:
         src = (
-            "const SEATS = []; const CLIM_BARS = []; const FAN_COLOR = '#c9a24a';\n"
+            "const SEATS = []; const CLIM_BARS = []; const FAN_COLOR = '#5ec8f0';\n"
             + _fn("flagAt") + _fn("flagCuts") + _fn("coverWindow") + _fn("fanPieces")
             + "const t0 = 0, t1 = 60000;\n"
             + "const base = {t0:t0, t1:t1, fan:[[{t:t0,v:0},{t:t1,v:0}]], auto:[], ac:[]};\n"
@@ -344,7 +346,7 @@ class PageGraphTests(unittest.TestCase):
 
     def test_fan_line_follows_auto_and_ac_changes(self) -> None:
         src = (
-            "const FAN_OFF = '#7d8794'; const FAN_ON = '#12c9a0'; const FAN_COLOR = '#c9a24a';\n"
+            "const FAN_COLOR = '#5ec8f0';\n"
             + _fn("flagAt") + _fn("flagCuts") + _fn("coverWindow") + _fn("fanPieces")
             + "const t0 = Date.parse('2026-11-21T08:00:00Z');\n"
             + "const mid = t0 + 30*60*1000;\n"
@@ -365,7 +367,7 @@ class PageGraphTests(unittest.TestCase):
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(got["n"], 1)
-        self.assertEqual(got["colors"], ["#c9a24a"])
+        self.assertEqual(got["colors"], ["#5ec8f0"])
         self.assertEqual(got["dashes"], [""])
 
     def test_level_labels_stay_inside_the_shared_right_edge(self) -> None:

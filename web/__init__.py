@@ -749,7 +749,7 @@ _CLIMATE_NAMES = (
     "SeatHeaterLeft", "SeatHeaterRight",
     "SeatHeaterRearLeft", "SeatHeaterRearRight", "SeatHeaterRearCenter",
     "AutoSeatClimateLeft", "AutoSeatClimateRight",
-    "HvacSteeringWheelHeatLevel", "SteeringWheelHeatAuto",
+    "HvacSteeringWheelHeatLevel", "HvacSteeringWheelHeatAuto",
     "RearDisplayHvacEnabled",
     "DefrostMode", "RearDefrostEnabled", "HvacRearDefrost",
     "WiperHeatEnabled", "HvacWiperHeat",

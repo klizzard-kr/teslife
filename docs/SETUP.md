@@ -59,7 +59,7 @@ openssl ec -in private-key.pem -pubout -out public-key.pem
 
 차 설정은 서명이 필요합니다. 테슬라 문서는 [vehicle-command](https://github.com/teslamotors/vehicle-command)의 HTTP 프록시가 개인 키로 서명한 뒤 Fleet API로 넘기라고 합니다. 그 프록시도 이 저장소에 없습니다.
 
-이 저장소가 하는 일은, 이미 받아 둔 설정에서 몇 칸만 고치는 것입니다. 예전부터 `VehicleSpeed` 간격을 1초로 하고, `LongitudinalAcceleration`, `LateralAcceleration`, `PedalPosition`, `BrakePedal`은 뺍니다. 그 네 칸을 빼는 일은 이번 버전에서 새로 넣은 것이 아닙니다. 이번 버전은 `Gear` 간격도 1초로 맞추고, 설정에 없는 공조 칸(`AutoSeatClimateLeft`, `AutoSeatClimateRight`, `SteeringWheelHeatAuto`, `RearDisplayHvacEnabled`, `SeatHeaterRearLeft`, `SeatHeaterRearRight`)을 10초 간격으로 더합니다. 이미 있는 칸은 그대로 둡니다. 호스트, 인증서, 포트와 나머지 항목은 그대로 둡니다. 화면 출력에는 인증서와 차대번호를 찍지 않습니다. 이 저장소의 변경만으로 차에 전송하지는 않습니다.
+이 저장소가 하는 일은, 이미 받아 둔 설정에서 몇 칸만 고치는 것입니다. 예전부터 `VehicleSpeed` 간격을 1초로 하고, `LongitudinalAcceleration`, `LateralAcceleration`, `PedalPosition`, `BrakePedal`은 뺍니다. 그 네 칸을 빼는 일은 이번 버전에서 새로 넣은 것이 아닙니다. 이번 버전은 `Gear` 간격도 1초로 맞추고, 설정에 없는 공조 칸(`AutoSeatClimateLeft`, `AutoSeatClimateRight`, `RearDisplayHvacEnabled`, `SeatHeaterRearLeft`, `SeatHeaterRearRight`)을 10초 간격으로 더합니다. 핸들 자동 열선(`HvacSteeringWheelHeatAuto`)은 더하지 않습니다. 이미 있는 칸은 그대로 둡니다. 호스트, 인증서, 포트와 나머지 항목은 그대로 둡니다. 화면 출력에는 인증서와 차대번호를 찍지 않습니다. 이 저장소의 변경만으로 차에 전송하지는 않습니다.
 
 ```bash
 python -m process.telemetry_delta --current current.json --out next.json

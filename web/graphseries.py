@@ -229,6 +229,18 @@ def _number(value: Any) -> float | None:
     return None
 
 
+def _defrost_on(value: Any) -> bool:
+    """DefrostMode is Off, Normal, Max, or AutoDefog. Only Off stays dark."""
+    if _on_flag(value):
+        return True
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if text.endswith(("Off", "Unknown")) or text in ("Unknown", "0"):
+        return False
+    return text.endswith(("Normal", "AutoDefog")) or text in ("Normal", "AutoDefog")
+
+
 def _hvac_setpoint_on(value: Any) -> bool:
     """Set-temperature is drawn while HvacPower is On or Precondition."""
     if not isinstance(value, str):
@@ -356,7 +368,7 @@ FLAG_BARS = (
     ("wiper_heat", "WiperHeatEnabled"),
     ("auto_seat_left", "AutoSeatClimateLeft"),
     ("auto_seat_right", "AutoSeatClimateRight"),
-    ("wheel_auto", "SteeringWheelHeatAuto"),
+    ("wheel_auto", "HvacSteeringWheelHeatAuto"),
     ("rear_hvac", "RearDisplayHvacEnabled"),
 )
 
@@ -442,7 +454,8 @@ def build_climate(
     for key, name in FLAG_BARS:
         spans = level_spans(
             samples(name), start, end, prior(name),
-            lambda value: 1.0 if _on_flag(value) else 0.0,
+            (lambda value: 1.0 if _defrost_on(value) else 0.0) if key == "defrost"
+            else (lambda value: 1.0 if _on_flag(value) else 0.0),
         )
         if spans:
             bars[key] = spans
