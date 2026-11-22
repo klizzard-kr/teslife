@@ -354,6 +354,10 @@ FLAG_BARS = (
     ("defrost", "DefrostMode"),
     ("rear_defrost", "RearDefrostEnabled"),
     ("wiper_heat", "WiperHeatEnabled"),
+    ("auto_seat_left", "AutoSeatClimateLeft"),
+    ("auto_seat_right", "AutoSeatClimateRight"),
+    ("wheel_auto", "SteeringWheelHeatAuto"),
+    ("rear_hvac", "RearDisplayHvacEnabled"),
 )
 
 

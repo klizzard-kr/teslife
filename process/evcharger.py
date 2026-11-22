@@ -179,6 +179,15 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(ev_chargers)").fetchall()}
     if "addr" not in cols:
         conn.execute("ALTER TABLE ev_chargers ADD COLUMN addr TEXT")
+    if "busi_id" not in cols:
+        conn.execute("ALTER TABLE ev_chargers ADD COLUMN busi_id TEXT")
+    if "bnm" not in cols:
+        conn.execute("ALTER TABLE ev_chargers ADD COLUMN bnm TEXT")
+    charger_cols = {row[1] for row in conn.execute("PRAGMA table_info(charge_charger)").fetchall()}
+    if charger_cols and "busi_id" not in charger_cols:
+        conn.execute("ALTER TABLE charge_charger ADD COLUMN busi_id TEXT")
+    if charger_cols and "bnm" not in charger_cols:
+        conn.execute("ALTER TABLE charge_charger ADD COLUMN bnm TEXT")
     conn.commit()
 
 
@@ -452,7 +461,9 @@ def _as_charger(row: dict[str, str]) -> dict[str, Any] | None:
         "lng": lng,
         "chger_type": _type_code(row.get("chgerType")),
         "output_kw": _kw(row.get("output")),
-        "busi_nm": (row.get("busiNm") or row.get("bnm") or "").strip(),
+        "busi_id": (row.get("busiId") or row.get("busi_id") or "").strip(),
+        "bnm": (row.get("bnm") or "").strip(),
+        "busi_nm": (row.get("busiNm") or "").strip(),
         "stat_nm": (row.get("statNm") or "").strip(),
         "addr": (row.get("addr") or "").strip(),
         "zcode": (row.get("zcode") or "").strip(),
@@ -531,6 +542,59 @@ def decide(
     if len(pool) == 1:
         return pool[0], []
     return None, pool[:8]
+
+
+def _match_score(item: dict[str, Any], kind: str, power_kw: float | None, busi_id: str) -> tuple[int, int]:
+    """(operator match, power match). A nearer charger does not outrank a match."""
+    from process.operators import same_operator
+
+    want = (busi_id or "").strip()
+    operator_hit = 0
+    if want:
+        code = _operator_code(item)
+        if code and code == want:
+            operator_hit = 1
+        elif same_operator(want, item.get("busi_id") or item.get("bnm") or item.get("busi_nm")):
+            operator_hit = 1
+    power_hit = 1 if _type_ok(item, kind or "AC") and _power_ok(item, power_kw) else 0
+    return operator_hit, power_hit
+
+
+def pick_station(
+    items: list[dict[str, Any]], kind: str, power_kw: float | None, busi_id: str | None = None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Smallest radius that has an operator and output match.
+
+    50 m, then 100 m, then 300 m. The nearest station is not chosen when a
+    matching station is in the same band. Several matching stations stay open.
+    """
+    want = (busi_id or "").strip()
+    radii = (NEAR_M, FAR_M, PICK_M)
+    for index, radius in enumerate(radii):
+        pool = [item for item in items if item.get("distance_m") is not None and float(item["distance_m"]) <= radius]
+        if not pool:
+            continue
+        scored = [(_match_score(item, kind, power_kw, want), item) for item in pool]
+        best = max(score for score, _item in scored)
+        if best == (0, 0):
+            continue
+        if want and best != (1, 1) and index < len(radii) - 1:
+            wider_better = False
+            for wider in radii[index + 1:]:
+                wider_pool = [
+                    item for item in items
+                    if item.get("distance_m") is not None and float(item["distance_m"]) <= wider
+                ]
+                if any(_match_score(item, kind, power_kw, want) > best for item in wider_pool):
+                    wider_better = True
+                    break
+            if wider_better:
+                continue
+        winners = [item for score, item in scored if score == best]
+        if len({item.get("stat_id") for item in winners}) == 1:
+            return _station_item(winners), []
+        return None, winners
+    return None, []
 
 
 def _calls(conn: sqlite3.Connection, now: datetime) -> int:
@@ -641,7 +705,8 @@ def _store_items(
         if item["lat"] is not None and item["lng"] is not None:
             rows.append((
                 item["stat_id"], item["chger_id"], item["lat"], item["lng"], item["chger_type"],
-                item["output_kw"], item["busi_nm"], item["stat_nm"], item.get("addr") or "",
+                item["output_kw"], item["busi_nm"], item.get("busi_id") or "", item.get("bnm") or "",
+                item["stat_nm"], item.get("addr") or "",
                 item["zcode"], ts,
             ))
         if item["stat"] or item["now_ts"] or item["last_start"] or item["last_end"] or item.get("stat_upd"):
@@ -665,11 +730,12 @@ def _store_items(
     with conn:
         if rows:
             conn.executemany(
-                "INSERT INTO ev_chargers (stat_id, chger_id, lat, lng, chger_type, output_kw, busi_nm, stat_nm, addr, zcode, updated_ts) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "INSERT INTO ev_chargers (stat_id, chger_id, lat, lng, chger_type, output_kw, busi_nm, busi_id, bnm, stat_nm, addr, zcode, updated_ts) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(stat_id, chger_id) DO UPDATE SET "
                 "lat = excluded.lat, lng = excluded.lng, chger_type = excluded.chger_type, "
-                "output_kw = excluded.output_kw, busi_nm = excluded.busi_nm, stat_nm = excluded.stat_nm, "
+                "output_kw = excluded.output_kw, busi_nm = excluded.busi_nm, busi_id = excluded.busi_id, "
+                "bnm = excluded.bnm, stat_nm = excluded.stat_nm, "
                 "addr = excluded.addr, zcode = excluded.zcode, updated_ts = excluded.updated_ts",
                 rows,
             )
@@ -811,7 +877,8 @@ def _nearby(conn: sqlite3.Connection, lat: float, lng: float, now: datetime, rad
     lo_lat, hi_lat, lo_lng, hi_lng = _box(lat, lng, radius)
     try:
         rows = conn.execute(
-            "SELECT c.stat_id, c.chger_id, c.lat, c.lng, c.chger_type, c.output_kw, c.busi_nm, c.stat_nm, c.addr, "
+            "SELECT c.stat_id, c.chger_id, c.lat, c.lng, c.chger_type, c.output_kw, c.busi_nm, c.busi_id, c.bnm, "
+            "c.stat_nm, c.addr, "
             "s.stat, s.now_tsdt, s.last_tsdt, s.last_tedt, s.fetched_ts "
             "FROM ev_chargers c LEFT JOIN ev_status s ON s.stat_id = c.stat_id AND s.chger_id = c.chger_id "
             "WHERE c.lat BETWEEN ? AND ? AND c.lng BETWEEN ? AND ?",
@@ -820,7 +887,7 @@ def _nearby(conn: sqlite3.Connection, lat: float, lng: float, now: datetime, rad
     except sqlite3.OperationalError:
         return []
     out = []
-    for stat_id, chger_id, clat, clng, chger_type, output_kw, busi_nm, stat_nm, addr, stat, now_ts, last_ts, last_te, fetched in rows:
+    for stat_id, chger_id, clat, clng, chger_type, output_kw, busi_nm, busi_id, bnm, stat_nm, addr, stat, now_ts, last_ts, last_te, fetched in rows:
         fresh = False
         if fetched:
             try:
@@ -835,6 +902,8 @@ def _nearby(conn: sqlite3.Connection, lat: float, lng: float, now: datetime, rad
             "chger_type": chger_type or "",
             "output_kw": output_kw,
             "busi_nm": busi_nm or "",
+            "busi_id": busi_id or "",
+            "bnm": bnm or "",
             "stat_nm": stat_nm or "",
             "addr": addr or "",
             "distance_m": distance_m((lat, lng), (clat, clng)),
@@ -914,23 +983,42 @@ def _save_place(conn: sqlite3.Connection, vid: str, lat: float, lng: float, item
             )
 
 
+def _operator_label(item: dict[str, Any]) -> str:
+    from process.operators import busi_code, display_name
+
+    label = display_name(item.get("busi_id"), item.get("bnm"), item.get("busi_nm"))
+    return label
+
+
+def _operator_code(item: dict[str, Any]) -> str:
+    from process.operators import busi_code
+
+    code = str(item.get("busi_id") or "").strip()
+    if code:
+        return code
+    return busi_code(item.get("bnm") or item.get("busi_nm") or "")
+
+
 def _write_choice(
     conn: sqlite3.Connection, vid: str, charge_id: str, item: dict[str, Any],
     source: str, lat: float, lng: float, force_operator: bool,
 ) -> None:
     now = _iso(datetime.now(timezone.utc))
+    label = _operator_label(item)
+    code = _operator_code(item)
     with conn:
         conn.execute(
-            "INSERT INTO charge_charger (vehicle_id, charge_id, stat_id, chger_id, busi_nm, output_kw, chger_type, "
-            "stat_nm, source, candidates_json, updated_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?) "
+            "INSERT INTO charge_charger (vehicle_id, charge_id, stat_id, chger_id, busi_id, bnm, busi_nm, output_kw, chger_type, "
+            "stat_nm, source, candidates_json, updated_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?) "
             "ON CONFLICT(vehicle_id, charge_id) DO UPDATE SET "
-            "stat_id = excluded.stat_id, chger_id = excluded.chger_id, busi_nm = excluded.busi_nm, "
+            "stat_id = excluded.stat_id, chger_id = excluded.chger_id, busi_id = excluded.busi_id, "
+            "bnm = excluded.bnm, busi_nm = excluded.busi_nm, "
             "output_kw = excluded.output_kw, chger_type = excluded.chger_type, stat_nm = excluded.stat_nm, "
             "source = excluded.source, candidates_json = NULL, updated_ts = excluded.updated_ts",
-            (vid, charge_id, item["stat_id"], item["chger_id"], item.get("busi_nm"), item.get("output_kw"),
+            (vid, charge_id, item["stat_id"], item["chger_id"], code, label, label, item.get("output_kw"),
              item.get("chger_type"), item.get("stat_nm"), source, now),
         )
-        _set_operator(conn, vid, charge_id, item.get("busi_nm") or "", force_operator)
+        _set_operator(conn, vid, charge_id, label, force_operator)
         _remember_station(conn, vid, charge_id, item)
 
 
@@ -1044,11 +1132,14 @@ def _write_location_text(conn: sqlite3.Connection, vid: str, charge_id: str, pla
 def fill_charge_place(
     conn: sqlite3.Connection, vid: str, charge_id: str, lat: float, lng: float,
     stat_id: str | None = None, lookup: Callable[[float, float], str | None] | None = None,
+    stations: list[dict[str, Any]] | None = None,
+    search: Callable[[str], list[dict[str, Any]] | None] | None = None,
 ) -> str | None:
     """Fill an empty place once. A typed place, or a pin the owner moved, stays.
 
-    A recent place the owner saved within 150 m, or at the same station, is copied.
-    Otherwise one lookup may supply an EV charger name, a building, or a road address.
+    A saved place within 150 m is copied first. Then each catalog station is
+    checked with a local search. Reverse geocoding runs only when that search
+    has no station to try.
     """
     if _pin_source(conn, vid, charge_id) == "manual":
         return None
@@ -1062,6 +1153,30 @@ def fill_charge_place(
     if inherited:
         _write_location_text(conn, vid, charge_id, inherited)
         return inherited
+    if stations:
+        from process.placefill import resolve_place
+
+        if search is None:
+            from process.naver_maps import place_search
+
+            def search(query: str, _lat: float = lat, _lng: float = lng) -> list[dict[str, Any]]:
+                try:
+                    found = place_search(query, _lat, _lng)
+                except Exception:
+                    return []
+                return list((found or {}).get("items") or [])
+
+        try:
+            named = resolve_place(stations, search)
+        except Exception:
+            named = None
+        # Several names cannot be one place. Leave the field empty.
+        if named == "":
+            return None
+        if named:
+            _write_location_text(conn, vid, charge_id, named)
+            return named
+        # No catalog station to name. Reverse geocoding is only this last step.
     if lookup is None:
         return None
     try:
@@ -2003,7 +2118,7 @@ def snapshot_port_status(
 def _charger_item(conn: sqlite3.Connection, stat_id: str, chger_id: str) -> dict[str, Any] | None:
     try:
         row = conn.execute(
-            "SELECT stat_id, chger_id, busi_nm, output_kw, chger_type, stat_nm, addr, lat, lng "
+            "SELECT stat_id, chger_id, busi_nm, busi_id, bnm, output_kw, chger_type, stat_nm, addr, lat, lng "
             "FROM ev_chargers WHERE stat_id = ? AND chger_id = ?",
             (stat_id, chger_id),
         ).fetchone()
@@ -2013,8 +2128,9 @@ def _charger_item(conn: sqlite3.Connection, stat_id: str, chger_id: str) -> dict
         return None
     return {
         "stat_id": row[0], "chger_id": row[1], "busi_nm": row[2] or "",
-        "output_kw": row[3], "chger_type": row[4] or "", "stat_nm": row[5] or "",
-        "addr": row[6] or "", "lat": row[7], "lng": row[8],
+        "busi_id": row[3] or "", "bnm": row[4] or "",
+        "output_kw": row[5], "chger_type": row[6] or "", "stat_nm": row[7] or "",
+        "addr": row[8] or "", "lat": row[9], "lng": row[10],
     }
 
 
@@ -2126,6 +2242,33 @@ def retry_status_matches(
     return calls
 
 
+def _meta_operator(conn: sqlite3.Connection, vid: str, charge_id: str) -> str:
+    try:
+        row = conn.execute(
+            "SELECT operator FROM charge_meta WHERE vehicle_id = ? AND charge_id = ?",
+            (vid, charge_id),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return ""
+    return str(row[0] or "").strip() if row else ""
+
+
+def _station_rows(items: list[dict[str, Any]], limit: int = 3) -> list[dict[str, Any]]:
+    """Nearest distinct stations, for a place-name search. No charger number."""
+    ordered = sorted(items, key=lambda item: item.get("distance_m") if item.get("distance_m") is not None else 1e9)
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in ordered:
+        stat_id = str(item.get("stat_id") or "")
+        if not stat_id or stat_id in seen:
+            continue
+        seen.add(stat_id)
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _fill(
     conn: sqlite3.Connection, vid: str, now: datetime, opener: Callable[..., Any] | None, key: str,
     lookback: timedelta = LOOKBACK,
@@ -2136,21 +2279,27 @@ def _fill(
         charge_id = row["start_ts"]
         if _locked_user(conn, vid, charge_id):
             continue
-        nearby = _nearby(conn, lat, lng, now)
+        nearby = _nearby(conn, lat, lng, now, PICK_M)
         kind = row["kind"] or "AC"
         power = row["max_charger_kw"] if row["max_charger_kw"] is not None else row["max_power"]
-        pool = select_type_power(select_band(nearby), kind, power) or select_band(nearby)
+        from process.operators import busi_code
+
+        meta_op = _meta_operator(conn, vid, charge_id)
+        token = busi_code(meta_op) or meta_op
         chosen = None
         try:
             chosen = match_status_change(conn, vid, now, opener)
         except Exception:
             chosen = None
+        rest: list[dict[str, Any]] = []
         if chosen is not None:
             item = chosen
             source = "status"
         else:
-            item = _station_item(pool) if pool else None
+            item, rest = pick_station(nearby, kind, power, token)
             source = "station"
+            if item is None and rest:
+                _write_pending(conn, vid, charge_id, rest, now)
             if _meta_get(conn, f"port_snap:{vid}"):
                 try:
                     _schedule_status_retry(conn, vid, charge_id, _parse_iso(charge_id), now)
@@ -2165,11 +2314,11 @@ def _fill(
             stat_id = item.get("stat_id")
             if item.get("lat") is not None and item.get("lng") is not None:
                 point = (float(item["lat"]), float(item["lng"]))
-        station_name = (item.get("stat_nm") or "") if item is not None else ""
-        station_addr = (item.get("addr") or "") if item is not None else ""
+        place_rows = [item] if item is not None else _station_rows(nearby)
         fill_charge_place(
             conn, vid, charge_id, point[0], point[1], stat_id,
-            lambda la, ln, n=station_name, a=station_addr: _naver_place(la, ln, n, a),
+            _reverse_place,
+            stations=place_rows,
         )
     return calls
 
@@ -2191,7 +2340,7 @@ def choose_charger(conn: sqlite3.Connection, vid: str, body: dict[str, Any]) -> 
         raise KeyError("charge location not found")
     if stat_id and not chger_id:
         row = conn.execute(
-            "SELECT stat_id, busi_nm, output_kw, chger_type, stat_nm, addr, lat, lng FROM ev_chargers "
+            "SELECT stat_id, busi_nm, busi_id, bnm, output_kw, chger_type, stat_nm, addr, lat, lng FROM ev_chargers "
             "WHERE stat_id = ? ORDER BY chger_id LIMIT 1",
             (stat_id,),
         ).fetchone()
@@ -2201,13 +2350,15 @@ def choose_charger(conn: sqlite3.Connection, vid: str, body: dict[str, Any]) -> 
             raise ValueError("not a station near this charge")
         item = {
             "stat_id": row["stat_id"], "chger_id": None, "busi_nm": row["busi_nm"],
+            "busi_id": row["busi_id"], "bnm": row["bnm"],
             "output_kw": row["output_kw"], "chger_type": row["chger_type"], "stat_nm": row["stat_nm"],
             "addr": row["addr"],
         }
-        _write_choice(conn, vid, charge_id, item, "station", float(loc["lat"]), float(loc["lon"]), force_operator=True)
+        # The owner picked this station. source user keeps it ahead of a later auto match.
+        _write_choice(conn, vid, charge_id, item, "user", float(loc["lat"]), float(loc["lon"]), force_operator=True)
         return {
             "ok": True, "charge_id": charge_id, "stat_id": row["stat_id"],
-            "operator": item.get("busi_nm") or "", "output_kw": item.get("output_kw"), "source": "station",
+            "operator": _operator_label(item), "output_kw": item.get("output_kw"), "source": "user",
         }
     if not chger_id:
         now = _iso(datetime.now(timezone.utc))
@@ -2222,7 +2373,7 @@ def choose_charger(conn: sqlite3.Connection, vid: str, body: dict[str, Any]) -> 
             )
         return {"ok": True, "charge_id": charge_id, "chger_id": None, "source": "user"}
     row = conn.execute(
-        "SELECT stat_id, chger_id, lat, lng, busi_nm, output_kw, chger_type, stat_nm FROM ev_chargers "
+        "SELECT stat_id, chger_id, lat, lng, busi_nm, busi_id, bnm, output_kw, chger_type, stat_nm FROM ev_chargers "
         "WHERE stat_id = ? AND chger_id = ?",
         (stat_id, chger_id),
     ).fetchone()
@@ -2232,10 +2383,11 @@ def choose_charger(conn: sqlite3.Connection, vid: str, body: dict[str, Any]) -> 
         raise ValueError("not a charger at this station")
     item = {
         "stat_id": row["stat_id"], "chger_id": row["chger_id"], "busi_nm": row["busi_nm"],
+        "busi_id": row["busi_id"], "bnm": row["bnm"],
         "output_kw": row["output_kw"], "chger_type": row["chger_type"], "stat_nm": row["stat_nm"],
     }
     _write_choice(conn, vid, charge_id, item, "user", float(loc["lat"]), float(loc["lon"]), force_operator=True)
-    return {"ok": True, "charge_id": charge_id, "operator": item.get("busi_nm") or "", "output_kw": item.get("output_kw"), "source": "user"}
+    return {"ok": True, "charge_id": charge_id, "operator": _operator_label(item), "output_kw": item.get("output_kw"), "source": "user"}
 
 
 def stations_near(conn: sqlite3.Connection, lat: Any, lon: Any) -> list[dict[str, Any]]:
@@ -2258,11 +2410,59 @@ def stations_near(conn: sqlite3.Connection, lat: Any, lon: Any) -> list[dict[str
                 "stat_id": sid,
                 "stat_nm": item.get("stat_nm") or "",
                 "addr": item.get("addr") or "",
-                "operator": item.get("busi_nm") or "",
+                "busi_id": item.get("busi_id") or "",
+                "bnm": item.get("bnm") or "",
+                "busi_nm": item.get("busi_nm") or "",
+                "operator": _operator_label(item),
                 "output_kw": item.get("output_kw"),
                 "distance_m": dist,
             }
     return sorted(grouped.values(), key=lambda row: row["distance_m"])
+
+
+def group_places(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per road address. The label is the station name, not the address."""
+    from process.placefill import fold_road
+
+    groups: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for row in rows:
+        addr = str(row.get("addr") or "").strip()
+        key = fold_road(addr) or str(row.get("stat_id") or "")
+        if not key:
+            continue
+        if key not in groups:
+            groups[key] = {
+                "stat_id": row.get("stat_id"),
+                "stat_nm": "",
+                "operator": "",
+                "operators": [],
+                "by_operator": {},
+                "distance_m": row.get("distance_m"),
+                "_names": [],
+            }
+            order.append(key)
+        group = groups[key]
+        label = _operator_label(row) or str(row.get("operator") or "").strip()
+        if label and label not in group["operators"]:
+            group["operators"].append(label)
+            group["by_operator"][label] = row.get("stat_id")
+        name = str(row.get("stat_nm") or "").strip()
+        if name and name not in group["_names"]:
+            group["_names"].append(name)
+        dist = row.get("distance_m")
+        if dist is not None and (group["distance_m"] is None or float(dist) < float(group["distance_m"])):
+            group["distance_m"] = dist
+    out = []
+    for key in order:
+        group = groups[key]
+        names = group.pop("_names")
+        group["stat_nm"] = " · ".join(names)
+        if len(group["operators"]) == 1:
+            group["operator"] = group["operators"][0]
+            group["stat_id"] = group["by_operator"].get(group["operator"]) or group["stat_id"]
+        out.append(group)
+    return out
 
 
 def attach_public_chargers(conn: sqlite3.Connection, vid: str, items: list[dict[str, Any]]) -> None:
@@ -2291,10 +2491,17 @@ def attach_public_chargers(conn: sqlite3.Connection, vid: str, items: list[dict[
     for item in items:
         row = found.get(item.get("charge_id"))
         meta_op = str(((item.get("meta") or {}).get("operator") or item.get("operator_display") or "")).strip()
-        operator = (row["busi_nm"] if row is not None and row["busi_nm"] else "") or meta_op
+        stored = ""
+        if row is not None:
+            stored = _operator_label({
+                "busi_id": row["busi_id"] if "busi_id" in row.keys() else "",
+                "bnm": row["bnm"] if "bnm" in row.keys() else "",
+                "busi_nm": row["busi_nm"],
+            })
+        operator = stored or meta_op
         stat_id = row["stat_id"] if row is not None else None
         source = row["source"] if row is not None else None
-        stations = stations_near(conn, item.get("lat"), item.get("lon"))
+        stations = group_places(stations_near(conn, item.get("lat"), item.get("lon")))
         if row is None and not stations and item.get("lat") is None:
             continue
         output = row["output_kw"] if row is not None and row["output_kw"] is not None else None

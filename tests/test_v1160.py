@@ -269,25 +269,10 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.12"', HTML)
-        tabs = _fn("climateTabs")
-        self.assertIn('["cabin", "실내·실외", cabinOn]', tabs)
-        self.assertIn('["fan", "A/C·팬", fanOn]', tabs)
-        self.assertIn('["seats", "시트·핸들", seatOn]', tabs)
-        self.assertIn('["glass", "유리·와이퍼", glassOn]', tabs)
-        self.assertIn("aria-disabled", _fn("mountClimate"))
-        tabs_css = HTML.split(".clim-tabs button {", 1)[1].split(".detail-block", 1)[0]
-        self.assertIn("font-weight: 400", tabs_css)
-        self.assertIn("padding: 6px 12px; min-height: 36px; font-size: 0.85rem", tabs_css)
-        selected = tabs_css.split(".clim-tabs button.on", 1)[1].split(".clim-tabs button.disabled", 1)[0]
-        self.assertIn("background: var(--accent)", selected)
-        self.assertIn("color: var(--on-accent)", selected)
-        self.assertIn("font-weight: 700", selected)
-        disabled = tabs_css.split(".clim-tabs button.disabled", 1)[1]
-        self.assertIn("opacity: 0.4", disabled)
-        self.assertNotIn("var(--accent)", disabled)
-        self.assertIn('classList.toggle("on"', _fn("mountClimate"))
+        self.assertIn('const APP_VERSION = "v1.17.0"', HTML)
+        self.assertNotIn("function climateTabs(", HTML)
         self.assertNotIn("<strong>공조</strong>", _fn("mountClimate"))
+        self.assertIn("climateSvg(model)", _fn("mountClimate"))
         i18n = (ROOT / "web" / "static" / "i18n.js").read_text(encoding="utf-8")
         self.assertIn('"온도": "Temp"', i18n)
         self.assertIn('"시트·핸들": "Seats and wheel"', i18n)
@@ -295,19 +280,16 @@ class PageGraphTests(unittest.TestCase):
         self.assertIn('"A/C 켬": "A/C on"', i18n)
         self.assertIn('"성에 제거": "Defrost"', i18n)
         fan = _fn("fanPieces")
-        self.assertIn('active && !auto ? "5 4"', fan)
-        self.assertIn("FAN_ON", fan)
-        self.assertIn("FAN_OFF", fan)
+        self.assertIn("flagAt(model.auto", fan)
+        self.assertIn("FAN_COLOR", fan)
         legend = _fn("climateLegend")
-        self.assertNotIn('group("바람 세기"', legend)
         self.assertIn("A/C 켬", legend)
         self.assertIn("A/C 끔", legend)
-        self.assertIn('mark("line"', legend)
-        self.assertIn('mark("hollow"', legend)
+        self.assertIn("legendSpan({line: FAN_COLOR}", legend)
         rows = _fn("climateRows")
         self.assertIn('label: "바람 세기"', rows)
         self.assertNotIn('"바람 세기 " + levelWord', rows)
-        self.assertIn('group("자리"', legend)
+        self.assertIn("시트·열선", legend)
         svg = _fn("climateSvg")
         self.assertIn("const W = 390, L = 40, R = 16", svg)
         self.assertNotIn("R = 44", svg)
@@ -315,16 +297,10 @@ class PageGraphTests(unittest.TestCase):
         self.assertIn("yTickText(L + innerW + 4, y, v, 11", svg)
         self.assertNotIn("L + innerW - 4", svg)
         self.assertIn("return [0, 2, 4, 6, 8, 10]", _fn("levelTicks"))
-        self.assertIn("return [0, 1, 2, 3]", _fn("levelTicks"))
         self.assertIn("return FAN_AXIS", _fn("fanAxisMax"))
         self.assertIn("return HEAT_AXIS", _fn("heatAxisMax"))
         self.assertIn("barStrip + 36", svg)
-        self.assertIn("STEP_FILL", svg)
-        self.assertNotIn("끄", svg)
-        self.assertIn('return tab === "cabin" ? 1 : 0.22;', _fn("seriesOp"))
-        temp = svg.split("const lines = [", 1)[1].split("fanPieces(model).forEach(piece => {", 1)[0]
-        self.assertNotIn("paintFill", temp)
-        self.assertNotIn("polygon", temp)
+        self.assertNotIn("polygon", svg)
         self.assertIn("polyline fill='none'", svg)
         self.assertNotIn("cross-xlabel", HTML)
         self.assertIn('label: "시각"', HTML)
@@ -348,31 +324,27 @@ class PageGraphTests(unittest.TestCase):
 
     def test_fan_tab_opens_for_auto_or_ac_without_fan_speed(self) -> None:
         src = (
-            "const SEATS = []; const CLIM_BARS = [];\n"
-            + _fn("flagOn") + _fn("climateTabs")
-            + "const base = {inside:[{v:20}], outside:[], setDriver:[], fan:[[{v:0},{v:0}]], "
-            + "wheel:[], heat:{}, cool:{}, auto:[], ac:[], bars:{}};\n"
-            + "const fanOf = (extra) => climateTabs(Object.assign({}, base, extra))[1][2];\n"
+            "const SEATS = []; const CLIM_BARS = []; const FAN_COLOR = '#c9a24a';\n"
+            + _fn("flagAt") + _fn("flagCuts") + _fn("coverWindow") + _fn("fanPieces")
+            + "const t0 = 0, t1 = 60000;\n"
+            + "const base = {t0:t0, t1:t1, fan:[[{t:t0,v:0},{t:t1,v:0}]], auto:[], ac:[]};\n"
+            + "const n = (extra) => fanPieces(Object.assign({}, base, extra)).length;\n"
             + "process.stdout.write(JSON.stringify({\n"
-            + "  off: fanOf({}),\n"
-            + "  fan: fanOf({fan:[[{v:1}]]}),\n"
-            + "  auto: fanOf({auto:[{v:1}]}),\n"
-            + "  ac: fanOf({ac:[{v:1}]}),\n"
-            + "  autoOff: fanOf({auto:[{v:0}]}),\n"
-            + "  acOff: fanOf({ac:[{v:0}]})\n"
+            + "  off: n({}),\n"
+            + "  fan: n({fan:[[{t:t0,v:3},{t:t1,v:3}]]}),\n"
+            + "  auto: n({fan:[[{t:t0,v:3},{t:t1,v:3}]], auto:[{t:t0,v:1}]}),\n"
+            + "  manual: n({fan:[[{t:t0,v:3},{t:t1,v:3}]], auto:[{t:t0,v:0}]})\n"
             + "}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertFalse(got["off"])
-        self.assertTrue(got["fan"])
-        self.assertTrue(got["auto"])
-        self.assertTrue(got["ac"])
-        self.assertFalse(got["autoOff"])
-        self.assertFalse(got["acOff"])
+        self.assertEqual(got["off"], 0)
+        self.assertGreater(got["fan"], 0)
+        self.assertEqual(got["auto"], 0)
+        self.assertGreater(got["manual"], 0)
 
     def test_fan_line_follows_auto_and_ac_changes(self) -> None:
         src = (
-            "const FAN_OFF = '#7d8794'; const FAN_ON = '#12c9a0';\n"
+            "const FAN_OFF = '#7d8794'; const FAN_ON = '#12c9a0'; const FAN_COLOR = '#c9a24a';\n"
             + _fn("flagAt") + _fn("flagCuts") + _fn("coverWindow") + _fn("fanPieces")
             + "const t0 = Date.parse('2026-11-21T08:00:00Z');\n"
             + "const mid = t0 + 30*60*1000;\n"
@@ -389,17 +361,12 @@ class PageGraphTests(unittest.TestCase):
             + "    lineAuto:piece.dash === '', tipAuto:auto,\n"
             + "    lineAc:piece.color === FAN_ON, tipAc:ac};\n"
             + "}\n"
-            + "const samples = [t0 + 1000, mid + 1000, acAt + 1000].map(at);\n"
-            + "process.stdout.write(JSON.stringify({n:pieces.length, samples:samples}));"
+            + "process.stdout.write(JSON.stringify({n:pieces.length, colors:pieces.map(p => p.color), dashes:pieces.map(p => p.dash)}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(got["n"], 3)
-        for sample in got["samples"]:
-            self.assertEqual(sample["lineAuto"], sample["tipAuto"])
-            self.assertEqual(sample["lineAc"], sample["tipAc"])
-        self.assertEqual(got["samples"][0]["dash"], "5 4")
-        self.assertEqual(got["samples"][1]["dash"], "")
-        self.assertEqual(got["samples"][2]["color"], "#12c9a0")
+        self.assertEqual(got["n"], 1)
+        self.assertEqual(got["colors"], ["#c9a24a"])
+        self.assertEqual(got["dashes"], [""])
 
     def test_level_labels_stay_inside_the_shared_right_edge(self) -> None:
         start = HTML.index("    const SEATS = [")
@@ -466,8 +433,8 @@ class PageGraphTests(unittest.TestCase):
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(got["plot"], [334, 334, 334, 334])
         self.assertEqual(got["fan"], ["0", "2", "4", "6", "8", "10"])
-        self.assertEqual(got["seats"], ["0", "1", "2", "3"])
-        self.assertEqual(got["cabin"], [])
+        self.assertEqual(got["seats"], ["0", "2", "4", "6", "8", "10"])
+        self.assertEqual(got["cabin"], ["0", "2", "4", "6", "8", "10"])
         right = 40 + got["plot"][1]
         self.assertEqual(right, 374)
         for x in got["fanX"] + got["seatX"]:

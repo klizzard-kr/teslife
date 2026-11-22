@@ -120,7 +120,23 @@ def canon_operator(name: str | None) -> str:
         return PLUGLINK
     if key in {"환경부", "기후에너지환경부", "기후에너지환경부카드"}:
         return ENV_CARD
-    return text
+    from process.operators import display_name
+
+    shown = display_name(busi_nm=text)
+    return shown or text
+
+
+def operator_keys(name: str | None) -> list[str]:
+    """busiId, bnm, and older names that still point at the same operator."""
+    from process.operators import group_keys
+
+    label = canon_operator(name)
+    keys = group_keys(label)
+    raw = (name or "").strip()
+    for extra in (label, raw):
+        if extra and extra not in keys:
+            keys.append(extra)
+    return keys
 
 
 def _day(ts: str | None) -> str | None:
@@ -208,7 +224,9 @@ def nearby_operator_rates(
     """One row per operator and speed near the car. No coordinates."""
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for item in chargers:
-        operator = canon_operator(str(item.get("busi_nm") or item.get("operator") or ""))
+        operator = canon_operator(
+            str(item.get("bnm") or item.get("busi_id") or item.get("busi_nm") or item.get("operator") or "")
+        )
         if not operator:
             continue
         output = _num(item.get("output_kw"))
@@ -319,10 +337,15 @@ def charger_sent(
 
 def _member(conn: sqlite3.Connection, vehicle_id: str, operator: str) -> bool:
     """True only when this operator is selected. A missing row is not a member."""
+    keys = operator_keys(operator)
+    if not keys:
+        return False
+    marks = ",".join("?" * len(keys))
     try:
         row = conn.execute(
-            "SELECT member FROM tariff_member WHERE vehicle_id = ? AND operator = ?",
-            (vehicle_id, operator),
+            f"SELECT member FROM tariff_member WHERE vehicle_id = ? AND operator IN ({marks}) "
+            "ORDER BY member DESC LIMIT 1",
+            (vehicle_id, *keys),
         ).fetchone()
     except sqlite3.OperationalError:
         return False
@@ -366,10 +389,14 @@ def choose_rate(
 
 
 def _has_official(conn: sqlite3.Connection, operator: str) -> bool:
+    keys = operator_keys(operator)
+    if not keys:
+        return False
+    marks = ",".join("?" * len(keys))
     try:
         row = conn.execute(
-            "SELECT 1 FROM tariff_rates WHERE vehicle_id = ? AND operator = ? AND source = 'official' LIMIT 1",
-            (OFFICIAL, operator),
+            f"SELECT 1 FROM tariff_rates WHERE vehicle_id = ? AND operator IN ({marks}) AND source = 'official' LIMIT 1",
+            (OFFICIAL, *keys),
         ).fetchone()
     except sqlite3.OperationalError:
         return False
@@ -379,11 +406,15 @@ def _has_official(conn: sqlite3.Connection, operator: str) -> bool:
 def _price_row(
     conn: sqlite3.Connection, vehicle_id: str, operator: str, speed: str, member: int, day: str,
 ) -> float | None:
+    keys = operator_keys(operator)
+    if not keys:
+        return None
+    marks = ",".join("?" * len(keys))
     try:
         row = conn.execute(
-            "SELECT krw_per_kwh FROM tariff_rates WHERE vehicle_id = ? AND operator = ? AND speed = ? "
+            f"SELECT krw_per_kwh FROM tariff_rates WHERE vehicle_id = ? AND operator IN ({marks}) AND speed = ? "
             "AND member = ? AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1",
-            (vehicle_id, operator, speed, member, day),
+            (vehicle_id, *keys, speed, member, day),
         ).fetchone()
     except sqlite3.OperationalError:
         return None
@@ -408,12 +439,16 @@ def _learned_price(
     conn: sqlite3.Connection, vehicle_id: str, operator: str, speed: str | None,
 ) -> float | None:
     want_dc = speed in ("fast50", "fast100", "ultra")
+    keys = operator_keys(operator)
+    if not keys:
+        return None
+    marks = ",".join("?" * len(keys))
     try:
         rows = conn.execute(
             "SELECT c.kind, m.total_krw, m.kwh_billed, m.discount_krw FROM charges c "
             "JOIN charge_meta m ON m.vehicle_id = c.vehicle_id AND m.charge_id = c.start_ts "
-            "WHERE c.vehicle_id = ? AND m.operator = ? AND m.total_krw IS NOT NULL AND m.kwh_billed > 0",
-            (vehicle_id, operator),
+            f"WHERE c.vehicle_id = ? AND m.operator IN ({marks}) AND m.total_krw IS NOT NULL AND m.kwh_billed > 0",
+            (vehicle_id, *keys),
         ).fetchall()
     except sqlite3.OperationalError:
         return None
@@ -431,13 +466,18 @@ def _learned_price(
 
 def _last_pay_method(conn: sqlite3.Connection, vehicle_id: str, operator: str) -> str | None:
     """Latest payment choice for this operator. Empty when this car has not chosen one."""
+    keys = operator_keys(operator)
+    if not keys:
+        return None
+    marks = ",".join("?" * len(keys))
     try:
         row = conn.execute(
             "SELECT m.pay_method FROM charge_meta m "
             "LEFT JOIN charges c ON c.vehicle_id = m.vehicle_id AND c.start_ts = m.charge_id "
-            "WHERE m.vehicle_id = ? AND m.operator = ? AND m.pay_method IN ('member', 'guest', 'env_card') "
+            f"WHERE m.vehicle_id = ? AND m.operator IN ({marks}) "
+            "AND m.pay_method IN ('member', 'guest', 'env_card') "
             "ORDER BY COALESCE(c.end_ts, c.start_ts, m.charge_id) DESC LIMIT 1",
-            (vehicle_id, operator),
+            (vehicle_id, *keys),
         ).fetchone()
     except sqlite3.OperationalError:
         return None
