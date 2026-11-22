@@ -587,8 +587,11 @@
     .chart-legend i.hollow { background: transparent; border: 1.5px solid currentColor; box-sizing: border-box; }
     .cross-tip .kv-row:last-child, .speed-tip .kv-row:last-child { border-bottom: 0; }
     .clim-legend { align-items: center; row-gap: 6px; }
-    .clim-legend > span { white-space: nowrap; max-width: 100%; }
-    .clim-legend .leg-sep { width: 1px; align-self: stretch; min-height: 12px; background: var(--line); flex: 0 0 auto; }
+    .clim-legend > span { white-space: nowrap; }
+    .clim-legend .leg-group {
+      display: inline-flex; align-items: center; flex-wrap: nowrap; gap: 2px 6px; white-space: nowrap;
+    }
+    .clim-legend .leg-name { margin-right: 2px; }
     .clim-band { container-type: inline-size; margin-top: 10px; position: relative; }
     .clim-band .tl-plot, .clim-band .tl-row.tl-axis { margin: 0 calc(100% * 8 / 390) 0 calc(100% * 76 / 390); }
     .tl-bar-txt {
@@ -3422,23 +3425,19 @@
       html += crossLine(T, innerH);
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH);
     }
-    function climateLegend(model, runs) {
-      if (!Array.isArray(runs)) runs = climateRuns(model);
+    function climateLegend(model) {
       const parts = [];
       if (model.inside.length) parts.push(legendSpan({line: INSIDE_COLOR}, "실내"));
       if (model.outside.length) parts.push(legendSpan({line: OUTSIDE_COLOR}, "실외"));
       if (model.setDriver.length || model.setPass.length) {
-        parts.push("<span>" + legendSwatch({line: "#9aa6b2"}) + legendSwatch({line: "#9aa6b2", dash: "4 3"}) +
-          "설정 온도: 운전석(실선)/조수석(점선)</span>");
-        parts.push("<span>" + legendSwatch({line: SET_ON}) + legendSwatch({line: SET_OFF}) +
-          "A/C: 켬(초록)/끔(분홍)</span>");
+        parts.push("<span class='leg-group'><span class='leg-name'>설정 온도</span>" +
+          legendSwatch({line: "#9aa6b2"}) + "운전석" +
+          legendSwatch({line: "#9aa6b2", dash: "4 3"}) + "조수석</span>");
+        parts.push("<span class='leg-group'><span class='leg-name'>A/C</span>" +
+          legendSwatch({line: SET_ON}) + "켜짐" +
+          legendSwatch({line: SET_OFF}) + "꺼짐</span>");
       }
-      const fanRow = runs.filter(row => row.label === "팬")[0];
-      if (fanRow) parts.push(legendSpan({fill: FAN_COLOR, fillOpacity: 1}, "팬"));
-      runs.filter(row => row.label !== "팬").forEach(row => {
-        parts.push(legendSpan({fill: row.spans[0].color, fillOpacity: 1}, row.legend || row.label));
-      });
-      return parts.filter(Boolean).join("<span class='leg-sep' aria-hidden='true'></span>");
+      return parts.filter(Boolean).join("");
     }
     function fanState(model, ms) {
       if (flagAt(model.auto, ms)) return "오토";
@@ -3465,11 +3464,11 @@
       const driver = seriesValueAt(model.setDriver || [], ms, "step");
       const pass = seriesValueAt(model.setPass || [], ms, "step");
       if (driver != null || pass != null) {
-        const ac = flagAt(model.ac, ms) ? "A/C 켬" : "A/C 끔";
-        if (driver != null) rows.push({label: "설정 온도", text: fmt(driver, 1) + "°C · " + ac});
-        if (pass != null && (driver == null || Math.abs(pass - driver) > 0.05)) {
-          rows.push({label: "조수석 설정", text: fmt(pass, 1) + "°C · " + ac});
-        }
+        const bits = [];
+        if (driver != null) bits.push("운전석 " + fmt(driver, 1) + "°C");
+        if (pass != null && (driver == null || Math.abs(pass - driver) > 0.05)) bits.push("조수석 " + fmt(pass, 1) + "°C");
+        rows.push({label: "설정 온도", text: bits.join(" · ")});
+        rows.push({label: "A/C", text: flagAt(model.ac, ms) ? "켜짐" : "꺼짐"});
       }
       rows.push({label: "팬", text: fanState(model, ms)});
       const left = stepLevel((model.heat || {}).seat_left, ms);
