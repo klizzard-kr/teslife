@@ -2861,34 +2861,40 @@
       segs.forEach(seg => (seg || []).forEach(pt => { if (pt.v != null) drawn.push(pt); }));
       const lineColor = opts.color || tone("chart-trip");
       const backColor = "#e07a5f";
-      const inReverse = (ts) => reverseSpans.some(span => {
-        const ms = Date.parse(ts);
-        return ms >= span.t0 && ms < span.t1;
-      });
       segs.forEach(seg => {
         const part = decimate((seg || []).filter(pt => pt.v != null).map(pt => ({ts: pt.ts, v: signedV(pt.ts, pt.v)})), 240);
         if (part.length < 2) return;
         const base = y(0);
-        let run = [part[0]];
-        let color = inReverse(part[0].ts) ? backColor : lineColor;
-        const flush = (pts, col) => {
+        const pieces = [];
+        const colorFor = (a, b) => (reverseSpans.length && (a.v < 0 || b.v < 0)) ? backColor : lineColor;
+        for (let i = 1; i < part.length; i++) {
+          const a = part[i - 1];
+          const b = part[i];
+          const hops = [];
+          if (reverseSpans.length && ((a.v < 0 && b.v > 0) || (a.v > 0 && b.v < 0))) {
+            const ta = Date.parse(a.ts), tb = Date.parse(b.ts);
+            const f = a.v / (a.v - b.v);
+            hops.push({ts: new Date(ta + (tb - ta) * f).toISOString(), v: 0});
+          }
+          hops.push(b);
+          let left = a;
+          hops.forEach(right => {
+            const col = colorFor(left, right);
+            const last = pieces[pieces.length - 1];
+            if (last && last.color === col) last.pts.push(right);
+            else pieces.push({color: col, pts: [left, right]});
+            left = right;
+          });
+        }
+        pieces.forEach(piece => {
+          const pts = piece.pts;
           if (pts.length < 2) return;
           const area = pts.map(pt => x(pt.ts) + "," + y(pt.v)).join(" ") + " " +
             x(pts[pts.length - 1].ts) + "," + base + " " + x(pts[0].ts) + "," + base;
-          html += '<polygon points="' + area + '" fill="' + col + '" fill-opacity="' + (tone("chart-area") || "0.15") + '"></polygon>';
-          html += '<polyline fill="none" stroke="' + col + '" stroke-width="1.8" points="' +
+          html += '<polygon points="' + area + '" fill="' + piece.color + '" fill-opacity="' + (tone("chart-area") || "0.15") + '"></polygon>';
+          html += '<polyline fill="none" stroke="' + piece.color + '" stroke-width="1.8" points="' +
             pts.map(pt => x(pt.ts) + "," + y(pt.v)).join(" ") + '"></polyline>';
-        };
-        for (let i = 1; i < part.length; i++) {
-          const next = inReverse(part[i].ts) ? backColor : lineColor;
-          if (next !== color) {
-            run.push(part[i]);
-            flush(run, color);
-            run = [part[i]];
-            color = next;
-          } else run.push(part[i]);
-        }
-        flush(run, color);
+        });
       });
       steps.forEach(series => {
         const sp = (series.points || []).filter(p => p.v != null);
@@ -3043,7 +3049,7 @@
     const INSIDE_COLOR = "#d5dee8";
     const OUTSIDE_COLOR = "#6ba8ef";
     const SET_ON = "#12c9a0";
-    const SET_OFF = "#f072b6";
+    const SET_OFF = "#c2749e";
     const FAN_COLOR = "#5ec8f0";
     const WHEEL_COLOR = "#c45c26";
     const CLIM_BARS = [

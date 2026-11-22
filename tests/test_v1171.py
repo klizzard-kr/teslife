@@ -80,37 +80,58 @@ class ReverseSpeedTests(unittest.TestCase):
             + "];\n"
             + "const html = svgLine(pts, {h:150, color:'#5b9fd6', t0: pts[0].ts, t1: pts[2].ts,\n"
             + "  reverse: [{t0: t1 - 1000, t1: t1 + 1000}]});\n"
-            + "const y0 = html.match(/y1=\"([^\"]+)\"[^>]*stroke=\"#5b9fd6\"/);\n"
             + "function ys(color){\n"
-            + "  const re = new RegExp('stroke=\"' + color + '\"[^>]*points=\"([^\"]+)\"');\n"
-            + "  const m = html.match(re);\n"
-            + "  if (!m) return [];\n"
-            + "  return m[1].split(' ').map(p => Number(p.split(',')[1]));\n"
+            + "  const re = new RegExp('<polyline[^>]*stroke=\"' + color + '\"[^>]*points=\"([^\"]+)\"', 'g');\n"
+            + "  const out = []; let m;\n"
+            + "  while ((m = re.exec(html))) m[1].split(' ').forEach(p => out.push(Number(p.split(',')[1])));\n"
+            + "  return out;\n"
             + "}\n"
+            + "function fillYs(color){\n"
+            + "  const re = new RegExp('<polygon points=\"([^\"]+)\" fill=\"' + color + '\"', 'g');\n"
+            + "  const out = []; let m;\n"
+            + "  while ((m = re.exec(html))) m[1].split(' ').forEach(p => out.push(Number(p.split(',')[1])));\n"
+            + "  return out;\n"
+            + "}\n"
+            + "const y0 = Number(html.match(/y=\"([^\"]+)\"[^>]*>0</)[1]);\n"
+            + "const plain = svgLine(pts, {h:150, color:'#5b9fd6', t0: pts[0].ts, t1: pts[2].ts});\n"
+            + "const regen = svgLine([{ts:pts[0].ts,v:4},{ts:pts[1].ts,v:-3},{ts:pts[2].ts,v:2}], {h:150, color:'#5b9fd6'});\n"
             + "const labels = [];\n"
             + "const re = />([-0-9.]+)</g; let m;\n"
             + "while ((m = re.exec(html))) labels.push(Number(m[1]));\n"
             + "process.stdout.write(JSON.stringify({\n"
-            + "  labels: labels,\n"
+            + "  labels: labels, y0: y0,\n"
             + "  forward: ys('#5b9fd6'),\n"
             + "  reverse: ys('#e07a5f'),\n"
+            + "  reverseFill: fillYs('#e07a5f'),\n"
+            + "  forwardFill: fillYs('#5b9fd6'),\n"
             + "  band: html.indexOf('fill=\\\"#e07a5f\\\" fill-opacity=\\\"0.16\\\"') >= 0,\n"
-            + "  fill: html.indexOf('fill=\\\"#e07a5f\\\"') >= 0\n"
+            + "  plainHasReverse: plain.indexOf('#e07a5f') >= 0,\n"
+            + "  regenHasReverse: regen.indexOf('#e07a5f') >= 0\n"
             + "}));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        y0 = got["y0"]
         self.assertFalse(got["band"])
-        self.assertTrue(got["fill"])
+        self.assertFalse(got["plainHasReverse"])
+        self.assertFalse(got["regenHasReverse"])
         self.assertTrue(any(n < 0 for n in got["labels"]))
         self.assertTrue(0 in got["labels"] or any(abs(n) < 1e-6 for n in got["labels"]))
         self.assertTrue(got["reverse"])
-        self.assertGreater(max(got["reverse"]), min(got["forward"]))
+        self.assertTrue(all(y >= y0 - 0.6 for y in got["reverse"]))
+        self.assertTrue(any(y > y0 + 1 for y in got["reverse"]))
+        self.assertTrue(all(y <= y0 + 0.6 for y in got["forward"]))
+        self.assertTrue(any(y < y0 - 1 for y in got["forward"]))
+        self.assertTrue(any(abs(y - y0) < 0.6 for y in got["reverse"]))
+        self.assertTrue(any(abs(y - y0) < 0.6 for y in got["forward"]))
+        self.assertTrue(got["reverseFill"])
+        self.assertTrue(all(y >= y0 - 0.6 for y in got["reverseFill"]))
+        self.assertTrue(all(y <= y0 + 0.6 for y in got["forwardFill"]))
 
 
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class ClimateFiveCasesTests(unittest.TestCase):
     def test_five_hvac_cases_match_the_confirmed_lines(self) -> None:
-        self.assertIn('const SET_OFF = "#f072b6"', HTML)
+        self.assertIn('const SET_OFF = "#c2749e"', HTML)
         self.assertIn('const FAN_COLOR = "#5ec8f0"', HTML)
         self.assertNotIn("운전석 · A/C", HTML)
         self.assertNotIn('const SET_OFF = "#7d8794"', HTML)
@@ -152,14 +173,14 @@ class ClimateFiveCasesTests(unittest.TestCase):
             + "  const tr = /text-anchor=\"start\" dominant-baseline=\"middle\">([^<]+)/g;\n"
             + "  while ((hit = tr.exec(html))) ticks.push(hit[1]);\n"
             + "  return {strokes: strokes, dashed: dashed, ticks: ticks, legend: legend,\n"
-            + "    filled: html.indexOf(\"<polygon\") >= 0 || html.indexOf(\"fill='#12c9a0'\") >= 0 || html.indexOf(\"fill='#f072b6'\") >= 0};\n"
+            + "    filled: html.indexOf(\"<polygon\") >= 0 || html.indexOf(\"fill='#12c9a0'\") >= 0 || html.indexOf(\"fill='#c2749e'\") >= 0};\n"
             + "}\n"
             + "const out = {}; Object.keys(cases).forEach(k => out[k] = view(cases[k]));\n"
             + "process.stdout.write(JSON.stringify(out));"
         )
         got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
         inside, outside = "#d5dee8", "#6ba8ef"
-        green, pink, sky = "#12c9a0", "#f072b6", "#5ec8f0"
+        green, pink, sky = "#12c9a0", "#c2749e", "#5ec8f0"
 
         def colors(name: str) -> set[str]:
             return set(got[name]["strokes"])
