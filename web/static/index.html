@@ -2842,9 +2842,7 @@
       html += marks.labels;
       html += '<rect class="cross-hit" x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="transparent"></rect>';
       html += crossLine(T, innerH);
-      const chargeColor = tone("chart-charge");
-      return chartSvg(html, H, t0, t1, L, innerW, T, innerH) +
-        "<p class='chart-legend'><span>" + legendSwatch({line: chargeColor, fill: chargeColor, fillOpacity: 0.15}) + "충전 전력</span></p>";
+      return chartSvg(html, H, t0, t1, L, innerW, T, innerH);
     }
 
     function paintChargeTemps(minC, maxC) {
@@ -3688,11 +3686,12 @@
       html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
       html += crossLine(T, innerH);
       const lineKey = (color) => legendSwatch({line: color});
-      let legend = "<p class='chart-legend'><span>" + lineKey("#ef8a6b") + "최고</span><span>" + lineKey("#6ba8ef") + "최저</span>";
-      if (model.heater && model.heater.length) {
-        legend += "<span>" + legendSwatch({fill: "#e39a4a", fillOpacity: 0.4}) + "배터리 히터</span>"; // opacity:0.4
-      }
-      legend += "</p>";
+      const seriesDrawn = (segs) => (segs || []).some(seg => (seg || []).length >= 2);
+      const items = [];
+      if (seriesDrawn(model.max)) items.push("<span>" + lineKey("#ef8a6b") + "최고</span>");
+      if (seriesDrawn(model.min)) items.push("<span>" + lineKey("#6ba8ef") + "최저</span>");
+      if (model.heater && model.heater.length) items.push("<span>" + legendSwatch({fill: "#e39a4a", fillOpacity: 0.4}) + "배터리 히터</span>"); // opacity:0.4
+      const legend = items.length >= 2 ? "<p class='chart-legend'>" + items.join("") + "</p>" : "";
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH) + legend;
     }
     function mountBattery(slot, battery, startTs, endTs) {
@@ -5560,12 +5559,13 @@
       if (pickedCharge) highlightCharge(pickedCharge, false);
       const kinds = new Set((places || []).flatMap(d => dotKinds(d)));
       const names = [...new Set((places || []).map(d => (d.place || "").trim()))];
-      document.getElementById("charges-map-legend").innerHTML = (places || []).length
-        ? names.map(n => "<span><i style='background:" + placeColor(n) + "'></i>" + (n ? escHtml(n) : "장소 없음") + "</span>").join("") +
-          ["DC", "SC"].filter(k => kinds.has(k)).map(k => "<span><b class='kb " + KIND_BADGE[k].cls + "'>" + KIND_BADGE[k].text + "</b>" +
-            CHARGE_KIND[k].label + "</span>").join("") +
-          ((places || []).some(d => d.estimated) ? "<span><i class='ring'></i>점선 = 위치 약</span>" : "")
-        : "<span>이 기간에는 위치가 있는 충전이 없어요</span>";
+      const mapBits = (places || []).length ? names.map(n => "<span><i style='background:" + placeColor(n) + "'></i>" + (n ? escHtml(n) : "장소 없음") + "</span>").concat(
+        ["DC", "SC"].filter(k => kinds.has(k)).map(k => "<span><b class='kb " + KIND_BADGE[k].cls + "'>" + KIND_BADGE[k].text + "</b>" + CHARGE_KIND[k].label + "</span>"),
+        (places || []).some(d => d.estimated) ? ["<span><i class='ring'></i>점선 = 위치 약</span>"] : []
+      ) : [];
+      document.getElementById("charges-map-legend").innerHTML = !(places || []).length
+        ? "<span>이 기간에는 위치가 있는 충전이 없어요</span>"
+        : (mapBits.length >= 2 ? mapBits.join("") : "");
       const chargeCard = document.getElementById("charges-map-card");
       if (chargeCard) chargeCard.classList.toggle("map-empty", !(places || []).length);
     }
