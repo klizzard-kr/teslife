@@ -29,7 +29,7 @@ def _button(html: str) -> str:
 
 class TireDisplayTests(unittest.TestCase):
     def test_chips_keep_the_saved_unit(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.12"', HTML)
+        self.assertIn('const APP_VERSION = "v1.17.0"', HTML)
         self.assertIn('id="pressure-unit" class="unit-tag tire-unit"', HTML)
         self.assertLess(CHANGELOG.index("## v1.15.2"), CHANGELOG.index("## v1.15.1"))
         chip = HTML.split("button.unit-tag.tire-unit {", 1)[1].split("}", 1)[0]
@@ -80,7 +80,7 @@ class TireDisplayTests(unittest.TestCase):
         self.assertIn(">" + fl + " → " + fr + "<", got["mixed"])
         self.assertIn(">" + fr + " → " + _psi(2.91) + "<", got["both"])
         self.assertEqual(got["empty"], "")
-        self.assertEqual(got["onlyAfter"], "— → " + fr)
+        self.assertEqual(got["onlyAfter"], fr + " psi")
         self.assertNotIn("주행 전 → 후", got["bars"])
         self.assertIn(">2.87 bar<", got["bars"])
         self.assertIn(">2.9 bar<", got["bars"])

@@ -1,11 +1,13 @@
-"""Change only VehicleSpeed and the four unused motion fields in a telemetry config.
+"""Copy a fetched telemetry config and change only the approved fields.
 
 The Fleet API replaces a vehicle's whole telemetry config. This module never
 builds that config from a template. It copies a config the caller already
-fetched and changes five fields:
+fetched and changes these fields:
 
 - VehicleSpeed interval_seconds becomes 1. minimum_delta and any other keys stay.
+- Gear interval_seconds becomes 1, the same as speed. Other keys on Gear stay.
 - LongitudinalAcceleration, LateralAcceleration, PedalPosition, BrakePedal are removed.
+- Climate fields that are not already present are added. An existing field is left as it is.
 
 Nothing here connects to the network, calls the Fleet API, or wakes the car. The printed
 summary does not include certificates, VINs, hostnames, or tokens.
@@ -27,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 SPEED_FIELD = "VehicleSpeed"
+GEAR_FIELD = "Gear"
 DROP_FIELDS = (
     "LongitudinalAcceleration",
     "LateralAcceleration",
@@ -34,6 +37,15 @@ DROP_FIELDS = (
     "BrakePedal",
 )
 SPEED_INTERVAL_S = 1
+# State fields. Added only when the fetched config does not already have them.
+CLIMATE_FIELDS = {
+    "AutoSeatClimateLeft": {"interval_seconds": 10},
+    "AutoSeatClimateRight": {"interval_seconds": 10},
+    "SteeringWheelHeatAuto": {"interval_seconds": 10},
+    "RearDisplayHvacEnabled": {"interval_seconds": 10},
+    "SeatHeaterRearLeft": {"interval_seconds": 10},
+    "SeatHeaterRearRight": {"interval_seconds": 10},
+}
 _SECRET_KEYS = {"vin", "vins", "token", "authorization", "access_token", "private_key"}
 
 _PEM = re.compile(r"-----BEGIN [A-Z ]+-----")
@@ -57,8 +69,18 @@ def extract_config(doc: Any) -> dict[str, Any]:
     raise DeltaError("fields not found; pass the fleet_telemetry_config GET body")
 
 
+def _one_second(fields: dict[str, Any], name: str) -> None:
+    if name not in fields:
+        fields[name] = {"interval_seconds": SPEED_INTERVAL_S}
+        return
+    spec = fields[name]
+    if not isinstance(spec, dict):
+        raise DeltaError(f"{name} must be an object")
+    spec["interval_seconds"] = SPEED_INTERVAL_S
+
+
 def apply_delta(config: dict[str, Any]) -> dict[str, Any]:
-    """Return a deep copy with only the five approved field differences."""
+    """Return a deep copy with only the approved field differences."""
     if not isinstance(config, dict):
         raise DeltaError("config must be an object")
     fields = config.get("fields")
@@ -68,13 +90,11 @@ def apply_delta(config: dict[str, Any]) -> dict[str, Any]:
     copied = out["fields"]
     for name in DROP_FIELDS:
         copied.pop(name, None)
-    if SPEED_FIELD not in copied:
-        copied[SPEED_FIELD] = {"interval_seconds": SPEED_INTERVAL_S}
-    else:
-        spec = copied[SPEED_FIELD]
-        if not isinstance(spec, dict):
-            raise DeltaError("VehicleSpeed must be an object")
-        spec["interval_seconds"] = SPEED_INTERVAL_S
+    _one_second(copied, SPEED_FIELD)
+    _one_second(copied, GEAR_FIELD)
+    for name, spec in CLIMATE_FIELDS.items():
+        if name not in copied:
+            copied[name] = dict(spec)
     for key in list(out):
         if key.lower() in _SECRET_KEYS:
             del out[key]
@@ -151,6 +171,10 @@ def public_report(before: dict[str, Any], after: dict[str, Any]) -> str:
         "removed=" + (",".join(removed) if removed else "none"),
         "absent_already=" + (",".join(already) if already else "none"),
         f"vehicle_speed_interval={_interval(bf.get(SPEED_FIELD))}->{_interval(af.get(SPEED_FIELD))}",
+        f"gear_interval={_interval(bf.get(GEAR_FIELD))}->{_interval(af.get(GEAR_FIELD))}",
+        "added=" + (
+            ",".join(name for name in CLIMATE_FIELDS if name not in bf and name in af) or "none"
+        ),
         f"vehicle_speed_minimum_delta={_delta(bf.get(SPEED_FIELD))}->{_delta(af.get(SPEED_FIELD))}",
         f"other_field_count={sum(1 for name in af if name != SPEED_FIELD)}",
         f"hostname_unchanged={_key_state(before, after, 'hostname')}",

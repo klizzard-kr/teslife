@@ -1,4 +1,4 @@
-"""Apply the five-field telemetry delta and, only with --send, post that copy.
+"""Apply the telemetry delta and, only with --send, post that copy.
 
 The default is a dry run: read a config the caller already has, keep every
 field that is not part of the delta, and print the difference. Nothing is

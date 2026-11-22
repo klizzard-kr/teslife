@@ -748,7 +748,9 @@ _CLIMATE_NAMES = (
     "HvacAutoMode", "HvacACEnabled", "HvacPower",
     "SeatHeaterLeft", "SeatHeaterRight",
     "SeatHeaterRearLeft", "SeatHeaterRearRight", "SeatHeaterRearCenter",
-    "HvacSteeringWheelHeatLevel",
+    "AutoSeatClimateLeft", "AutoSeatClimateRight",
+    "HvacSteeringWheelHeatLevel", "SteeringWheelHeatAuto",
+    "RearDisplayHvacEnabled",
     "DefrostMode", "RearDefrostEnabled", "HvacRearDefrost",
     "WiperHeatEnabled", "HvacWiperHeat",
     "ModuleTempMin", "ModuleTempMax", "BatteryHeaterOn",
@@ -816,6 +818,27 @@ def trip_power(conn: sqlite3.Connection, vehicle_id: str, start_ts: str) -> dict
     }
 
 
+def _reverse_spans(ev: Any, start: datetime, end: datetime) -> list[tuple[datetime, datetime]]:
+    """Intervals where Gear is R. The value is held until the next report."""
+    samples = [(ts, value) for ts, value in ev.series("Gear", start, end)]
+    hit = ev.at_ts("Gear", start - timedelta(microseconds=1))
+    prior = hit[1] if hit is not None and hit[0] < start else None
+    open_at = start if prior == "R" else None
+    spans: list[tuple[datetime, datetime]] = []
+    for ts, value in samples:
+        if ts < start or ts > end:
+            continue
+        if value == "R":
+            if open_at is None:
+                open_at = ts
+        elif open_at is not None:
+            spans.append((open_at, ts))
+            open_at = None
+    if open_at is not None and end > open_at:
+        spans.append((open_at, end))
+    return spans
+
+
 def trip_speed(conn: sqlite3.Connection, vehicle_id: str, start_ts: str) -> dict[str, Any]:
     """VehicleSpeed samples and hard accel/brake times. Reads only."""
     row = conn.execute(
@@ -823,7 +846,7 @@ def trip_speed(conn: sqlite3.Connection, vehicle_id: str, start_ts: str) -> dict
     ).fetchone()
     if row is None:
         raise KeyError(f"trip not found: {start_ts}")
-    ev = _events_between(conn, vehicle_id, row[0], row[1], ("VehicleSpeed",))
+    ev = _events_between(conn, vehicle_id, row[0], row[1], ("VehicleSpeed", "Gear"))
     s, e = parse_ts(row[0]), parse_ts(row[1])
     samples = ev.nums("VehicleSpeed", s, e, include_start=False)
     hit = ev.at_ts("VehicleSpeed", s - timedelta(microseconds=1))
@@ -867,6 +890,10 @@ def trip_speed(conn: sqlite3.Connection, vehicle_id: str, start_ts: str) -> dict
         "points": pts,
         "segments": _pack_segments(segs, "kph"),
         "events": marks,
+        "reverse": [
+            {"start": format_ts(a), "end": format_ts(b)}
+            for a, b in _reverse_spans(ev, s, e)
+        ],
     }
 
 
@@ -2213,7 +2240,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 (_q1(query, "charge_id") or "").strip(),
             )
         if path == "/api/chargers/near":
-            from process.evcharger import stations_near
+            from process.evcharger import group_places, stations_near
 
             def _coord(key: str) -> float | None:
                 raw = _q1(query, key)
@@ -2224,9 +2251,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 except ValueError:
                     return None
 
-            rows = stations_near(conn, _coord("lat"), _coord("lon"))
+            rows = group_places(stations_near(conn, _coord("lat"), _coord("lon")))
             return {"stations": [
-                {key: row.get(key) for key in ("stat_id", "stat_nm", "addr", "operator", "output_kw")}
+                {key: row.get(key) for key in ("stat_id", "stat_nm", "operator", "operators", "by_operator")}
                 for row in rows
             ]}
         return None

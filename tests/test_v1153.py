@@ -27,7 +27,7 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.16.12"', HTML)
+        self.assertIn('const APP_VERSION = "v1.17.0"', HTML)
         self.assertLess(CHANGELOG.index("## v1.16.12"), CHANGELOG.index("## v1.16.11"))
         self.assertLess(CHANGELOG.index("## v1.16.11"), CHANGELOG.index("## v1.16.10"))
         self.assertLess(CHANGELOG.index("## v1.16.10"), CHANGELOG.index("## v1.16.9"))
@@ -94,7 +94,7 @@ class TireUnitOnSingleValueTests(unittest.TestCase):
         both = f"{2.87 * PSI_PER_BAR:.1f} → {2.90 * PSI_PER_BAR:.1f}"
         self.assertEqual(got["both"], both)
         self.assertNotIn("psi", got["both"])
-        self.assertEqual(got["after"], "— → " + f"{2.90 * PSI_PER_BAR:.1f}")
+        self.assertEqual(got["after"], f"{2.90 * PSI_PER_BAR:.1f} psi")
         self.assertEqual(got["dash"], "—")
         self.assertEqual(got["homeBar"], "2.88 bar")
         self.assertEqual(got["oneBar"], "2.88 bar")

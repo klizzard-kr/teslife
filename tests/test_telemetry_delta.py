@@ -9,6 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from process.telemetry_delta import (
+    CLIMATE_FIELDS,
     DROP_FIELDS,
     apply_delta,
     extract_config,
@@ -58,14 +59,18 @@ class DeltaTests(unittest.TestCase):
         for name in DROP_FIELDS:
             self.assertNotIn(name, after["fields"])
             self.assertIn(name, before["fields"])
-        for name in ("Odometer", "Gear", "Location", "BatteryLevel", "SentryMode"):
+        for name in ("Odometer", "Location", "BatteryLevel", "SentryMode"):
             self.assertEqual(after["fields"][name], before["fields"][name])
+        self.assertEqual(after["fields"]["Gear"]["interval_seconds"], 1)
+        for name, spec in CLIMATE_FIELDS.items():
+            self.assertEqual(after["fields"][name], spec)
         self.assertEqual(after["ca"], CA)
         self.assertEqual(after["hostname"], HOST)
         self.assertEqual(after["alert_types"], ["service"])
         self.assertTrue(after["prefer_typed"])
         self.assertEqual(list(after["fields"]), [
             "Odometer", "Gear", "VehicleSpeed", "Location", "BatteryLevel", "SentryMode",
+            *CLIMATE_FIELDS,
         ])
 
     def test_documented_two_second_shape_is_the_same_delta(self) -> None:
@@ -77,7 +82,11 @@ class DeltaTests(unittest.TestCase):
     def test_already_one_second_and_no_motion_fields_is_unchanged(self) -> None:
         before = live_config(speed_interval=1, with_motion=False)
         after = apply_delta(before)
-        self.assertEqual(after, before)
+        self.assertEqual(after["fields"]["VehicleSpeed"], before["fields"]["VehicleSpeed"])
+        self.assertEqual(after["fields"]["Gear"], before["fields"]["Gear"])
+        for name, spec in CLIMATE_FIELDS.items():
+            self.assertEqual(after["fields"][name], spec)
+            self.assertNotIn(name, before["fields"])
 
     def test_missing_speed_is_added_without_inventing_a_delta(self) -> None:
         before = live_config(speed_interval=2, with_motion=False)
