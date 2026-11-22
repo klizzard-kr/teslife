@@ -2680,9 +2680,21 @@
       const rows = [{label: "시각", text: whenText}].concat(box._crossRows(when) || []);
       tip.innerHTML = rows.map(r => "<div class='kv-row'><span>" + r.label + "</span><span>" + r.text + "</span></div>").join("");
       tip.hidden = false;
-      const left = Math.max(8, Math.min((box.clientWidth || rect.width) - 150, (x / 390) * rect.width));
-      tip.style.left = left + "px";
       tip.style.top = "8px";
+      tip.style.right = "auto";
+      const edge = 8;
+      const hostW = box.clientWidth || rect.width;
+      const room = Math.max(120, Math.min(hostW, window.innerWidth) - edge * 2);
+      tip.style.maxWidth = room + "px";
+      tip.style.left = "0px";
+      const pw = Math.min(tip.offsetWidth || 160, room);
+      const base = box.getBoundingClientRect();
+      const minLeft = Math.max(edge, edge - base.left);
+      const maxLeft = Math.min(hostW - pw - edge, window.innerWidth - edge - pw - base.left);
+      let left = (x / 390) * rect.width - pw / 2;
+      if (left < minLeft) left = minLeft;
+      if (left > maxLeft) left = Math.max(minLeft, maxLeft);
+      tip.style.left = left + "px";
       box._crossX = clientX;
       box.classList.add("cross-on");
     }
@@ -3406,6 +3418,8 @@
       });
       html += "<rect class='clim-range' x='" + L + "' y='" + T + "' width='0' height='" + innerH +
         "' fill='#5b9fd6' fill-opacity='0.16' pointer-events='none'></rect>";
+      html += "<rect class='cross-hit' x='" + L + "' y='" + T + "' width='" + innerW + "' height='" + innerH + "' fill='transparent'></rect>";
+      html += crossLine(T, innerH);
       return chartSvg(html, H, t0, t1, L, innerW, T, innerH);
     }
     function climateLegend(model, runs) {
@@ -3426,7 +3440,19 @@
       });
       return parts.filter(Boolean).join("<span class='leg-sep' aria-hidden='true'></span>");
     }
-    function climateRows(model, tab, ms) {
+    function fanState(model, ms) {
+      if (flagAt(model.auto, ms)) return "오토";
+      const v = seriesValueAt(model.fan || [], ms, "step");
+      if (v != null && v > 0.05) return Math.max(1, Math.round(v)) + "단";
+      return "꺼짐";
+    }
+    function wheelState(model, ms) {
+      const v = seriesValueAt(model.wheel || [], ms, "step");
+      if (v != null && v > 0.05) return Math.max(1, Math.round(v)) + "단";
+      const auto = (model.bars.wheel_auto || []).some(span => ms >= span.t0 && ms < span.t1);
+      return auto ? "켬" : "꺼짐";
+    }
+    function climateRows(model, ms) {
       const rows = [];
       const add = (label, segs, mode) => {
         if (!segs || !segs.length) return;
@@ -3434,10 +3460,22 @@
         if (v == null) return;
         rows.push({label: label, text: fmt(v, 1) + "°C"});
       };
-      if (model.inside.length) add("실내", model.inside, "line");
+      if (model.inside && model.inside.length) add("실내", model.inside, "line");
       add("실외", model.outside, "line");
-      add("설정 온도", model.setDriver, "step");
-      add("조수석 설정", model.setPass, "step");
+      const driver = seriesValueAt(model.setDriver || [], ms, "step");
+      const pass = seriesValueAt(model.setPass || [], ms, "step");
+      if (driver != null || pass != null) {
+        const ac = flagAt(model.ac, ms) ? "A/C 켬" : "A/C 끔";
+        if (driver != null) rows.push({label: "설정 온도", text: fmt(driver, 1) + "°C · " + ac});
+        if (pass != null && (driver == null || Math.abs(pass - driver) > 0.05)) {
+          rows.push({label: "조수석 설정", text: fmt(pass, 1) + "°C · " + ac});
+        }
+      }
+      rows.push({label: "팬", text: fanState(model, ms)});
+      const left = stepLevel((model.heat || {}).seat_left, ms);
+      const right = stepLevel((model.heat || {}).seat_right, ms);
+      rows.push({label: "시트", text: "운전석 " + seatText(left) + " · 조수석 " + seatText(right)});
+      rows.push({label: "핸들", text: wheelState(model, ms)});
       return rows;
     }
     function climDur(ms) {
@@ -3515,9 +3553,13 @@
             shade.setAttribute("width", plot * w / 100);
           }
           if (pop) placePop(pop, block, climateTip(flat[i]), el);
+          hideCross(block.querySelector(".clim-plot"));
         });
       });
-      block.addEventListener("click", () => clear());
+      block.addEventListener("click", (ev) => {
+        if (ev.target.closest && ev.target.closest(".tl-bar")) return;
+        clear();
+      });
     }
     function mountClimate(slot, data) {
       const model = climateModel(data);
@@ -3530,8 +3572,10 @@
         "<p class='chart-legend clim-legend'></p>" +
         "<div class='tl-pop' hidden></div></div>";
       const block = slot.querySelector(".clim-block");
-      block.querySelector(".clim-plot").innerHTML = climateSvg(model);
+      const plot = block.querySelector(".clim-plot");
+      plot.innerHTML = climateSvg(model);
       block.querySelector(".clim-legend").innerHTML = climateLegend(model, runs);
+      bindCrosshair(plot, (ms) => climateRows(model, ms));
       bindClimateSelect(block, runs);
     }
     function tempSummary(rows) {

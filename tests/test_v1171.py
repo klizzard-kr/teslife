@@ -355,3 +355,52 @@ class ClimateFiveCasesTests(unittest.TestCase):
         placed = HTML[HTML.index("function placePop("):HTML.index("function showTlPop(")]
         self.assertIn("window.innerWidth", placed)
         self.assertIn("popCard(", HTML[HTML.index("function barPopHtml"):HTML.index("function hourPopHtml")])
+
+    def test_temperature_touch_reads_climate_at_that_moment(self) -> None:
+        svg = _fn("climateSvg")
+        self.assertIn("crossLine(", svg)
+        self.assertIn("class='cross-hit'", svg)
+        self.assertIn("bindCrosshair(plot", _fn("mountClimate"))
+        self.assertIn("hideCross(", _fn("bindClimateSelect"))
+        place = HTML[HTML.index("function placeCross("):HTML.index("function bindCrosshair(")]
+        self.assertIn("window.innerWidth", place)
+        start = HTML.index("    const SEATS = [")
+        chunk = HTML[start:HTML.index("    function climateRows")]
+        src = (
+            "function tone(){ return '#8aa0b5'; }\n"
+            + _fn("fmtTrim") + _fn("fmt") + _fn("seriesValueAt") + _fn("flagAt")
+            + chunk + _fn("climateRows")
+            + "const t0 = Date.parse('2026-11-22T01:00:00Z');\n"
+            + "const mid = t0 + 8*60*1000;\n"
+            + "const t1 = t0 + 20*60*1000;\n"
+            + "const model = {t0:t0, t1:t1,\n"
+            + "  inside:[[{t:t0,v:21},{t:t1,v:23}]], outside:[[{t:t0,v:8},{t:t1,v:9}]],\n"
+            + "  setDriver:[[{t:t0,v:22},{t:mid,v:22}]], setPass:[[{t:t0,v:19.5},{t:mid,v:19.5}]],\n"
+            + "  fan:[[{t:t0,v:6},{t:mid,v:0},{t:t1,v:0}]],\n"
+            + "  wheel:[[{t:t0,v:2},{t:mid,v:0}]],\n"
+            + "  heat:{seat_left:[[{t:t0,v:3},{t:mid,v:0}]], seat_right:[[{t:t0,v:0}]]},\n"
+            + "  auto:[{t:t0,v:0},{t:mid,v:1}], ac:[{t:t0,v:1},{t:mid,v:0}],\n"
+            + "  bars:{wheel_auto:[{t0:mid,t1:t1}]}};\n"
+            + "const early = climateRows(model, t0 + 60*1000);\n"
+            + "const late = climateRows(model, mid + 60*1000);\n"
+            + "const text = (rows, label) => (rows.find(r => r.label === label) || {}).text || '';\n"
+            + "process.stdout.write(JSON.stringify({early:early, late:late,\n"
+            + "  eSet:text(early,'설정 온도'), ePass:text(early,'조수석 설정'), eFan:text(early,'팬'),\n"
+            + "  eSeat:text(early,'시트'), eWheel:text(early,'핸들'),\n"
+            + "  lSet:text(late,'설정 온도'), lPass:text(late,'조수석 설정'), lFan:text(late,'팬'),\n"
+            + "  lSeat:text(late,'시트'), lWheel:text(late,'핸들')}));"
+        )
+        got = json.loads(subprocess.run(["node", "-e", src], capture_output=True, text=True, check=True).stdout)
+        self.assertIn("A/C 켬", got["eSet"])
+        self.assertIn("22", got["eSet"])
+        self.assertIn("A/C 켬", got["ePass"])
+        self.assertIn("19.5", got["ePass"])
+        self.assertEqual(got["eFan"], "6단")
+        self.assertIn("운전석 3단", got["eSeat"])
+        self.assertIn("조수석 꺼짐", got["eSeat"])
+        self.assertEqual(got["eWheel"], "2단")
+        self.assertEqual(got["lSet"], "")
+        self.assertEqual(got["lPass"], "")
+        self.assertEqual(got["lFan"], "오토")
+        self.assertIn("운전석 꺼짐", got["lSeat"])
+        self.assertEqual(got["lWheel"], "켬")
