@@ -2316,6 +2316,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return map_config()
             if path == "/api/places":
                 return {"vehicle_id": vehicle_id, "places": list_places(conn, vehicle_id)}
+            if path == "/api/car/location":
+                from web.carloc import car_location_payload
+                return car_location_payload(conn, vehicle_id)
+            if path == "/api/home":
+                from web.carloc import home_payload
+                return home_payload(conn, vehicle_id)
             m = _CHARGE_CURVE_RE.fullmatch(path)
             if m:
                 return charge_detail_curve(conn, vehicle_id, unquote(m.group(1)))
@@ -2641,6 +2647,7 @@ WRITE_PATHS = {
     },
     "PUT": {
         "/api/charges/location",
+        "/api/home",
         "/api/places",
         "/api/ledger",
         "/api/charge-meta",
@@ -2654,6 +2661,7 @@ WRITE_PATHS = {
         "/api/tariffs",
     },
     "DELETE": {
+        "/api/home",
         "/api/places",
         "/api/ledger",
         "/api/stations",
@@ -2673,6 +2681,14 @@ def dispatch_write(
     vehicle_id: str,
     body: dict[str, Any],
 ) -> tuple[dict[str, Any], int]:
+    if path == "/api/home" and method == "PUT":
+        from web.carloc import save_home
+        home, created = save_home(conn, vehicle_id, body)
+        return {"home": home}, (201 if created else 200)
+    if path == "/api/home" and method == "DELETE":
+        from web.carloc import delete_home
+        delete_home(conn, vehicle_id)
+        return {"ok": True}, 200
     if path == "/api/places" and method == "POST":
         return {"place": create_place(conn, vehicle_id, body)}, 201
     if path == "/api/places" and method == "PUT":

@@ -24,6 +24,10 @@ ERRORS = {
     "권장 공기압은 42 psi(문기둥 라벨 값) 고정이라 바꿀 수 없어요":
         "Recommended pressure stays at 42 psi (the door-jamb label) and cannot be changed.",
     "address_text (장소) is required": "A place name is required.",
+    "위도와 경도가 필요해요": "Latitude and longitude are required.",
+    "위도·경도 범위가 아니에요": "That latitude or longitude is out of range.",
+    "마지막 위치가 없어요": "There is no last location.",
+    "저장된 집이 없어요": "No home is saved.",
 }
 
 
