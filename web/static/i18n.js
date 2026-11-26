@@ -53,6 +53,20 @@
     "뒤오": "RR",
     "실내 온도": "Inside",
     "실외 온도": "Outside",
+    "차 위치": "Car location",
+    "집에 있음": "At home",
+    "마지막 위치": "Last location",
+    "마지막 위치가 없어요": "No last location yet",
+    "집을 저장하면 집까지 거리를 알려 드려요": "Save home to see how far the car is.",
+    "지금 차 위치를 집으로 저장": "Save the car's location as home",
+    "여기를 집으로 저장": "Save here as home",
+    "이 위치로 저장": "Save this pin",
+    "집 삭제": "Delete home",
+    "이미 저장된 집을 이 위치로 바꿀까요?": "Replace the saved home with this spot?",
+    "저장된 집을 지울까요?": "Delete the saved home?",
+    "집까지 거리는 도로 기준이에요": "Distance follows the road.",
+    "집까지 거리는 직선 기준이에요": "Distance is a straight line.",
+    "불러오지 못했어요": "Could not load it.",
     "연결 중": "Connecting",
     "연결 끊김": "Offline",
     "불러오는 중": "Loading",
@@ -602,6 +616,9 @@
 
   function applyPatterns(s) {
     var out = s;
+    out = out.replace(/집에서 (\d+(?:\.\d+)?)km/g, "$1 km from home");
+    out = out.replace(/오후 (\d{1,2}:\d{2})/g, "$1 PM");
+    out = out.replace(/오전 (\d{1,2}:\d{2})/g, "$1 AM");
     out = out.replace(/(^|[\s·(])약 /g, "$1about ");
     out = out.replace(/\(0\.1% 미만\)/g, "(under 0.1%)");
     out = out.replace(/0\.1% 미만/g, "under 0.1%");

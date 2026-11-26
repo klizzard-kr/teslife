@@ -39,7 +39,7 @@ class I18nScriptTests(unittest.TestCase):
         self.assertIn("teslife-lang", HTML)
         self.assertIn('src="/static/i18n.js', HTML)
         self.assertLess(HTML.index('id="lang-select"'), HTML.index('id="theme-select"'))
-        self.assertIn('const APP_VERSION = "v1.18.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.19.0"', HTML)
 
     @unittest.skipUnless(shutil.which("node"), "node not installed")
     def test_t_and_language_persistence(self) -> None:
