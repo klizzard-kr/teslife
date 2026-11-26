@@ -156,9 +156,13 @@
       var anchor = (icon && icon.iconAnchor) || [size[0] / 2, size[1] / 2];
       var html = icon && icon.html != null ? icon.html : (fallbackHtml || "");
       var cls = icon && icon.className ? icon.className : "";
+      var rot = icon && icon.rotation != null ? Number(icon.rotation) : 0;
+      if (!isFinite(rot)) rot = 0;
+      var inner = "<div class=\"teslife-rot\" style=\"width:100%;height:100%;display:flex;align-items:center;" +
+        "justify-content:center;transform-origin:center center;transform:rotate(" + rot + "deg)\">" + html + "</div>";
       return {
         content: "<div class=\"" + cls + "\" style=\"width:" + size[0] + "px;height:" + size[1] +
-          "px;display:flex;align-items:center;justify-content:center;line-height:1\">" + html + "</div>",
+          "px;display:flex;align-items:center;justify-content:center;line-height:1\">" + inner + "</div>",
         size: new maps.Size(size[0], size[1]),
         anchor: new maps.Point(anchor[0], anchor[1])
       };
@@ -232,7 +236,84 @@
         }
         return pin;
       };
+      pin.setIcon = function (next) {
+        pin._icon = next || {};
+        raw.setIcon(markerIcon(pin._icon, ""));
+        if (pin._rotation != null) pin.setRotationAngle(pin._rotation);
+        return pin;
+      };
+      pin.setRotationAngle = function (deg) {
+        var angle = Number(deg);
+        pin._rotation = isFinite(angle) ? angle : 0;
+        var root = raw.getElement && raw.getElement();
+        var node = root && (root.querySelector(".car-loc-arrow") || root.querySelector(".teslife-rot"));
+        if (node) {
+          node.style.transformOrigin = "center center";
+          node.style.transform = "rotate(" + pin._rotation + "deg)";
+        }
+        return pin;
+      };
+      if (options.zIndexOffset && raw.setZIndex) raw.setZIndex(options.zIndexOffset);
+      if (options.draggable) {
+        maps.Event.addListener(raw, "drag", function (ev) {
+          if (ev && ev.coord) pin._at = ev.coord;
+        });
+        maps.Event.addListener(raw, "dragend", function (ev) {
+          if (ev && ev.coord) pin._at = ev.coord;
+        });
+      }
+      var baseAttach = pin._attach;
+      pin._attach = function (map) {
+        baseAttach.call(pin, map);
+        if (pin._rotation != null) pin.setRotationAngle(pin._rotation);
+      };
       return pin;
+    }
+
+    function mapCorner(map, position) {
+      var host = map._el || (map.getContainer && map.getContainer()) || document.body;
+      var found = host.querySelector("[data-teslife-corner='" + position + "']");
+      if (found) return found;
+      var spot = position || "topright";
+      var bottom = spot.indexOf("bottom") === 0;
+      var left = spot.indexOf("left") > 0;
+      var div = document.createElement("div");
+      div.className = "teslife-map-corner";
+      div.setAttribute("data-teslife-corner", spot);
+      div.style.position = "absolute";
+      div.style.zIndex = "800";
+      div.style.display = "flex";
+      div.style.flexDirection = "column";
+      div.style.gap = "8px";
+      div.style.pointerEvents = "none";
+      div.style.alignItems = left ? "flex-start" : "flex-end";
+      div.style[bottom ? "bottom" : "top"] = bottom ? "36px" : "10px";
+      div.style[left ? "left" : "right"] = "10px";
+      host.appendChild(div);
+      return div;
+    }
+
+    function control(options) {
+      var position = (options && options.position) || "topright";
+      return {
+        options: { position: position },
+        onAdd: function () { return document.createElement("div"); },
+        addTo: function (map) {
+          var el = this.onAdd(map);
+          if (!el) return this;
+          el.classList.add("teslife-map-control");
+          mapCorner(map, this.options.position || position).appendChild(el);
+          this._el = el;
+          this._map = map;
+          return this;
+        },
+        remove: function () {
+          if (this._el && this._el.parentNode) this._el.parentNode.removeChild(this._el);
+          this._el = null;
+          return this;
+        },
+        getContainer: function () { return this._el || null; }
+      };
     }
 
     function divIcon(opts) {
@@ -288,6 +369,11 @@
           var coord = raw.getProjection().fromOffsetToCoord(new maps.Point(pt.x, pt.y));
           return plain(coord);
         },
+        removeLayer: function (layer) {
+          if (!layer) return;
+          if (layer._detach) layer._detach();
+          else if (layer.remove) layer.remove();
+        },
         on: function (name, fn) {
           var ev = name === "zoomend" ? "zoom_changed" : name;
           maps.Event.addListener(raw, ev, function (e) {
@@ -334,10 +420,33 @@
           return Math.hypot(p.x - x, p.y - y);
         }
       },
+      control: control,
+      DomUtil: {
+        create: function (tag, className, parent) {
+          var el = document.createElement(tag || "div");
+          if (className) el.className = className;
+          if (parent) parent.appendChild(el);
+          return el;
+        }
+      },
       DomEvent: {
         stopPropagation: function (ev) {
           var raw = ev && (ev.domEvent || ev.originalEvent || ev.pointerEvent || ev);
           if (raw && raw.stopPropagation) raw.stopPropagation();
+        },
+        disableClickPropagation: function (el) {
+          if (!el || !el.addEventListener) return el;
+          ["click", "dblclick", "mousedown", "touchstart", "pointerdown", "contextmenu", "wheel"].forEach(function (name) {
+            el.addEventListener(name, function (ev) { ev.stopPropagation(); });
+          });
+          return el;
+        },
+        disableScrollPropagation: function (el) {
+          if (!el || !el.addEventListener) return el;
+          ["wheel", "mousewheel", "touchmove"].forEach(function (name) {
+            el.addEventListener(name, function (ev) { ev.stopPropagation(); });
+          });
+          return el;
         }
       }
     };

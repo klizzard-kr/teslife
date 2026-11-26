@@ -1132,19 +1132,30 @@
     #car-loc-delete { color: var(--disc); border-color: var(--disc); background: transparent; }
     #car-loc-card button:disabled { opacity: 0.42; }
     #car-loc-map { margin-top: 12px; }
-    .leaflet-div-icon.car-loc-car, .leaflet-div-icon.car-loc-pin { background: transparent; border: 0; }
-    .car-loc-car span {
-      display: flex; width: 28px; height: 28px; align-items: center; justify-content: center;
-      border-radius: 8px; background: var(--accent); color: var(--on-accent);
-      border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    #car-loc-map .teslife-map-corner { pointer-events: none; }
+    #car-loc-map .car-loc-locate,
+    #car-loc-map .leaflet-control.car-loc-locate {
+      width: 44px; height: 44px; margin: 0 0 8px; padding: 0; border-radius: 50%;
+      border: 1px solid var(--line); background: var(--card); color: var(--text);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; pointer-events: auto;
     }
-    .car-loc-pin { cursor: grab; }
-    .car-loc-pin i {
-      display: block; width: 22px; height: 22px; margin: 2px auto 0;
-      background: var(--warn-fill); border: 2px solid #fff;
-      border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    #car-loc-map .car-loc-locate[hidden] { display: none !important; }
+    #car-loc-map .car-loc-locate svg { width: 32px; height: 32px; display: block; }
+    #car-loc-map .car-loc-locate:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .leaflet-div-icon.car-loc-car, .leaflet-div-icon.car-loc-pin,
+    .car-loc-car, .car-loc-pin { background: transparent; border: 0; padding: 0; }
+    .leaflet-div-icon.car-loc-car, .car-loc-car { overflow: visible; }
+    .car-loc-arrow {
+      display: flex; width: 36px; height: 36px; align-items: center; justify-content: center;
+      transform-origin: center center; color: #2f7dcc;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
     }
+    [data-theme="light"] .car-loc-arrow { color: #145a9c; }
+    .leaflet-div-icon.car-loc-pin { line-height: 0; }
+    .car-loc-pin { cursor: grab; color: var(--warn-fill); }
+    .car-loc-pin svg { display: block; overflow: visible; }
     [data-theme="light"] #battery-card .chart-legend span:nth-child(1) i { background: #1c649e !important; }
     [data-theme="light"] #battery-card .chart-legend span:nth-child(2) i { background: #157a4a !important; }
     [data-theme="light"] #battery-card .chart-legend span:nth-child(3) i { background: #5c6e80 !important; }
@@ -1210,8 +1221,7 @@
           <p id="car-loc-via" class="car-loc-note" hidden></p>
           <p id="car-loc-map-note" class="car-loc-note" hidden></p>
           <div class="car-loc-actions">
-            <button type="button" class="primary" id="car-loc-save-here" hidden>여기를 집으로 저장</button>
-            <button type="button" id="car-loc-save-pin" disabled>이 위치로 저장</button>
+            <button type="button" id="car-loc-save-pin" disabled>핀 위치를 집으로 저장</button>
             <button type="button" id="car-loc-delete" hidden>집 삭제</button>
           </div>
         </details>
@@ -1875,8 +1885,8 @@
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=9"></script>
-  <script src="/static/naver-map.js?v=1"></script>
+  <script src="/static/i18n.js?v=10"></script>
+  <script src="/static/naver-map.js?v=2"></script>
   <script>
     function mapLib() { return window.__teslifeMapLib || window.L; }
     const TABS = ["home", "trips", "charges", "ledger", "consumables"];
@@ -2122,8 +2132,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.19.0"; // display constant only
+    const APP_VERSION = "v1.20.0"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.20.0", features: ["차 위치: 지도는 다른 화면과 같고, 차는 위를 향하는 화살표예요", "방향: 차에서 방향이 오면 화살표가 시계 방향으로 돌아요", "집: 핀을 옮긴 자리만 집으로 저장해요"], fixes: [] },
       { version: "1.19.0", features: ["홈: 차 위치 카드에서 집에 있는지, 집까지 거리를 봐요", "집: 차의 마지막 위치나 지도 핀으로 집 한 곳을 저장해요"], fixes: [] },
       { version: "1.18.0", features: ["충전 요금: 보내기가 안 되면 같은 주차 안에서만 다시 보내요", "주행 종료: 집이 아니면 남은 배터리와 집까지 거리를 봇으로 보내요"], fixes: [] },
       { version: "1.17.1", features: [], fixes: ["공조: 핸들 열선 자동 막대가 차에서 오는 신호를 읽어요", "속도: 후진 구간은 0 아래 음수로 그려요", "전력: 회생은 0 아래만 초록이고 범례로 구분해요", "공조: 온도 아래 막대를 누르면 시간과 단계가 나와요"] },
@@ -6171,69 +6182,120 @@
       const ap = /p/i.test(get("dayPeriod")) ? "오후" : "오전";
       return ap + " " + get("hour") + ":" + get("minute");
     }
-    function carBadgeIcon() {
-      return window.L.divIcon({
+    const CAR_ARROW_SVG = "<svg viewBox='0 0 36 36' width='28' height='28' aria-hidden='true'><path fill='currentColor' stroke='#fff' stroke-width='1.8' stroke-linejoin='round' d='M18 3.2 30.2 29.6 18 23.4 5.8 29.6Z'/></svg>";
+    const HOME_PIN_SVG = "<svg viewBox='0 0 32 40' width='32' height='40' aria-hidden='true'><path fill='#fff' d='M16 40C16 40 1 27 1 15A15 15 0 0 1 31 15C31 27 16 40 16 40Z'/><path fill='currentColor' d='M16 40C16 40 4.5 25.5 4.5 15A11.5 11.5 0 0 1 27.5 15C27.5 25.5 16 40 16 40Z'/><circle cx='16' cy='15' r='4.2' fill='#fff'/></svg>";
+    const LOCATE_SVG = "<svg viewBox='0 0 44 44' width='32' height='32' aria-hidden='true'><circle cx='22' cy='22' r='11' fill='none' stroke='currentColor' stroke-width='1.6'/><path d='M22 4.2v5.2M22 34.6v5.2M4.2 22h5.2M34.6 22h5.2' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linecap='round'/><path fill='currentColor' d='M15.4 25.4v-1.15l.75-2a1.25 1.25 0 0 1 1.15-.75h9.4a1.25 1.25 0 0 1 1.15.75l.75 2V25.4h.55v1.2h-1.2v-.65h-12.1v.65h-1.2v-1.2h.55zm1.35-2.5.45-1.05h9.5l.45 1.05h-10.4zM17.15 24.9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm9.7 0a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z'/></svg>";
+    function headingDeg(data) {
+      if (!data || data.heading == null || data.heading === "") return null;
+      const n = Number(data.heading);
+      return Number.isFinite(n) ? n : null;
+    }
+    function carArrowIcon() {
+      return mapLib().divIcon({
         className: "car-loc-car",
-        html: "<span><svg viewBox='0 0 24 24' width='16' height='16' aria-hidden='true'><path fill='currentColor' d='M5 15v-2l1.2-3.2A2 2 0 0 1 8.1 8h7.8a2 2 0 0 1 1.9 1.4L19 13v2h1v2h-2v-1H6v1H4v-2h1zm2.2-4 .7-1.6h8.2l.7 1.6H7.2zM7.5 14.2a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4zm9 0a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4z'/></svg></span>",
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
+        html: "<span class='car-loc-arrow'>" + CAR_ARROW_SVG + "</span>",
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
       });
+    }
+    function pointCar(marker, deg) {
+      if (!marker) return;
+      if (typeof marker.setRotationAngle === "function") {
+        marker.setRotationAngle(deg == null ? 0 : deg);
+        return;
+      }
+      const el = marker.getElement && marker.getElement();
+      const node = el && el.querySelector(".car-loc-arrow");
+      if (!node) return;
+      node.style.transformOrigin = "center center";
+      node.style.transform = deg == null ? "" : ("rotate(" + deg + "deg)");
     }
     function homePinIcon() {
-      return window.L.divIcon({
+      return mapLib().divIcon({
         className: "car-loc-pin",
-        html: "<i></i>",
-        iconSize: [28, 36],
-        iconAnchor: [14, 34]
+        html: HOME_PIN_SVG,
+        iconSize: [32, 40],
+        iconAnchor: [16, 40]
       });
     }
-    function pinShifted() {
-      if (!homeMarker || !carLocData) return false;
-      const ll = homeMarker.getLatLng();
-      const home = carLocData.home;
-      const base = home && home.lat != null ? { lat: Number(home.lat), lon: Number(home.lon) }
-        : (carLocData.lat != null ? { lat: Number(carLocData.lat), lon: Number(carLocData.lon) } : null);
-      if (!base) return true;
-      const dlat = (ll.lat - base.lat) * 111320;
-      const dlon = (ll.lng - base.lon) * 111320 * Math.cos(base.lat * Math.PI / 180);
-      return Math.hypot(dlat, dlon) > 15;
+    function latLngOf(value) {
+      if (!value) return null;
+      const lat = typeof value.lat === "function" ? value.lat() : Number(value.lat);
+      const rawLon = value.lng != null ? value.lng : value.lon;
+      const lon = typeof rawLon === "function" ? rawLon() : Number(rawLon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return { lat: lat, lon: lon };
+    }
+    function metresApart(a, b) {
+      const dlat = (a.lat - b.lat) * 111320;
+      const dlon = (a.lon - b.lon) * 111320 * Math.cos(b.lat * Math.PI / 180);
+      return Math.hypot(dlat, dlon);
+    }
+    function pinAwayFromHome() {
+      if (!homeMarker) return false;
+      const here = latLngOf(homeMarker.getLatLng());
+      if (!here) return false;
+      const home = carLocData && carLocData.home;
+      if (!home || home.lat == null || home.lon == null) return true;
+      return metresApart(here, { lat: Number(home.lat), lon: Number(home.lon) }) > 8;
     }
     function paintPinButton() {
       const btn = document.getElementById("car-loc-save-pin");
       if (!btn) return;
-      const can = !!(homeMarker && pinMoved);
+      const can = pinAwayFromHome();
       btn.disabled = !can;
       btn.classList.toggle("primary", can);
-      btn.hidden = !(carLocData && ((carLocData.lat != null) || (carLocData.home && carLocData.home.lat != null)));
+    }
+    function paintLocate() {
+      const btn = document.getElementById("car-loc-locate");
+      if (!btn) return;
+      const data = carLocData || {};
+      btn.hidden = !(data.lat != null && data.lon != null);
+    }
+    function bindPinDrag(marker) {
+      if (!marker || marker.__pinBound) return;
+      marker.__pinBound = true;
+      marker.on("dragend", () => {
+        pinMoved = true;
+        paintPinButton();
+      });
+    }
+    function fitCarLoc(points) {
+      if (!carLocMap || pinMoved || carLocFitted || !points.length) return;
+      if (points.length === 1) carLocMap.setView(points[0], 16);
+      else carLocMap.fitBounds(points, { padding: [32, 32], maxZoom: 16 });
+      carLocFitted = true;
     }
     function paintCarMarkers() {
-      if (!carLocMap || !window.L) return;
-      const L = window.L;
+      if (!carLocMap || !mapLib()) return;
+      const lib = mapLib();
       const data = carLocData || {};
+      const aim = headingDeg(data);
       if (data.lat != null && data.lon != null) {
-        const ll = [data.lat, data.lon];
+        const ll = [Number(data.lat), Number(data.lon)];
         if (!carMarker) {
-          carMarker = L.marker(ll, {
-            icon: carBadgeIcon(), interactive: false, keyboard: false, zIndexOffset: 400
+          carMarker = lib.marker(ll, {
+            icon: carArrowIcon(), interactive: false, keyboard: false, zIndexOffset: 300
           }).addTo(carLocMap);
-        } else carMarker.setLatLng(ll);
+          pointCar(carMarker, aim);
+        } else {
+          carMarker.setLatLng(ll);
+          pointCar(carMarker, aim);
+        }
       } else if (carMarker) {
         carLocMap.removeLayer(carMarker);
         carMarker = null;
       }
       if (!pinMoved) {
         let pin = null;
-        if (data.home && data.home.lat != null && data.home.lon != null) pin = [data.home.lat, data.home.lon];
-        else if (data.lat != null && data.lon != null) pin = [data.lat, data.lon];
+        if (data.home && data.home.lat != null && data.home.lon != null) pin = [Number(data.home.lat), Number(data.home.lon)];
+        else if (data.lat != null && data.lon != null) pin = [Number(data.lat), Number(data.lon)];
         if (pin) {
           if (!homeMarker) {
-            homeMarker = L.marker(pin, {
-              draggable: true, icon: homePinIcon(), autoPan: true, zIndexOffset: 200
+            homeMarker = lib.marker(pin, {
+              draggable: true, icon: homePinIcon(), autoPan: true, zIndexOffset: 500
             }).addTo(carLocMap);
-            homeMarker.on("dragend", () => {
-              pinMoved = pinShifted();
-              paintPinButton();
-            });
+            bindPinDrag(homeMarker);
           } else homeMarker.setLatLng(pin);
         } else if (homeMarker) {
           carLocMap.removeLayer(homeMarker);
@@ -6241,14 +6303,58 @@
         }
       }
       paintPinButton();
+      paintLocate();
       if (!carLocFitted && !pinMoved) {
         const pts = [];
-        if (carMarker) pts.push(carMarker.getLatLng());
-        if (homeMarker) pts.push(homeMarker.getLatLng());
-        if (pts.length === 1) carLocMap.setView(pts[0], 16);
-        else if (pts.length > 1) carLocMap.fitBounds(L.latLngBounds(pts), { padding: [32, 32], maxZoom: 16 });
-        if (pts.length) carLocFitted = true;
+        if (carMarker) {
+          const here = latLngOf(carMarker.getLatLng());
+          if (here) pts.push([here.lat, here.lon]);
+        }
+        if (homeMarker) {
+          const here = latLngOf(homeMarker.getLatLng());
+          if (here && !pts.some((p) => metresApart({ lat: p[0], lon: p[1] }, here) < 1)) pts.push([here.lat, here.lon]);
+        }
+        fitCarLoc(pts);
       }
+    }
+    function addCarLocateControl(map) {
+      if (!map || document.getElementById("car-loc-locate")) return;
+      const lib = mapLib();
+      if (!lib || typeof lib.control !== "function" || !lib.DomUtil) return;
+      const ctrl = lib.control({ position: "bottomright" });
+      ctrl.onAdd = function () {
+        const btn = lib.DomUtil.create("button", "car-loc-locate");
+        btn.type = "button";
+        btn.id = "car-loc-locate";
+        btn.setAttribute("aria-label", "핀을 차 위치로 옮겨요");
+        btn.title = "핀을 차 위치로 옮겨요";
+        btn.innerHTML = LOCATE_SVG;
+        if (lib.DomEvent && lib.DomEvent.disableClickPropagation) lib.DomEvent.disableClickPropagation(btn);
+        btn.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          movePinToCar();
+        });
+        return btn;
+      };
+      ctrl.addTo(map);
+      paintLocate();
+    }
+    function movePinToCar() {
+      const data = carLocData || {};
+      if (!carLocMap || data.lat == null || data.lon == null) return;
+      const ll = [Number(data.lat), Number(data.lon)];
+      const lib = mapLib();
+      if (!homeMarker) {
+        homeMarker = lib.marker(ll, {
+          draggable: true, icon: homePinIcon(), autoPan: true, zIndexOffset: 500
+        }).addTo(carLocMap);
+        bindPinDrag(homeMarker);
+      } else homeMarker.setLatLng(ll);
+      pinMoved = true;
+      carLocFitted = true;
+      carLocMap.setView(ll, 16);
+      paintPinButton();
     }
     async function showCarLocMap() {
       const el = document.getElementById("car-loc-map");
@@ -6264,17 +6370,8 @@
       if (note) note.hidden = true;
       try {
         if (!carLocMap) {
-          await loadLeaflet();
-          const L = window.L;
-          carLocMap = L.map(el, { zoomControl: true, attributionControl: true, preferCanvas: true });
-          if (carLocMap.attributionControl && carLocMap.attributionControl.setPrefix) {
-            carLocMap.attributionControl.setPrefix(false);
-          }
-          const spec = mapTileSpec();
-          const layer = L.tileLayer(spec.url, {
-            maxZoom: 18, minZoom: 3, attribution: spec.attr
-          }).addTo(carLocMap);
-          mapTileLayers.push(layer);
+          carLocMap = await rawMap(el);
+          addCarLocateControl(carLocMap);
         }
       } catch (e) {
         el.hidden = true;
@@ -6292,7 +6389,6 @@
       const status = document.getElementById("car-loc-status");
       const when = document.getElementById("car-loc-when");
       const saveNow = document.getElementById("car-loc-save-now");
-      const saveHere = document.getElementById("car-loc-save-here");
       const del = document.getElementById("car-loc-delete");
       const via = document.getElementById("car-loc-via");
       const hasCar = data.lat != null && data.lon != null;
@@ -6315,13 +6411,13 @@
         ? ("마지막 위치 · " + fmtAmpmKo(data.received_at))
         : "마지막 위치가 없어요";
       saveNow.hidden = !!home || !hasCar;
-      saveHere.hidden = !hasCar;
       del.hidden = !home;
       if (data.home_via === "도로") via.textContent = "집까지 거리는 도로 기준이에요";
       else if (data.home_via === "직선") via.textContent = "집까지 거리는 직선 기준이에요";
       else via.textContent = "";
       via.hidden = !via.textContent || atHome || !home;
       paintPinButton();
+      paintLocate();
       const fold = document.getElementById("car-loc-fold");
       if (fold && fold.open) showCarLocMap();
     }
@@ -6339,8 +6435,7 @@
       }).finally(() => { carLocBusy = null; });
       return carLocBusy;
     }
-    async function saveCarHome(body) {
-      if (carLocData && carLocData.home && !askKo("이미 저장된 집을 이 위치로 바꿀까요?")) return;
+    async function writeHome(body) {
       try {
         await writeJson("PUT", "/api/home", body);
       } catch (e) {
@@ -6350,6 +6445,17 @@
       pinMoved = false;
       carLocFitted = false;
       await refreshCarLoc(true);
+    }
+    async function saveLastHome() {
+      if (carLocData && carLocData.home) return;
+      await writeHome({ use_last: true });
+    }
+    async function savePinHome() {
+      if (!pinAwayFromHome()) return;
+      const here = latLngOf(homeMarker.getLatLng());
+      if (!here) return;
+      if (carLocData && carLocData.home && !askKo("이미 저장된 집을 이 위치로 바꿀까요?")) return;
+      await writeHome({ lat: here.lat, lon: here.lon });
     }
     async function deleteCarHome() {
       if (!askKo("저장된 집을 지울까요?")) return;
@@ -6374,16 +6480,9 @@
       document.getElementById("car-loc-save-now").addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        saveCarHome({ use_last: true });
+        saveLastHome();
       });
-      document.getElementById("car-loc-save-here").addEventListener("click", () => {
-        saveCarHome({ use_last: true });
-      });
-      document.getElementById("car-loc-save-pin").addEventListener("click", () => {
-        if (!homeMarker || !pinMoved) return;
-        const ll = homeMarker.getLatLng();
-        saveCarHome({ lat: ll.lat, lon: ll.lng });
-      });
+      document.getElementById("car-loc-save-pin").addEventListener("click", () => { savePinHome(); });
       document.getElementById("car-loc-delete").addEventListener("click", () => { deleteCarHome(); });
     }
 
