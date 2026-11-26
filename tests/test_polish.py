@@ -45,7 +45,7 @@ class PolishHtmlTests(unittest.TestCase):
         self.assertIn("--accent-surface", HTML)
         self.assertIn("차량 수신 ", HTML)
         self.assertIn('id="home-foot"', HTML)
-        self.assertIn('const APP_VERSION = "v1.19.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.20.0"', HTML)
         self.assertIn('href="https://github.com/klizzard-kr/teslife" target="_blank" rel="noopener">GitHub</a>', HTML)
         self.assertIn(">by klizzard<", HTML)
         self.assertIn('"연결 끊김"', HTML)

@@ -123,7 +123,9 @@ class BridgeLocationTests(unittest.TestCase):
         self.assertIn("Location", self.names(Location=where))  # still driving
         self.assertIn("Location", self.names(Gear="ShiftStateP", Location=where))  # arrival point
         self.assertNotIn("Location", self.names(Location=where))  # parked afterwards
-        self.assertNotIn("GpsHeading", self.names(Gear="ShiftStateD", GpsHeading=90))
+        kept = self.names(Gear="ShiftStateD", GpsHeading=90, GpsState="GpsStateNominal")
+        self.assertEqual(kept["GpsHeading"], 90)
+        self.assertNotIn("GpsState", kept)
 
     def test_bad_location_dropped(self) -> None:
         self.names(Gear="ShiftStateD")

@@ -47,20 +47,20 @@ class HomeCardMarkupTests(unittest.TestCase):
         for text in (
             "차 위치",
             "지금 차 위치를 집으로 저장",
-            "여기를 집으로 저장",
-            "이 위치로 저장",
+            "핀 위치를 집으로 저장",
             "집 삭제",
             'id="car-loc-map" class="map-box"',
-            "loadLeaflet",
         ):
-            self.assertIn(text, block if text != "loadLeaflet" else HTML)
+            self.assertIn(text, block)
+        self.assertNotIn("여기를 집으로 저장", HTML)
+        self.assertNotIn("이 위치로 저장", HTML)
         self.assertNotIn("+ 장소 추가", HTML)
         self.assertNotIn("37.566", HTML)
         self.assertNotIn("126.978", HTML)
 
     def test_version_note(self) -> None:
         self.assertEqual(PROCESS_VERSION, "25")
-        self.assertIn('const APP_VERSION = "v1.19.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.20.0"', HTML)
         note = HTML.split('version: "1.19.0"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("차 위치", note)
         self.assertIn("집 한 곳", note)

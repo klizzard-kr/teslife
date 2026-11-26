@@ -47,6 +47,52 @@ def home_dict(row: sqlite3.Row | tuple | None) -> dict[str, Any] | None:
     }
 
 
+def _heading_number(value: Any) -> int | float | None:
+    """Degrees already stored, or a numeric string. Missing and junk stay None."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        num = float(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            num = float(text)
+        except ValueError:
+            return None
+    else:
+        return None
+    if num != num or num in (float("inf"), float("-inf")):
+        return None
+    rounded = round(num, 1)
+    if rounded == int(rounded):
+        return int(rounded)
+    return rounded
+
+
+def last_heading(conn: sqlite3.Connection, vehicle_id: str) -> int | float | None:
+    """Newest GpsHeading the bridge kept. The row's ts is when it was received.
+
+    The telemetry config does not ask for GpsHeading yet, so None is normal.
+    Nothing is requested from the car.
+    """
+    try:
+        row = conn.execute(
+            "SELECT value FROM signals WHERE vehicle_id = ? AND name = 'GpsHeading' "
+            "ORDER BY ts DESC LIMIT 1",
+            (vehicle_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if not row or row[0] in (None, ""):
+        return None
+    try:
+        return _heading_number(decode_value(row[0]))
+    except (TypeError, ValueError):
+        return None
+
+
 def last_fix(conn: sqlite3.Connection, vehicle_id: str) -> dict[str, Any] | None:
     """The newest Location signal already stored. Nothing is requested from the car."""
     try:
@@ -91,10 +137,11 @@ def car_location_payload(
     vehicle_id: str,
     route_opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    """Coordinates, when they arrived, the at-home flag, and kilometres home.
+    """Coordinates, when they arrived, heading, the at-home flag, and kilometres home.
 
-    home_km and home_via come from home_leg. Both are empty when either point is missing.
-    No street address is included.
+    heading is the newest stored GpsHeading in degrees, or None when the car has not
+    sent one. home_km and home_via come from home_leg. Both are empty when either
+    point is missing. No street address is included.
     """
     fix = last_fix(conn, vehicle_id)
     row = _home_row(conn, vehicle_id)
@@ -106,6 +153,7 @@ def car_location_payload(
         "lon": None if fix is None else fix["lon"],
         "received_at": None if fix is None else fix["received_at"],
         "located_at_home": located_at_home(conn, vehicle_id),
+        "heading": last_heading(conn, vehicle_id),
         "home_km": km,
         "home_via": via,
         "home": home_dict(row),

@@ -51,6 +51,7 @@ class NormTsTests(unittest.TestCase):
                 Gear="ShiftStatePark",
                 Location={"latitude": 37.5, "longitude": 126.9},
                 GpsHeading=90,
+                GpsState="GpsStateNominal",
                 Destination="home",
                 LatLon={"latitude": 37.5, "longitude": 126.9},
                 ChargeState="<invalid>",
@@ -67,12 +68,13 @@ class NormTsTests(unittest.TestCase):
             self.assertNotIn(gone, {row["name"] for row in rows})
         names = {row["name"] for row in rows}
         self.assertNotIn("Location", names)
-        self.assertNotIn("GpsHeading", names)
+        self.assertNotIn("GpsState", names)
         self.assertNotIn("Destination", names)
         self.assertNotIn("LatLon", names)
         self.assertNotIn("ChargeState", names)
         self.assertTrue(all(row["timestamp"] == ISO for row in rows))
         by_name = {row["name"]: row["value"] for row in rows}
+        self.assertEqual(by_name["GpsHeading"], 90)
         self.assertEqual(by_name["BatteryLevel"], 55)
         self.assertEqual(by_name["Gear"], "P")
         self.assertEqual(by_name["Odometer"], round(10 * 1.609344, 3))

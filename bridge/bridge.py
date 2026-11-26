@@ -27,7 +27,8 @@ Normalisation (teslife expects its simulator's conventions):
     stay). Parked positions are dropped. Navigation destination fields (DestinationName,
     DestinationLocation, MilesToArrival, MinutesToArrival, ExpectedEnergyPercentAtTripArrival)
     are dropped: teslife no longer uses the navigation destination.
-    Other GPS / route fields (GpsHeading, OriginLocation, RouteLine, ...) are dropped.
+    GpsHeading is kept as degrees, with the payload time, even while parked. Other GPS /
+    route fields (OriginLocation, RouteLine, and any other Gps* name) are dropped.
   * Invalid ("<invalid>") values are dropped.
   * New enum prefixes stripped: BMSState "BMSStateFault" -> "Fault", Hvil "HvilStatusOK" -> "OK",
     DiStateR "DriveInverterStateFault" -> "Fault", CabinOverheatProtectionMode
@@ -44,7 +45,7 @@ DB = "signals.db"
 MI = 1.609344
 SKIP = {"Vin", "CreatedAt", "IsResend", "MinutesToArrival", "ExpectedEnergyPercentAtTripArrival"}
 DROP_PREFIX = ("Location", "Gps", "Destination", "OriginLocation", "RouteLine", "MilesToArrival")
-KEEP = {"Location"}  # kept despite DROP_PREFIX
+KEEP = {"Location", "GpsHeading"}  # kept despite DROP_PREFIX
 LATLON = {"Location"}
 GEAR_STATE = {}  # vin -> last known gear letter (seeded from the DB in main)
 RANGE_MI = {"RatedRange", "EstBatteryRange"}
@@ -59,9 +60,35 @@ PREFIXES = {"Gear": "ShiftState", "ChargeState": "ChargeState",
 GEARS = {"Park": "P", "Reverse": "R", "Neutral": "N", "Drive": "D", "P": "P", "R": "R", "N": "N", "D": "D"}
 
 
+def heading_degrees(value):
+    """GpsHeading as degrees. Anything else is dropped. The caller stores the time."""
+    if isinstance(value, bool) or value is None or value == "<invalid>":
+        return None
+    if isinstance(value, (int, float)):
+        num = float(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text or text == "<invalid>":
+            return None
+        try:
+            num = float(text)
+        except ValueError:
+            return None
+    else:
+        return None
+    if num != num or num in (float("inf"), float("-inf")):
+        return None
+    rounded = round(num, 1)
+    if rounded == int(rounded):
+        return int(rounded)
+    return rounded
+
+
 def convert(name, value):
     if value == "<invalid>" or value is None:
         return None
+    if name == "GpsHeading":
+        return heading_degrees(value)
     if isinstance(value, dict) and set(value) == {"latitude", "longitude"}:
         if name not in LATLON:
             return None
