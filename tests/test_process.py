@@ -2,6 +2,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,11 +91,14 @@ class ProcessDayTests(unittest.TestCase):
 
     def test_idempotent(self) -> None:
         db = self._ingest("day")
-        process_db(db)
+        # The sample day is 2026-10-26. A clock 31 days later prunes those signals
+        # between the two runs, so the second run is pinned to the next day.
+        now = datetime(2026, 10, 27, tzinfo=timezone.utc)
+        process_db(db, now=now)
         first_trips = [tuple(r) for r in self._rows(db, "trips")]
         first_charges = [tuple(r) for r in self._rows(db, "charges")]
         first_tires = [tuple(r) for r in self._rows(db, "tire_readings")]
-        process_db(db)
+        process_db(db, now=now)
         self.assertEqual([tuple(r) for r in self._rows(db, "trips")], first_trips)
         self.assertEqual([tuple(r) for r in self._rows(db, "charges")], first_charges)
         self.assertEqual([tuple(r) for r in self._rows(db, "tire_readings")], first_tires)

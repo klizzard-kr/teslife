@@ -408,63 +408,446 @@ def _park_session_id(ev: Events) -> str | None:
     return format_ts(started)
 
 
+BOT_SEND_MAX_ATTEMPTS = 3
+BOT_SEND_GAP = timedelta(minutes=2)
+_TERMINAL_PREFIXES = ("sent:", "empty:", "nobot:", "gave_up:", "moved:", "home:", "skip:")
+_DRIVE_GEARS = ("D", "R", "N")
+HOME_VIA_ROAD = "도로"
+HOME_VIA_STRAIGHT = "직선"
+_BOT_DELIVERY_SQL = """
+CREATE TABLE IF NOT EXISTS bot_delivery (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vehicle_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    attempt INTEGER NOT NULL,
+    ok INTEGER NOT NULL,
+    http_status INTEGER,
+    ts TEXT NOT NULL
+)
+"""
+
+
+def _state_row(conn: sqlite3.Connection, vid: str, kind: str) -> tuple[str, datetime | None]:
+    row = conn.execute(
+        "SELECT state, updated_ts FROM alert_state WHERE vehicle_id = ? AND kind = ?",
+        (vid, kind),
+    ).fetchone()
+    if not row:
+        return "", None
+    updated = None
+    if row[1]:
+        try:
+            updated = parse_ts(row[1])
+        except ValueError:
+            updated = None
+    return row[0] or "", updated
+
+
+def _iso_tail(state: str) -> str:
+    """The ISO timestamp at the end of an alert state, or ''."""
+    if len(state) < 20:
+        return ""
+    tail = state[-20:]
+    if tail[4] == "-" and tail[10] == "T" and tail[13] == ":" and tail.endswith("Z"):
+        return tail
+    return ""
+
+
+def _is_terminal(state: str, session: str) -> bool:
+    if not session or not state.endswith(":" + session):
+        return False
+    return state.startswith(_TERMINAL_PREFIXES)
+
+
+def _retry_attempt(state: str, session: str) -> int | None:
+    """How many sends already failed, when state is retry:{n}:{session}."""
+    prefix = "retry:"
+    suffix = ":" + session
+    if not state.startswith(prefix) or not state.endswith(suffix):
+        return None
+    mid = state[len(prefix):-len(suffix)]
+    if not mid.isdigit():
+        return None
+    return int(mid)
+
+
+def _pending_attempt(state: str, session: str) -> int | None:
+    """Failed attempts so far, or 0 when an older wait state still needs a send."""
+    found = _retry_attempt(state, session)
+    if found is not None:
+        return found
+    if state == "wait:" + session:
+        return 0
+    return None
+
+
+def _stop_retry(conn, vid: str, kind: str, state: str, now: datetime) -> None:
+    if not (state.startswith("retry:") or state.startswith("wait:")):
+        return
+    session = _iso_tail(state)
+    if session:
+        _set_state(conn, vid, kind, "moved:" + session, now)
+
+
+def _record_bot_delivery(
+    conn: sqlite3.Connection, vid: str, kind: str, event_id: str,
+    attempt: int, ok: bool, http_status: int | None, now: datetime,
+) -> None:
+    """Server log and notification-delivery log. Neither row stores a coordinate."""
+    conn.execute(_BOT_DELIVERY_SQL)
+    ts = format_ts(now)
+    status = "ok" if ok else "fail"
+    http = "-" if http_status is None else str(int(http_status))
+    message = f"{status} http {http} attempt {attempt}"
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(alert_log)").fetchall()}
+    with conn:
+        if "lat" in cols and "lon" in cols:
+            conn.execute(
+                "INSERT INTO alert_log (vehicle_id, ts, kind, status, message, lat, lon) "
+                "VALUES (?, ?, ?, ?, ?, NULL, NULL)",
+                (vid, ts, kind, status, message),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO alert_log (vehicle_id, ts, kind, status, message) VALUES (?, ?, ?, ?, ?)",
+                (vid, ts, kind, status, message),
+            )
+        conn.execute(
+            "INSERT INTO bot_delivery (vehicle_id, kind, event_id, attempt, ok, http_status, ts) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (vid, kind, event_id, attempt, 1 if ok else 0, http_status, ts),
+        )
+
+
+def _finish_bot_send(
+    conn, vid: str, kind: str, session: str, pending: int | None,
+    ok: bool, http_status: int | None, event_id: str, now: datetime,
+) -> None:
+    attempt = (pending or 0) + 1
+    _record_bot_delivery(conn, vid, kind, event_id, attempt, ok, http_status, now)
+    if ok:
+        _set_state(conn, vid, kind, "sent:" + session, now)
+    elif attempt >= BOT_SEND_MAX_ATTEMPTS:
+        _set_state(conn, vid, kind, "gave_up:" + session, now)
+    else:
+        _set_state(conn, vid, kind, f"retry:{attempt}:{session}", now)
+
+
+def _port_rates(conn, vid: str, session: str, ev: Events, now: datetime):
+    """Cached operator prices for this park, a new list, None when the car has no position, or 'error'."""
+    from process.evcharger import _meta_get, _meta_set
+
+    raw = _meta_get(conn, f"port_rates:{vid}") or ""
+    try:
+        saved = json.loads(raw)
+    except (TypeError, ValueError):
+        saved = None
+    if isinstance(saved, dict) and saved.get("session") == session and isinstance(saved.get("rates"), list):
+        return saved["rates"]
+    where = parked_location(conn, vid, ev)
+    if where is None:
+        return None
+    try:
+        from process.evcharger import FAR_M, _nearby, snapshot_port_status
+        from web.tariff import ensure_schema, nearby_operator_rates
+
+        snapshot_port_status(conn, vid, where[0], where[1], now)
+        chargers = _nearby(conn, where[0], where[1], now, FAR_M)
+        ensure_schema(conn)
+        rates = nearby_operator_rates(conn, chargers, now.astimezone(KST).date().isoformat())
+    except Exception:
+        return "error"
+    _meta_set(
+        conn, f"port_rates:{vid}",
+        json.dumps({"session": session, "rates": rates or []}, ensure_ascii=False),
+    )
+    return rates or []
+
+
+def port_rates_retry_due(conn: sqlite3.Connection, vid: str, now: datetime) -> bool:
+    """True when a failed port-price send is allowed to try again."""
+    state, updated = _state_row(conn, vid, "port_open_rates")
+    if _pending_attempt(state, _iso_tail(state)) is None:
+        return False
+    if updated and now - updated < BOT_SEND_GAP:
+        return False
+    return True
+
+
 def check_port_open_rates(conn, vid, ev, now, sender, opener=None) -> None:
     """Tell the bot the nearby public prices. No app notice and no app push.
 
-    One send per parking session. The open-port warning still waits five minutes.
-    `sender` is the app webhook and is not used.
+    One success per parking session. A failed post is tried again, up to three
+    times and two minutes apart, only until the car leaves park. The open-port
+    warning still waits five minutes. `sender` is the app webhook and is not used.
     """
     del sender
-    if ev.latest("Gear") != "P" or ev.latest("ChargePortDoorOpen") is not True:
+    state, updated = _state_row(conn, vid, "port_open_rates")
+    gear = ev.latest("Gear")
+    if gear in _DRIVE_GEARS:
+        _stop_retry(conn, vid, "port_open_rates", state, now)
+        return
+    if gear != "P":
         return
     session = _park_session_id(ev)
-    if not session:
+    if not session or _is_terminal(state, session):
         return
-    state = _get_state(conn, vid, "port_open_rates") or ""
-    if state.endswith(":" + session):
+    pending = _pending_attempt(state, session)
+    if pending is None and ev.latest("ChargePortDoorOpen") is not True:
         return
-    from process.evcharger import _meta_get, _meta_set
-    from web.bot_notify import _url_ok, publish_direct, webhook_url
+    if pending is not None:
+        if updated and now - updated < BOT_SEND_GAP:
+            return
+        if pending >= BOT_SEND_MAX_ATTEMPTS:
+            _set_state(conn, vid, "port_open_rates", "gave_up:" + session, now)
+            return
+    from web.bot_notify import _url_ok, publish_direct_result, webhook_url
 
-    waiting = state == "wait:" + session
-    rates = None
-    if waiting:
-        try:
-            rates = json.loads(_meta_get(conn, f"port_rates:{vid}") or "")
-        except (TypeError, ValueError):
-            rates = None
-    if not isinstance(rates, list):
-        where = parked_location(conn, vid, ev)
-        if where is None:
-            _set_state(conn, vid, "port_open_rates", "empty:" + session, now)
-            return
-        try:
-            from process.evcharger import FAR_M, _nearby, snapshot_port_status
-            from web.tariff import ensure_schema, nearby_operator_rates
-
-            snapshot_port_status(conn, vid, where[0], where[1], now)
-            chargers = _nearby(conn, where[0], where[1], now, FAR_M)
-            ensure_schema(conn)
-            rates = nearby_operator_rates(conn, chargers, now.astimezone(KST).date().isoformat())
-        except Exception:
-            return
-        if not rates:
-            _set_state(conn, vid, "port_open_rates", "empty:" + session, now)
-            return
-        _meta_set(conn, f"port_rates:{vid}", json.dumps(rates, ensure_ascii=False))
-        _set_state(conn, vid, "port_open_rates", "wait:" + session, now)
+    rates = _port_rates(conn, vid, session, ev, now)
+    if rates == "error":
+        return
+    if not rates:
+        _set_state(conn, vid, "port_open_rates", "empty:" + session, now)
+        return
     if not _url_ok(webhook_url()):
         _set_state(conn, vid, "port_open_rates", "nobot:" + session, now)
         return
-    ok = publish_direct(
-        "port_open_rates",
-        f"port_open_rates:{session}",
-        format_ts(now),
-        {"rates": rates},
-        opener,
+    event_id = f"port_open_rates:{session}"
+    ok, http = publish_direct_result(
+        "port_open_rates", event_id, format_ts(now), {"rates": rates}, opener,
     )
-    if ok:
-        _set_state(conn, vid, "port_open_rates", "sent:" + session, now)
+    _finish_bot_send(conn, vid, "port_open_rates", session, pending, ok, http, event_id, now)
+
+
+def _home_flag(value: Any) -> bool | None:
+    """True at home, False away, None when the value is missing or not a yes/no."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in ("true", "1"):
+        return True
+    if text in ("false", "0"):
+        return False
+    return None
+
+
+def located_at_home(ev: Events, end: datetime, now: datetime) -> bool | None:
+    """The at-home flag from the end of the trip through now. Older samples are ignored."""
+    window = end - timedelta(minutes=2)
+    samples = [(ts, value) for ts, value in ev.series("LocatedAtHome") if window <= ts <= now]
+    if not samples:
+        return None
+    return _home_flag(samples[-1][1])
+
+
+def saved_home(conn: sqlite3.Connection, vid: str) -> tuple[float, float] | None:
+    """The stored place named 집. The coordinates stay on the server."""
+    try:
+        row = conn.execute(
+            "SELECT lat, lon FROM places WHERE vehicle_id = ? AND TRIM(name) = ? ORDER BY id LIMIT 1",
+            (vid, "집"),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if not row or row[0] is None or row[1] is None:
+        return None
+    return float(row[0]), float(row[1])
+
+
+def _trip_end_point(row: sqlite3.Row) -> tuple[float, float] | None:
+    try:
+        lat, lon = row["end_lat"], row["end_lon"]
+    except (IndexError, KeyError):
+        return None
+    if lat is None or lon is None:
+        return None
+    return float(lat), float(lon)
+
+
+def road_km(
+    origin: tuple[float, float], dest: tuple[float, float], opener: Callable[..., Any] | None = None,
+) -> float | None:
+    """Kilometres along the road from the configured OSRM, or None when it is off or down.
+
+    The request is not logged. A failure leaves the caller on the straight line.
+    """
+    from process.match import from_env
+
+    matcher = from_env()
+    base = getattr(matcher, "base_url", "") if matcher is not None else ""
+    if not base:
+        return None
+    lat1, lon1 = origin
+    lat2, lon2 = dest
+    url = (
+        f"{str(base).rstrip('/')}/route/v1/driving/{lon1:.5f},{lat1:.5f};{lon2:.5f},{lat2:.5f}"
+        "?overview=false&alternatives=false&steps=false"
+    )
+    open_ = opener or urllib.request.urlopen
+    req = urllib.request.Request(url, headers={"User-Agent": "teslife-distance", "Accept": "application/json"})
+    try:
+        with open_(req, timeout=5) as res:
+            body = res.read()
+        data = json.loads(body.decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, TypeError, AttributeError):
+        return None
+    routes = data.get("routes") if isinstance(data, dict) else None
+    if not routes or not isinstance(routes, list):
+        return None
+    try:
+        km = float(routes[0].get("distance")) / 1000.0
+    except (AttributeError, TypeError, ValueError, IndexError):
+        return None
+    if km < 0:
+        return None
+    return km
+
+
+def home_leg(
+    origin: tuple[float, float] | None, home: tuple[float, float] | None,
+    opener: Callable[..., Any] | None = None,
+) -> tuple[float | None, str | None]:
+    """(km, 도로 or 직선). Both are empty when the server has no home point or no end point."""
+    if origin is None or home is None:
+        return None, None
+    from process.geo import distance_m
+
+    straight = distance_m(origin, home) / 1000.0
+    road = road_km(origin, home, opener)
+    if road is None:
+        return round(straight, 1), HOME_VIA_STRAIGHT
+    return round(road, 1), HOME_VIA_ROAD
+
+
+def _charger_candidates(
+    conn: sqlite3.Connection, origin: tuple[float, float] | None, now: datetime, limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Up to three stations within the existing station-list radius. Name, distance, operator."""
+    if origin is None:
+        return []
+    from process.evcharger import PICK_M, _nearby
+    from process.operators import display_name
+    from web.bot_notify import _safe
+
+    try:
+        items = _nearby(conn, origin[0], origin[1], now, PICK_M)
+    except Exception:
+        return []
+    items.sort(key=lambda item: item.get("distance_m") if item.get("distance_m") is not None else 1e9)
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in items:
+        name = str(item.get("stat_nm") or "").strip()
+        operator = display_name(item.get("busi_id"), item.get("bnm"), item.get("busi_nm"))
+        key = (name, operator)
+        if not name or key in seen:
+            continue
+        dist = item.get("distance_m")
+        if dist is None:
+            continue
+        row = {"name": name, "distance_m": int(round(float(dist))), "operator": operator}
+        try:
+            _safe(row)
+        except ValueError:
+            continue
+        seen.add(key)
+        out.append(row)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _left_since(conn: sqlite3.Connection, vid: str, ev: Events, since: datetime) -> bool:
+    if ev.latest("Gear") in _DRIVE_GEARS:
+        return True
+    return moved_since(conn, vid, since)
+
+
+def trip_end_away_due(conn: sqlite3.Connection, vid: str, now: datetime) -> bool:
+    """True while the latest trip still needs the away-from-home bot message."""
+    row = _last_trip(conn, vid)
+    if row is None:
+        return False
+    start = row["start_ts"]
+    state, updated = _state_row(conn, vid, "trip_end_away")
+    pending = _pending_attempt(state, start)
+    if pending is not None:
+        if updated and now - updated < BOT_SEND_GAP:
+            return False
+        return True
+    if _is_terminal(state, start):
+        return False
+    return now - parse_ts(row["end_ts"]) <= TRIP_END_FRESH
+
+
+def check_trip_end_away(conn, vid, ev, now, sender, opener=None, route_opener=None) -> None:
+    """Bot webhook when a trip ends away from home. No app notice and no app push.
+
+    `LocatedAtHome` must be false near the end. Missing or unknown stays silent.
+    Home kilometres use the stored place named 집. The payload has distances only.
+    `sender` is the app webhook and is not used.
+    """
+    del sender
+    row = _last_trip(conn, vid)
+    if row is None:
+        return
+    start = row["start_ts"]
+    end = parse_ts(row["end_ts"])
+    state, updated = _state_row(conn, vid, "trip_end_away")
+    if _is_terminal(state, start):
+        return
+    pending = _pending_attempt(state, start)
+    if pending is not None:
+        if _left_since(conn, vid, ev, end):
+            _set_state(conn, vid, "trip_end_away", "moved:" + start, now)
+            return
+        if updated and now - updated < BOT_SEND_GAP:
+            return
+        if pending >= BOT_SEND_MAX_ATTEMPTS:
+            _set_state(conn, vid, "trip_end_away", "gave_up:" + start, now)
+            return
+    else:
+        if now - end > TRIP_END_FRESH:
+            _set_state(conn, vid, "trip_end_away", "skip:" + start, now)
+            return
+        flag = located_at_home(ev, end, now)
+        if flag is None:
+            return
+        if flag:
+            _set_state(conn, vid, "trip_end_away", "home:" + start, now)
+            return
+    from web.bot_notify import _url_ok, publish_direct_result, webhook_url
+
+    if not _url_ok(webhook_url()):
+        _set_state(conn, vid, "trip_end_away", "nobot:" + start, now)
+        return
+    origin = _trip_end_point(row)
+    if origin is None and ev.latest("Gear") == "P":
+        origin = parked_location(conn, vid, ev)
+    home_km, home_via = home_leg(origin, saved_home(conn, vid), route_opener)
+    battery = _as_float(ev.at("BatteryLevel", end))
+    estimated = _as_float(ev.at("EstBatteryRange", end))
+    rated = _as_float(ev.at("RatedRange", end))
+    chosen = estimated if estimated is not None and estimated > 0 else rated
+    if chosen is None:
+        range_km = None
+    else:
+        range_km = int(float(chosen) + 0.5)
+    outside = _as_float(ev.at("OutsideTemp", end))
+    values = {
+        "battery_pct": None if battery is None else round(float(battery), 1),
+        "range_km": range_km,
+        "outside_temp": None if outside is None else round(float(outside), 1),
+        "home_km": home_km,
+        "home_via": home_via,
+        "chargers": _charger_candidates(conn, origin, now),
+    }
+    event_id = f"trip_end_away:{start}"
+    ok, http = publish_direct_result("trip_end_away", event_id, format_ts(end), values, opener)
+    _finish_bot_send(conn, vid, "trip_end_away", start, pending, ok, http, event_id, now)
 
 
 def check_charge_start(conn, vid, ev, now, sender) -> None:
@@ -1282,7 +1665,7 @@ def run_alerts(
     sender = sender or webhook_sender
     from process.maintenance import SIGNAL_CHECKS
 
-    for check in (check_trip_start, check_trip_end, check_charge_start, check_charge_end,
+    for check in (check_trip_start, check_trip_end, check_trip_end_away, check_charge_start, check_charge_end,
                   check_park14h, check_software_update, check_port_open_rates,
                   check_open_after_park, check_sentry, check_sentry_alarm, check_tpms_warning, *SIGNAL_CHECKS):
         try:

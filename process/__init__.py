@@ -141,6 +141,17 @@ CREATE TABLE IF NOT EXISTS alert_log (
     message TEXT
 );
 
+CREATE TABLE IF NOT EXISTS bot_delivery (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vehicle_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    attempt INTEGER NOT NULL,
+    ok INTEGER NOT NULL,
+    http_status INTEGER,
+    ts TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS trip_points (
     vehicle_id TEXT NOT NULL,
     trip_start_ts TEXT NOT NULL,
@@ -2381,7 +2392,8 @@ def _run_deferred_alerts(conn: sqlite3.Connection, vehicle_ids: list[str], now: 
     """With no new signals, still finish a trip_end alert that is waiting for tires, and run
     the 14 h AC-spot check (the car sleeps while parked, so no new signals come)."""
     from process.alerts import (
-        charge_port_hold_due, check_open_after_park, check_park14h, check_trip_end, trip_end_pending,
+        charge_port_hold_due, check_open_after_park, check_park14h, check_port_open_rates,
+        check_trip_end, check_trip_end_away, port_rates_retry_due, trip_end_away_due, trip_end_pending,
     )
     from process.maintenance import IDLE_CHECKS
 
@@ -2404,10 +2416,21 @@ def _run_deferred_alerts(conn: sqlite3.Connection, vehicle_ids: list[str], now: 
         except Exception as exc:  # alerts must never break processing
             print(f"alerts error: {type(exc).__name__}: {exc}", flush=True)
         try:
-            if not trip_end_pending(conn, vid, now):
-                continue
-            ev = _load_events(conn, vid, _window_start(conn, vid))
-            check_trip_end(conn, vid, ev, now, sender or _default_sender())
+            if trip_end_pending(conn, vid, now):
+                ev = _load_events(conn, vid, _window_start(conn, vid))
+                check_trip_end(conn, vid, ev, now, sender or _default_sender())
+        except Exception as exc:  # alerts must never break processing
+            print(f"alerts error: {type(exc).__name__}: {exc}", flush=True)
+        try:
+            need_rates = port_rates_retry_due(conn, vid, now)
+            need_away = trip_end_away_due(conn, vid, now)
+            if need_rates or need_away:
+                ev = _load_events(conn, vid, _window_start(conn, vid))
+                who = sender or _default_sender()
+                if need_rates:
+                    check_port_open_rates(conn, vid, ev, now, who)
+                if need_away:
+                    check_trip_end_away(conn, vid, ev, now, who)
         except Exception as exc:  # alerts must never break processing
             print(f"alerts error: {type(exc).__name__}: {exc}", flush=True)
 
