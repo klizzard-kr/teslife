@@ -117,7 +117,7 @@ PYTHONPATH=. python bridge/bridge.py < telemetry.log
 
 - `TESLIFE_GEOCODER` — 네이버 지도 키가 없을 때 `nominatim`이면 오픈스트리트맵으로 주소를 찾습니다. 비우면 주소 찾기를 하지 않습니다.
 - `EV_CHARGER_API_KEY` — 한국 공공 충전기 목록입니다. 없으면 그 조회는 꺼집니다.
-- `TESLIFE_ROUTE_MATCH` — `osrm-local`일 때만 내 OSRM으로 도로를 맞춥니다. 비우면 점 사이 직선입니다.
+- `TESLIFE_ROUTE_MATCH` — `osrm-local`일 때만 내 OSRM으로 도로를 맞춥니다. 비우면 점 사이 직선입니다. 집까지 거리도 이 설정이 켜져 있고 OSRM이 답을 주면 도로 거리이고, 아니면 직선거리입니다.
 - `TESLIFE_OSRM_URL` — 그 OSRM 주소입니다. 비우면 이 컴퓨터의 5000번 포트입니다.
 - `TESLIFE_ALERT_WEBHOOK_URL`, `TESLIFE_ALERT_WEBHOOK_KEY` — `python -m web --alerts`일 때 상태 알림을 보냅니다. 없으면 남기고 건너뜁니다.
 - `BOT_NOTIFY_WEBHOOK_URL`, `BOT_PUSH_TOKEN` — 둘 다 있어야 봇 대기 전송을 합니다.

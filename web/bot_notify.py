@@ -123,7 +123,8 @@ def event_payload(notice_id: str, body: str, details: list | None, stored_ts: st
     return payload
 
 
-def _post(payload: dict[str, Any], opener: Opener | None) -> bool:
+def _post(payload: dict[str, Any], opener: Opener | None) -> tuple[bool, int | None]:
+    """POST the signed body. The second value is the HTTP status, or None when there was no response."""
     raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
@@ -148,26 +149,38 @@ def _post(payload: dict[str, Any], opener: Opener | None) -> bool:
     except urllib.error.HTTPError as exc:
         code = exc.code
     except (urllib.error.URLError, TimeoutError, OSError, ValueError):
-        return False
-    return 200 <= code < 300
+        return False, None
+    try:
+        status = int(code)
+    except (TypeError, ValueError):
+        return False, None
+    return 200 <= status < 300, status
+
+
+def publish_direct_result(
+    kind: str, event_id: str, event_ts: str, values: dict[str, Any], opener: Opener | None = None,
+) -> tuple[bool, int | None]:
+    """POST one bot event and return (ok, http status). No inbox row and no app push."""
+    if not _url_ok(webhook_url()):
+        return False, None
+    payload = {"id": event_id, "kind": kind, "event_ts": event_ts, "values": values}
+    try:
+        _safe(payload)
+    except ValueError:
+        return False, None
+    try:
+        return _post(payload, opener)
+    except Exception as exc:
+        print(f"bot webhook: {type(exc).__name__}", flush=True)
+        return False, None
 
 
 def publish_direct(
     kind: str, event_id: str, event_ts: str, values: dict[str, Any], opener: Opener | None = None,
 ) -> bool:
     """POST one bot event. No inbox row and no app push, even when this fails."""
-    if not _url_ok(webhook_url()):
-        return False
-    payload = {"id": event_id, "kind": kind, "event_ts": event_ts, "values": values}
-    try:
-        _safe(payload)
-    except ValueError:
-        return False
-    try:
-        return _post(payload, opener)
-    except Exception as exc:
-        print(f"bot webhook: {type(exc).__name__}", flush=True)
-        return False
+    ok, _status = publish_direct_result(kind, event_id, event_ts, values, opener)
+    return ok
 
 
 def publish_pending(
@@ -183,7 +196,8 @@ def publish_pending(
     except ValueError:
         return False
     try:
-        return _post(payload, opener)
+        ok, _status = _post(payload, opener)
+        return ok
     except Exception as exc:  # the inbox row must stay either way
         print(f"bot webhook: {type(exc).__name__}", flush=True)
         return False
