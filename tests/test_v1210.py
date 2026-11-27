@@ -13,15 +13,15 @@ from web import STATIC_DIR, STATIC_FILES, make_server, serve_in_thread
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "web" / "static" / "index.html").read_text(encoding="utf-8")
-CAR_URL = "/static/map/car-t1h.svg?v=1.21.0"
-PIN_URL = "/static/map/home-pin.svg?v=1.21.0"
+CAR_URL = "/static/map/car-t1h.svg?v=1.21.1"
+PIN_URL = "/static/map/home-pin.svg?v=1.21.1"
 
 
 def _between(text: str, start: str, end: str) -> str:
     return text.split(start, 1)[1].split(end, 1)[0]
 
 
-TPMS_URL = "/static/tire/tpms-car.svg?v=1.21.0"
+TPMS_URL = "/static/tire/tpms-car.svg?v=1.21.1"
 TIRE_IDS = ("tire-fl", "tire-fr", "tire-rl", "tire-rr")
 
 
@@ -34,8 +34,8 @@ class CarMapArtTests(unittest.TestCase):
         car_svg = car.read_text(encoding="utf-8")
         pin_svg = pin.read_text(encoding="utf-8")
         self.assertIn('viewBox="-10 -8 112 224"', car_svg)
-        self.assertIn('viewBox="0 0 80 128"', pin_svg)
-        self.assertIn("123.5", pin_svg)
+        self.assertIn('viewBox="0 0 80 98"', pin_svg)
+        self.assertIn("94.4", pin_svg)
         self.assertEqual(HTML.count(f'"{CAR_URL}"'), 1)
         self.assertEqual(HTML.count(f'"{PIN_URL}"'), 1)
         self.assertIn(f'const CAR_ICON_SRC = "{CAR_URL}"', HTML)
@@ -60,17 +60,15 @@ class CarMapArtTests(unittest.TestCase):
         self.assertIn("car-loc-arrow", marker)
         self.assertIn("<img", locate)
         self.assertIn("CAR_ICON_SRC", locate)
-        self.assertIn("width='14'", locate)
-        self.assertIn("height='28'", locate)
+        self.assertIn("car-loc-locate-car", locate)
         self.assertNotIn("<svg", marker)
-        self.assertNotIn("<svg", locate)
-        self.assertIn("#car-loc-map .car-loc-locate img { width: 14px; height: 28px;", HTML)
+        self.assertIn("car-loc-cross", locate)
 
     def test_pin_and_car_anchors(self) -> None:
         pin = _between(HTML, "function homePinIcon()", "function latLngOf(")
         marker = _between(HTML, "function carArrowIcon()", "function pointCar(")
-        self.assertIn("iconSize: [40, 64]", pin)
-        self.assertIn("iconAnchor: [20, 61.75]", pin)
+        self.assertIn("iconSize: [40, 49]", pin)
+        self.assertIn("iconAnchor: [20, 47.2]", pin)
         self.assertIn("HOME_PIN_SRC", pin)
         self.assertIn("iconSize: [20, 40]", marker)
         self.assertIn("iconAnchor: [10, 19.3]", marker)
@@ -108,7 +106,7 @@ class CarMapArtTests(unittest.TestCase):
         self.assertIn(".leaflet-div-icon.car-loc-car, .car-loc-car { overflow: visible; }", HTML)
         self.assertNotIn("#2f7dcc", HTML)
         self.assertNotIn("#145a9c", HTML)
-        self.assertIn('const APP_VERSION = "v1.21.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.1"', HTML)
         note = _between(HTML, 'version: "1.21.0"', "fixes:")
         self.assertIn("위에서 본 차 그림", note)
         self.assertIn("파란 압정", note)
@@ -128,7 +126,7 @@ class CarMapArtTests(unittest.TestCase):
         self.addCleanup(server.server_close)
         for path, needle in (
             (CAR_URL, b'viewBox="-10 -8 112 224"'),
-            (PIN_URL, b'viewBox="0 0 80 128"'),
+            (PIN_URL, b'viewBox="0 0 80 98"'),
         ):
             with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as res:
                 self.assertEqual(res.status, 200, path)
