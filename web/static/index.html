@@ -83,6 +83,7 @@
       --car-tire: #0b0f14;
       --car-tire-line: #65788c;
       --car-hood: #3b4a5b;
+      --tire-warn: #FF6B5E;
       --map-filter: brightness(0.85) saturate(0.8);
       --route: #5b9fd6;
       --soc-up: #3dd68c;
@@ -132,6 +133,7 @@
       --car-tire: #3a434d;
       --car-tire-line: #5c6e80;
       --car-hood: #b8c2cc;
+      --tire-warn: #D93025;
       --map-filter: none;
       --route: #1c649e;
       --soc-up: #0f7a45;
@@ -1026,20 +1028,14 @@
     .tire-board { display: grid; grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr); grid-template-areas: "fl car fr" "rl car rr"; gap: 8px; align-items: stretch; }
     #m-fl { grid-area: fl; } #m-fr { grid-area: fr; } #m-rl { grid-area: rl; } #m-rr { grid-area: rr; }
     .tire-car { grid-area: car; display: flex; align-items: center; justify-content: center; }
-    .model-y { width: 72px; height: 132px; display: block; }
-    .model-y .body { fill: var(--car-body); stroke: var(--car-outline); stroke-width: 2; stroke-linejoin: round; }
-    .model-y .glass { fill: var(--car-glass); stroke: var(--car-glass-line); stroke-width: 1.2; stroke-linejoin: round; }
-    .model-y .roof { fill: var(--car-roof); stroke: var(--car-glass-line); stroke-width: 1.2; stroke-linejoin: round; }
-    .model-y .door { fill: none; stroke: var(--car-glass-line); stroke-width: 1.2; stroke-linejoin: round; }
-    .model-y .hood { fill: none; stroke: var(--car-hood); stroke-width: 1.2; }
-    .model-y .tire { fill: var(--car-tire); stroke: var(--car-tire-line); stroke-width: 1.5; }
-    .model-y g.is-low .tire { fill: var(--warn-fill); stroke: var(--warn-fill); }
+    .model-y { width: 72px; height: 132px; display: block; color: var(--text); }
+    .model-y .tire.is-low { stroke: var(--tire-warn); fill: var(--tire-warn); fill-opacity: 0.28; }
     .tire-cell { background: var(--bg); border-radius: 10px; padding: 10px 8px; min-width: 0; }
     .tire-cell .tw { color: var(--text-secondary); font-size: 12px; line-height: 18px; }
     .tire-cell .tv { font-size: 18px; line-height: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .tire-cell.is-low { background: var(--warn-surface); box-shadow: inset 3px 0 0 var(--warn-fill); }
-    .tire-cell.is-low .tv, .tire-cell.is-low .tw { color: var(--warn-text); }
-    .tire-note { color: var(--warn-text); background: var(--warn-surface); border-radius: 8px; padding: 8px 10px; margin: 10px 0 0; font-size: 13px; line-height: 20px; }
+    .tire-cell.is-low { background: var(--warn-surface); box-shadow: inset 3px 0 0 var(--tire-warn); }
+    .tire-cell.is-low .tv, .tire-cell.is-low .tw { color: var(--tire-warn); }
+    .tire-note { color: var(--tire-warn); background: var(--warn-surface); border-radius: 8px; padding: 8px 10px; margin: 10px 0 0; font-size: 13px; line-height: 20px; }
     .sheet-kicker { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 20px; }
     .sheet-route { margin: 0; font-size: 16px; line-height: 24px; }
     .sheet-stack { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -1142,20 +1138,22 @@
       cursor: pointer; pointer-events: auto;
     }
     #car-loc-map .car-loc-locate[hidden] { display: none !important; }
-    #car-loc-map .car-loc-locate svg { width: 32px; height: 32px; display: block; }
+    #car-loc-map .car-loc-locate svg,
+    #car-loc-map .car-loc-locate img { width: 14px; height: 28px; display: block; }
     #car-loc-map .car-loc-locate:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .leaflet-div-icon.car-loc-car, .leaflet-div-icon.car-loc-pin,
     .car-loc-car, .car-loc-pin { background: transparent; border: 0; padding: 0; }
     .leaflet-div-icon.car-loc-car, .car-loc-car { overflow: visible; }
     .car-loc-arrow {
-      display: flex; width: 36px; height: 36px; align-items: center; justify-content: center;
-      transform-origin: center center; color: #2f7dcc;
+      display: flex; width: 20px; height: 40px; align-items: center; justify-content: center;
+      transform-origin: center center;
       filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
     }
-    [data-theme="light"] .car-loc-arrow { color: #145a9c; }
+    .car-loc-arrow img { width: 20px; height: 40px; display: block; }
     .leaflet-div-icon.car-loc-pin { line-height: 0; }
-    .car-loc-pin { cursor: grab; color: var(--warn-fill); }
-    .car-loc-pin svg { display: block; overflow: visible; }
+    .car-loc-pin { cursor: grab; }
+    .car-loc-pin svg,
+    .car-loc-pin img { display: block; width: 40px; height: 64px; overflow: visible; }
     [data-theme="light"] #battery-card .chart-legend span:nth-child(1) i { background: #1c649e !important; }
     [data-theme="light"] #battery-card .chart-legend span:nth-child(2) i { background: #157a4a !important; }
     [data-theme="light"] #battery-card .chart-legend span:nth-child(3) i { background: #5c6e80 !important; }
@@ -2132,8 +2130,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.20.0"; // display constant only
+    const APP_VERSION = "v1.21.0"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.21.0", features: ["차 위치: 지도의 차는 위에서 본 차 그림이고, 코가 위를 향해요", "방향: 차에서 방향이 오면 시계 방향으로 돌아요. 방향이 없으면 그대로 위를 봐요", "집: 파란 압정이고, 바늘 끝이 집 자리예요", "위치 버튼: 같은 차 그림이에요. 누르면 핀을 차 위치로 옮기고 저장하지 않아요", "공기압: 가운데 차는 선으로 그린 그림이고, 낮은 바퀴는 붉은 선으로 보여요"], fixes: [] },
       { version: "1.20.0", features: ["차 위치: 지도는 다른 화면과 같고, 차는 위를 향하는 화살표예요", "방향: 차에서 방향이 오면 화살표가 시계 방향으로 돌아요", "집: 핀을 옮긴 자리만 집으로 저장해요"], fixes: [] },
       { version: "1.19.0", features: ["홈: 차 위치 카드에서 집에 있는지, 집까지 거리를 봐요", "집: 차의 마지막 위치나 지도 핀으로 집 한 곳을 저장해요"], fixes: [] },
       { version: "1.18.0", features: ["충전 요금: 보내기가 안 되면 같은 주차 안에서만 다시 보내요", "주행 종료: 집이 아니면 남은 배터리와 집까지 거리를 봇으로 보내요"], fixes: [] },
@@ -2203,21 +2202,31 @@
     function routePalette() {
       return isLightTheme() ? LIGHT_ROUTE_COLORS : ROUTE_COLORS;
     }
+    const TPMS_CAR_URL = "/static/tire/tpms-car.svg?v=1.21.0";
+    let tpmsCarSvg = "";
+    function prepareTpmsCar(text) {
+      let svg = text.replace("<svg ", "<svg class=\"model-y\" ");
+      ["fl", "fr", "rl", "rr"].forEach(wheel => {
+        svg = svg.replace(
+          'id="tire-' + wheel + '" class="tire"',
+          'id="tire-' + wheel + '" class="tire" data-wheel="' + wheel + '"'
+        );
+      });
+      return svg;
+    }
     function carTopSvg() {
-      // Simple generic top view from the approved drawing. No light lines. Tire rects stay separate.
-      return "<svg class='model-y' viewBox='0 0 120 220' aria-hidden='true'>" +
-        "<g data-wheel='fl'><rect class='tire' x='12' y='40' width='12' height='30' rx='4'/></g>" +
-        "<g data-wheel='fr'><rect class='tire' x='96' y='40' width='12' height='30' rx='4'/></g>" +
-        "<g data-wheel='rl'><rect class='tire' x='12' y='152' width='12' height='30' rx='4'/></g>" +
-        "<g data-wheel='rr'><rect class='tire' x='96' y='152' width='12' height='30' rx='4'/></g>" +
-        "<path class='body' d='M42 10 Q60 6 78 10 Q98 14 100 36 L102 80 L102 170 Q101 202 84 210 Q60 216 36 210 Q19 202 18 170 L18 80 L20 36 Q22 14 42 10 Z'/>" +
-        "<path class='glass' d='M27 82 Q60 70 93 82 L89 106 Q60 100 31 106 Z'/>" +
-        "<path class='roof' d='M31 112 Q60 107 89 112 L89 154 Q60 158 31 154 Z'/>" +
-        "<path class='glass' d='M31 160 Q60 164 89 160 L85 184 Q60 190 35 184 Z'/>" +
-        "<path class='door' d='M24 88 L28 108 L28 156 L25 176'/>" +
-        "<path class='door' d='M96 88 L92 108 L92 156 L95 176'/>" +
-        "<path class='hood' d='M36 30 Q60 24 84 30'/>" +
-        "</svg>";
+      return tpmsCarSvg.replace(/ id="[^"]+"/g, "");
+    }
+    function loadTpmsCar() {
+      const home = document.getElementById("home-car");
+      fetch(TPMS_CAR_URL).then(res => {
+        if (!res.ok) throw new Error("tpms");
+        return res.text();
+      }).then(text => {
+        tpmsCarSvg = prepareTpmsCar(text);
+        if (home) home.innerHTML = tpmsCarSvg;
+        if (lastPayload) paintTireAlert(lastPayload);
+      }).catch(() => {});
     }
 
     function fmtTripDistance(km) {
@@ -6182,9 +6191,8 @@
       const ap = /p/i.test(get("dayPeriod")) ? "오후" : "오전";
       return ap + " " + get("hour") + ":" + get("minute");
     }
-    const CAR_ARROW_SVG = "<svg viewBox='0 0 36 36' width='28' height='28' aria-hidden='true'><path fill='currentColor' stroke='#fff' stroke-width='1.8' stroke-linejoin='round' d='M18 3.2 30.2 29.6 18 23.4 5.8 29.6Z'/></svg>";
-    const HOME_PIN_SVG = "<svg viewBox='0 0 32 40' width='32' height='40' aria-hidden='true'><path fill='#fff' d='M16 40C16 40 1 27 1 15A15 15 0 0 1 31 15C31 27 16 40 16 40Z'/><path fill='currentColor' d='M16 40C16 40 4.5 25.5 4.5 15A11.5 11.5 0 0 1 27.5 15C27.5 25.5 16 40 16 40Z'/><circle cx='16' cy='15' r='4.2' fill='#fff'/></svg>";
-    const LOCATE_SVG = "<svg viewBox='0 0 44 44' width='32' height='32' aria-hidden='true'><circle cx='22' cy='22' r='11' fill='none' stroke='currentColor' stroke-width='1.6'/><path d='M22 4.2v5.2M22 34.6v5.2M4.2 22h5.2M34.6 22h5.2' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linecap='round'/><path fill='currentColor' d='M15.4 25.4v-1.15l.75-2a1.25 1.25 0 0 1 1.15-.75h9.4a1.25 1.25 0 0 1 1.15.75l.75 2V25.4h.55v1.2h-1.2v-.65h-12.1v.65h-1.2v-1.2h.55zm1.35-2.5.45-1.05h9.5l.45 1.05h-10.4zM17.15 24.9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm9.7 0a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z'/></svg>";
+    const CAR_ICON_SRC = "/static/map/car-t1h.svg?v=1.21.0";
+    const HOME_PIN_SRC = "/static/map/home-pin.svg?v=1.21.0";
     function headingDeg(data) {
       if (!data || data.heading == null || data.heading === "") return null;
       const n = Number(data.heading);
@@ -6193,9 +6201,9 @@
     function carArrowIcon() {
       return mapLib().divIcon({
         className: "car-loc-car",
-        html: "<span class='car-loc-arrow'>" + CAR_ARROW_SVG + "</span>",
-        iconSize: [36, 36],
-        iconAnchor: [18, 18]
+        html: "<span class='car-loc-arrow'><img src='" + CAR_ICON_SRC + "' width='20' height='40' alt='' draggable='false'></span>",
+        iconSize: [20, 40],
+        iconAnchor: [10, 19.3]
       });
     }
     function pointCar(marker, deg) {
@@ -6213,9 +6221,9 @@
     function homePinIcon() {
       return mapLib().divIcon({
         className: "car-loc-pin",
-        html: HOME_PIN_SVG,
-        iconSize: [32, 40],
-        iconAnchor: [16, 40]
+        html: "<img src='" + HOME_PIN_SRC + "' width='40' height='64' alt='' draggable='false'>",
+        iconSize: [40, 64],
+        iconAnchor: [20, 61.75]
       });
     }
     function latLngOf(value) {
@@ -6328,7 +6336,7 @@
         btn.id = "car-loc-locate";
         btn.setAttribute("aria-label", "핀을 차 위치로 옮겨요");
         btn.title = "핀을 차 위치로 옮겨요";
-        btn.innerHTML = LOCATE_SVG;
+        btn.innerHTML = "<img src='" + CAR_ICON_SRC + "' width='14' height='28' alt='' draggable='false'>";
         if (lib.DomEvent && lib.DomEvent.disableClickPropagation) lib.DomEvent.disableClickPropagation(btn);
         btn.addEventListener("click", (ev) => {
           ev.preventDefault();
@@ -7248,8 +7256,7 @@
     document.getElementById("notes-x").addEventListener("click", () => {
       document.getElementById("notes-overlay").classList.remove("show");
     });
-    const homeCar = document.getElementById("home-car");
-    if (homeCar) homeCar.innerHTML = carTopSvg();
+    loadTpmsCar();
     function themeButtonLabel(mode) {
       const ko = { auto: "자동", light: "라이트", dark: "다크" };
       return "화면 테마, " + (ko[mode] || "자동");

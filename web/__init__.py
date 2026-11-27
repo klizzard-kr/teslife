@@ -103,6 +103,9 @@ STATIC_FILES = {
     "/static/logo-64.png": ("brand/logo-64.png", "image/png"),
     "/static/logo-128.png": ("brand/logo-128.png", "image/png"),
     "/static/teslife-logo-1024.png": ("brand/teslife-logo-1024.png", "image/png"),
+    "/static/map/car-t1h.svg": ("map/car-t1h.svg", "image/svg+xml"),
+    "/static/map/home-pin.svg": ("map/home-pin.svg", "image/svg+xml"),
+    "/static/tire/tpms-car.svg": ("tire/tpms-car.svg", "image/svg+xml"),
 }
 DEFAULT_TIRE_ALERT_BAR = 2.6
 DEFAULT_PROCESS_INTERVAL = 30.0

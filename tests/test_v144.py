@@ -17,7 +17,7 @@ def _block(src: str, start: str, end: str) -> str:
 
 class AlertToggleLayoutTests(unittest.TestCase):
     def test_version_and_note(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.20.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.0"', HTML)
         self.assertIn("알림 설정: 스위치는 각 항목의 오른쪽 끝에 있어요", HTML)
         self.assertIn("알림 설정: 알림 받기 스위치는 제목 오른쪽에 있어요", HTML)
         self.assertIn("알림 안내: 알림이 막히면 쓰는 브라우저에 맞는 설정 방법을 알려요", HTML)

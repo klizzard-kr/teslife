@@ -104,8 +104,11 @@ class CarLocationCardTests(unittest.TestCase):
         self.assertNotIn("loadLeaflet()", block)
         self.assertNotIn("L.map(", block)
         self.assertIn("car-loc-arrow", block)
-        self.assertIn("M18 3.2", block)
-        self.assertIn("iconAnchor: [16, 40]", block)
+        self.assertIn("/static/map/car-t1h.svg?v=1.21.0", block)
+        self.assertIn("iconAnchor: [10, 19.3]", block)
+        self.assertIn("iconAnchor: [20, 61.75]", block)
+        self.assertNotIn("M18 3.2", block)
+        self.assertNotIn("iconAnchor: [16, 40]", block)
         self.assertIn("movePinToCar", block)
         self.assertIn("savePinHome", block)
         self.assertIn('writeHome({ lat: here.lat, lon: here.lon })', block)
@@ -118,7 +121,7 @@ class CarLocationCardTests(unittest.TestCase):
         self.assertIn("draggable: !!options.draggable", NAVER)
         self.assertIn("function control(", NAVER)
         self.assertIn("disableClickPropagation", NAVER)
-        self.assertIn('const APP_VERSION = "v1.20.0"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.0"', HTML)
         note = HTML.split('version: "1.20.0"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("화살표", note)
 
