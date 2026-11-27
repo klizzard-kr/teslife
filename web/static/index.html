@@ -1138,8 +1138,17 @@
       cursor: pointer; pointer-events: auto;
     }
     #car-loc-map .car-loc-locate[hidden] { display: none !important; }
-    #car-loc-map .car-loc-locate svg,
-    #car-loc-map .car-loc-locate img { width: 14px; height: 28px; display: block; }
+    #car-loc-map .car-loc-locate .car-loc-locate-mark {
+      position: relative; width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #car-loc-map .car-loc-locate .car-loc-cross {
+      width: 36px; height: 36px; display: block; color: var(--text);
+    }
+    #car-loc-map .car-loc-locate .car-loc-locate-car {
+      position: absolute; left: 50%; top: 50%; width: 8px; height: 16px;
+      transform: translate(-50%, -50%); display: block;
+    }
     #car-loc-map .car-loc-locate:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .leaflet-div-icon.car-loc-car, .leaflet-div-icon.car-loc-pin,
     .car-loc-car, .car-loc-pin { background: transparent; border: 0; padding: 0; }
@@ -1153,7 +1162,7 @@
     .leaflet-div-icon.car-loc-pin { line-height: 0; }
     .car-loc-pin { cursor: grab; }
     .car-loc-pin svg,
-    .car-loc-pin img { display: block; width: 40px; height: 64px; overflow: visible; }
+    .car-loc-pin img { display: block; width: 40px; height: 49px; overflow: visible; }
     [data-theme="light"] #battery-card .chart-legend span:nth-child(1) i { background: #1c649e !important; }
     [data-theme="light"] #battery-card .chart-legend span:nth-child(2) i { background: #157a4a !important; }
     [data-theme="light"] #battery-card .chart-legend span:nth-child(3) i { background: #5c6e80 !important; }
@@ -2130,8 +2139,9 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.21.0"; // display constant only
+    const APP_VERSION = "v1.21.1"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.21.1", features: ["위치 버튼: 동그란 조준 고리 한가운데에 작은 차가 있어요", "차 위치: 지도를 줄여 차가 집 핀 끝에 붙으면 핀만 보여요", "집: 압정 바늘이 더 짧고, 끝은 집 자리에 있어요"], fixes: [] },
       { version: "1.21.0", features: ["차 위치: 지도의 차는 위에서 본 차 그림이고, 코가 위를 향해요", "방향: 차에서 방향이 오면 시계 방향으로 돌아요. 방향이 없으면 그대로 위를 봐요", "집: 파란 압정이고, 바늘 끝이 집 자리예요", "위치 버튼: 같은 차 그림이에요. 누르면 핀을 차 위치로 옮기고 저장하지 않아요", "공기압: 가운데 차는 선으로 그린 그림이고, 낮은 바퀴는 붉은 선으로 보여요"], fixes: [] },
       { version: "1.20.0", features: ["차 위치: 지도는 다른 화면과 같고, 차는 위를 향하는 화살표예요", "방향: 차에서 방향이 오면 화살표가 시계 방향으로 돌아요", "집: 핀을 옮긴 자리만 집으로 저장해요"], fixes: [] },
       { version: "1.19.0", features: ["홈: 차 위치 카드에서 집에 있는지, 집까지 거리를 봐요", "집: 차의 마지막 위치나 지도 핀으로 집 한 곳을 저장해요"], fixes: [] },
@@ -2202,7 +2212,7 @@
     function routePalette() {
       return isLightTheme() ? LIGHT_ROUTE_COLORS : ROUTE_COLORS;
     }
-    const TPMS_CAR_URL = "/static/tire/tpms-car.svg?v=1.21.0";
+    const TPMS_CAR_URL = "/static/tire/tpms-car.svg?v=1.21.1";
     let tpmsCarSvg = "";
     function prepareTpmsCar(text) {
       let svg = text.replace("<svg ", "<svg class=\"model-y\" ");
@@ -6191,8 +6201,9 @@
       const ap = /p/i.test(get("dayPeriod")) ? "오후" : "오전";
       return ap + " " + get("hour") + ":" + get("minute");
     }
-    const CAR_ICON_SRC = "/static/map/car-t1h.svg?v=1.21.0";
-    const HOME_PIN_SRC = "/static/map/home-pin.svg?v=1.21.0";
+    const CAR_ICON_SRC = "/static/map/car-t1h.svg?v=1.21.1";
+    const HOME_PIN_SRC = "/static/map/home-pin.svg?v=1.21.1";
+    const CAR_NEAR_PIN_PX = 28;
     function headingDeg(data) {
       if (!data || data.heading == null || data.heading === "") return null;
       const n = Number(data.heading);
@@ -6221,10 +6232,55 @@
     function homePinIcon() {
       return mapLib().divIcon({
         className: "car-loc-pin",
-        html: "<img src='" + HOME_PIN_SRC + "' width='40' height='64' alt='' draggable='false'>",
-        iconSize: [40, 64],
-        iconAnchor: [20, 61.75]
+        html: "<img src='" + HOME_PIN_SRC + "' width='40' height='49' alt='' draggable='false'>",
+        iconSize: [40, 49],
+        iconAnchor: [20, 47.2]
       });
+    }
+    function screenGap(a, b) {
+      if (!a || !b) return null;
+      const dx = Number(a.x) - Number(b.x);
+      const dy = Number(a.y) - Number(b.y);
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+      return Math.hypot(dx, dy);
+    }
+    function carHiddenNearPin(gap) {
+      return gap != null && Number.isFinite(gap) && gap < CAR_NEAR_PIN_PX;
+    }
+    function mapScreenPoint(map, latlng) {
+      if (!map || !latlng) return null;
+      const project = map.latLngToContainerPoint || map.latLngToLayerPoint;
+      if (typeof project !== "function") return null;
+      let pt = null;
+      try { pt = project.call(map, latlng); } catch (e) { pt = null; }
+      if (!pt) return null;
+      const x = Number(pt.x);
+      const y = Number(pt.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return { x: x, y: y };
+    }
+    function setCarVisible(show) {
+      if (!carMarker) return;
+      const el = carMarker.getElement && carMarker.getElement();
+      if (el) el.style.visibility = show ? "" : "hidden";
+      else if (typeof carMarker.setOpacity === "function") carMarker.setOpacity(show ? 1 : 0);
+    }
+    function syncCarNearPin() {
+      if (!carMarker) return;
+      let hide = false;
+      if (homeMarker && carLocMap) {
+        const gap = screenGap(mapScreenPoint(carLocMap, carMarker.getLatLng()), mapScreenPoint(carLocMap, homeMarker.getLatLng()));
+        hide = carHiddenNearPin(gap);
+      }
+      setCarVisible(!hide);
+    }
+    function bindCarOverlap(map) {
+      if (!map || map.__carOverlapBound) return;
+      map.__carOverlapBound = true;
+      map.on("zoom", syncCarNearPin);
+      map.on("move", syncCarNearPin);
+      map.on("zoomend", syncCarNearPin);
+      map.on("moveend", syncCarNearPin);
     }
     function latLngOf(value) {
       if (!value) return null;
@@ -6263,9 +6319,11 @@
     function bindPinDrag(marker) {
       if (!marker || marker.__pinBound) return;
       marker.__pinBound = true;
+      marker.on("drag", () => syncCarNearPin());
       marker.on("dragend", () => {
         pinMoved = true;
         paintPinButton();
+        syncCarNearPin();
       });
     }
     function fitCarLoc(points) {
@@ -6324,6 +6382,7 @@
         }
         fitCarLoc(pts);
       }
+      syncCarNearPin();
     }
     function addCarLocateControl(map) {
       if (!map || document.getElementById("car-loc-locate")) return;
@@ -6336,7 +6395,13 @@
         btn.id = "car-loc-locate";
         btn.setAttribute("aria-label", "핀을 차 위치로 옮겨요");
         btn.title = "핀을 차 위치로 옮겨요";
-        btn.innerHTML = "<img src='" + CAR_ICON_SRC + "' width='14' height='28' alt='' draggable='false'>";
+        btn.innerHTML = "<span class='car-loc-locate-mark'>" +
+          "<svg class='car-loc-cross' viewBox='0 0 36 36' aria-hidden='true'>" +
+          "<circle cx='18' cy='18' r='11' fill='none' stroke='currentColor' stroke-width='1.6'/>" +
+          "<path d='M18 1.6v5.2M18 29.2v5.2M1.6 18h5.2M29.2 18h5.2' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round'/>" +
+          "</svg>" +
+          "<img class='car-loc-locate-car' src='" + CAR_ICON_SRC + "' width='8' height='16' alt='' draggable='false'>" +
+          "</span>";
         if (lib.DomEvent && lib.DomEvent.disableClickPropagation) lib.DomEvent.disableClickPropagation(btn);
         btn.addEventListener("click", (ev) => {
           ev.preventDefault();
@@ -6363,6 +6428,7 @@
       carLocFitted = true;
       carLocMap.setView(ll, 16);
       paintPinButton();
+      syncCarNearPin();
     }
     async function showCarLocMap() {
       const el = document.getElementById("car-loc-map");
@@ -6379,6 +6445,7 @@
       try {
         if (!carLocMap) {
           carLocMap = await rawMap(el);
+          bindCarOverlap(carLocMap);
           addCarLocateControl(carLocMap);
         }
       } catch (e) {

@@ -68,6 +68,9 @@
       if (this._raw && this._raw.setZIndex) this._raw.setZIndex(1000);
       return this;
     };
+    Overlay.prototype.getElement = function () {
+      return this._raw && this._raw.getElement ? this._raw.getElement() : null;
+    };
     Overlay.prototype.getLatLng = function () {
       if (this._raw && this._raw.getPosition) return plain(this._raw.getPosition());
       return plain(this._at);
@@ -375,7 +378,8 @@
           else if (layer.remove) layer.remove();
         },
         on: function (name, fn) {
-          var ev = name === "zoomend" ? "zoom_changed" : name;
+          var alias = { zoom: "zoom_changed", zoomend: "zoom_changed", move: "center_changed", moveend: "idle" };
+          var ev = alias[name] || name;
           maps.Event.addListener(raw, ev, function (e) {
             if (name !== "click") {
               fn(e || {});
