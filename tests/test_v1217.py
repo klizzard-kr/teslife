@@ -21,9 +21,6 @@ def _between(text: str, start: str, end: str) -> str:
 
 class RetapScrollTests(unittest.TestCase):
     def test_version(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
-        self.assertIn("현재 버전은 v1.21.7입니다.", README)
-        self.assertIn("화면의 제품 버전은 `v1.21.7`", DESIGN)
         self.assertIn("## v1.21.7", CHANGELOG)
         self.assertIn("맨 위로 부드럽게", CHANGELOG)
         self.assertIn("다섯 탭", CHANGELOG)

@@ -115,7 +115,7 @@ class LocateButtonSizeAndThemeTests(unittest.TestCase):
         self.assertNotIn('data-locate-btn="a"', block)
 
     def test_version_notes_and_copy(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
         note = _between(HTML, 'version: "1.21.2"', "fixes:")
         self.assertIn("지도를 많이 줄였을 때만", note)
         self.assertIn("크게 보면 차와 핀을 같이", note)

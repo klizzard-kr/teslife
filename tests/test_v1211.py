@@ -39,7 +39,7 @@ class LocateCrosshairTests(unittest.TestCase):
         self.assertNotIn("pearlT1H", locate)
         self.assertIn(".car-loc-cross {\n      width: 26px; height: 26px; display: block; color: var(--loc-btn-fg);", HTML)
         self.assertIn("width: 6px; height: 12px;", HTML)
-        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
         note = _between(HTML, 'version: "1.21.1"', "fixes:")
         self.assertIn("조준 고리", note)
 
