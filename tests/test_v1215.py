@@ -86,7 +86,7 @@ def _put_cache(conn: sqlite3.Connection, lat: float, lon: float,
 
 class CardMarkupTests(unittest.TestCase):
     def test_card_matches_vehicle_card_and_stays_open(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
         loc = HTML[HTML.index('id="car-loc-card"'):HTML.index('id="home-foot"')]
         self.assertIn("<h2>현재 위치</h2>", loc)
         self.assertIn('class="live-grid home-hero"', loc)
@@ -145,9 +145,9 @@ class CardMarkupTests(unittest.TestCase):
     def test_pin_icons_and_confirms(self) -> None:
         self.assertIn("car-loc-pin-action", HTML)
         self.assertIn("선택한 위치를 집으로 저장할까요?", HTML)
-        self.assertIn("집으로 저장된 위치를 삭제할까요?", HTML)
+        self.assertNotIn("집으로 저장된 위치를 삭제할까요?", HTML)
         self.assertIn('writeJson("PUT", "/api/home"', HTML)
-        self.assertIn('writeJson("DELETE", "/api/home"', HTML)
+        self.assertNotIn('writeJson("DELETE", "/api/home"', HTML)
         block = HTML[HTML.index("#car-loc-map .car-loc-pin-action,"):HTML.index("#car-loc-map .car-loc-pin-action svg")]
         self.assertIn("min-height: 36px", block)
         self.assertIn("padding: 0", block)
@@ -244,10 +244,7 @@ class I18nTests(unittest.TestCase):
             _node('TeslifeI18n.setLanguage("en", false), TeslifeI18n.t("선택한 위치를 집으로 저장할까요?")'),
             "Save the selected spot as home?",
         )
-        self.assertEqual(
-            _node('TeslifeI18n.setLanguage("en", false), TeslifeI18n.t("집으로 저장된 위치를 삭제할까요?")'),
-            "Delete the saved home location?",
-        )
+        self.assertNotIn("Delete the saved home location?", I18N)
 
 
 class AreaCacheTests(unittest.TestCase):
