@@ -285,7 +285,7 @@ class DetailTests(unittest.TestCase):
         self.assertNotIn("한국시간", str(event))
 
     def test_detail_row_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
         trip = HTML[HTML.index("function tripSheetHtml"):HTML.index("function openTripSheet")]
         self.assertLess(trip.index('oneRow("평균 속도"'), trip.index('oneRow("최고 속도"'))
         self.assertLess(trip.index('oneRow("최고 속도"'), trip.index('oneRow("급가속"'))
