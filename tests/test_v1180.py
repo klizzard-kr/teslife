@@ -386,7 +386,7 @@ class AwayTests(unittest.TestCase):
 class VersionTests(unittest.TestCase):
     def test_screen_version_and_process_version(self) -> None:
         self.assertEqual(PROCESS_VERSION, "25")
-        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.12"', HTML)
         note = HTML.split('version: "1.18.0"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("집까지 거리", note)
 
