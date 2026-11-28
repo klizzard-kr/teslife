@@ -52,7 +52,7 @@ class LocateButtonCircleTests(unittest.TestCase):
         self.assertNotIn("rgba(232, 238, 244, 0.28)", rule)
 
     def test_version_notes(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
         note = _between(HTML, 'version: "1.21.3"', "fixes:")
         # features array is empty; the text is in fixes, still inside this slice? 
         # _between to "fixes:" would be the features array only. Check the whole entry.

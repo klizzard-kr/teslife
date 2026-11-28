@@ -45,7 +45,7 @@ class HomeFootVersionButtonTests(unittest.TestCase):
         self.assertIn('id="last-update"', markup)
 
     def test_version_notes(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
         entry = _between(HTML, 'version: "1.21.4"', 'version: "1.21.3"')
         self.assertIn("아래 차량 수신 줄과 버전 줄이 바로 붙어 있어요", entry)
         self.assertIn("홈: 아래 차량 수신 줄과 버전 줄이 바로 붙어 있어요", I18N)
