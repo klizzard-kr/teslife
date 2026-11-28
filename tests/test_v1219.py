@@ -48,9 +48,9 @@ def _node(src: str) -> str:
 
 class VersionTests(unittest.TestCase):
     def test_version_and_docs(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
-        self.assertIn("현재 버전은 v1.21.10입니다.", README)
-        self.assertIn("화면의 제품 버전은 `v1.21.10`", DESIGN)
+        self.assertIn('const APP_VERSION = "v1.21.12"', HTML)
+        self.assertIn("현재 버전은 v1.21.12입니다.", README)
+        self.assertIn("화면의 제품 버전은 `v1.21.12`", DESIGN)
         self.assertIn("## v1.21.9", CHANGELOG)
         self.assertIn("핀 그림 자체에서 누름이 끝나도", CHANGELOG)
         self.assertIn("시각적 가운데", CHANGELOG)
