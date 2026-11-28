@@ -135,6 +135,9 @@
       var at = pt ? ll(pt) : (this._raw.getPosition ? this._raw.getPosition() : this._at);
       this._info.open(this._map._raw, at);
       openInfo = this._info;
+      if (window.fitTeslifeMapPop) {
+        requestAnimationFrame(function () { window.fitTeslifeMapPop(); });
+      }
       return this;
     };
     Overlay.prototype.bindTooltip = function (html) {
