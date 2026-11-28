@@ -38,17 +38,22 @@ def _node(expr: str) -> str:
 
 class HomeCardMarkupTests(unittest.TestCase):
     def test_card_sits_under_the_temperature_card(self) -> None:
+        live = HTML.index('id="live-card"')
+        tires = HTML.index('id="tire-card"')
         temp = HTML.index('id="temp-card"')
         card = HTML.index('id="car-loc-card"')
         foot = HTML.index('id="home-foot"')
+        self.assertLess(live, tires)
+        self.assertLess(tires, temp)
         self.assertLess(temp, card)
         self.assertLess(card, foot)
+        self.assertIn('id="m-inside"', HTML[temp:card])
+        self.assertIn('id="m-outside"', HTML[temp:card])
+        self.assertNotIn('id="temp-row"', HTML)
         block = HTML[card:foot]
         for text in (
-            "차 위치",
+            "<h2>현재 위치</h2>",
             "지금 차 위치를 집으로 저장",
-            "핀 위치를 집으로 저장",
-            "집 삭제",
             'id="car-loc-map" class="map-box"',
         ):
             self.assertIn(text, block)
@@ -60,7 +65,7 @@ class HomeCardMarkupTests(unittest.TestCase):
 
     def test_version_note(self) -> None:
         self.assertEqual(PROCESS_VERSION, "25")
-        self.assertIn('const APP_VERSION = "v1.21.1"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
         note = HTML.split('version: "1.19.0"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("차 위치", note)
         self.assertIn("집 한 곳", note)

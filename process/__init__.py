@@ -201,6 +201,14 @@ CREATE TABLE IF NOT EXISTS geocode_cache (
     key TEXT NOT NULL,
     label TEXT,
     label_en TEXT,
+    gu TEXT,
+    gu_en TEXT,
+    si TEXT,
+    si_en TEXT,
+    sido TEXT,
+    sido_en TEXT,
+    road_addr TEXT,
+    jibun_addr TEXT,
     fetched_at TEXT,
     PRIMARY KEY (provider, key)
 );
@@ -362,7 +370,17 @@ def ensure_process_schema(conn: sqlite3.Connection) -> None:
     _ensure_columns(conn, "sentry_alarms", (("stage", "TEXT"),))
     _ensure_columns(conn, "alert_log", (("lat", "REAL"), ("lon", "REAL")))
     _ensure_columns(conn, "parked_segments", (("modes", "TEXT"), ("outside_temp", "REAL")))
-    _ensure_columns(conn, "geocode_cache", (("label_en", "TEXT"),))
+    _ensure_columns(conn, "geocode_cache", (
+        ("label_en", "TEXT"),
+        ("gu", "TEXT"),
+        ("gu_en", "TEXT"),
+        ("si", "TEXT"),
+        ("si_en", "TEXT"),
+        ("sido", "TEXT"),
+        ("sido_en", "TEXT"),
+        ("road_addr", "TEXT"),
+        ("jibun_addr", "TEXT"),
+    ))
     from process.chargeloc import ensure_schema as _chargeloc_schema
     from process.roads import ensure_schema as _roads_schema
 
@@ -2485,11 +2503,14 @@ def process_db(
                 with conn:
                     _meta_set(conn, "signal_state", _signal_state(conn))
         if geocoder is not None:
-            from process.geocode import fill_trip_labels
+            from process.geocode import MAX_PER_CYCLE, fill_car_area_label, fill_trip_labels
 
             for vid in vehicle_ids:
                 try:
-                    fill_trip_labels(conn, vid, geocoder)
+                    used = fill_car_area_label(conn, vid, geocoder)
+                    left = max(0, MAX_PER_CYCLE - used)
+                    if left:
+                        fill_trip_labels(conn, vid, geocoder, limit=left)
                 except sqlite3.Error as exc:
                     print(f"geocode error: {type(exc).__name__}", flush=True)
         if matcher is not None:

@@ -69,7 +69,7 @@ class WheelAutoNameTests(unittest.TestCase):
             self.assertNotIn("defrost", built["bars"], raw)
 
     def test_version(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.1"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
 
 
 def _fn(name: str) -> str:
