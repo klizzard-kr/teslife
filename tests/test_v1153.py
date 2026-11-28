@@ -27,7 +27,7 @@ def _node(src: str):
 
 class VersionTests(unittest.TestCase):
     def test_notes_stay_in_order(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.12"', HTML)
         self.assertLess(CHANGELOG.index("## v1.16.12"), CHANGELOG.index("## v1.16.11"))
         self.assertLess(CHANGELOG.index("## v1.16.11"), CHANGELOG.index("## v1.16.10"))
         self.assertLess(CHANGELOG.index("## v1.16.10"), CHANGELOG.index("## v1.16.9"))
