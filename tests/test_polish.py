@@ -44,8 +44,12 @@ class PolishHtmlTests(unittest.TestCase):
         self.assertIn('data-theme', HTML)
         self.assertIn("--accent-surface", HTML)
         self.assertIn("차량 수신 ", HTML)
+        ago = HTML.split("function fmtTodayOrAgo(", 1)[1].split("function fillTable(", 1)[0]
+        self.assertIn('"차량 수신 " + fmtTodayOrAgo(lastTs)', ago)
+        self.assertIn("hour12: false", ago)
+        self.assertIn("fmtAgo(ts)", ago)
         self.assertIn('id="home-foot"', HTML)
-        self.assertIn('const APP_VERSION = "v1.21.1"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
         self.assertIn('href="https://github.com/klizzard-kr/teslife" target="_blank" rel="noopener">GitHub</a>', HTML)
         self.assertIn(">by klizzard<", HTML)
         self.assertIn('"연결 끊김"', HTML)
