@@ -51,7 +51,7 @@ def _node(expr: str) -> str:
 
 class CardTests(unittest.TestCase):
     def test_version_and_no_divider(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
         loc_css = _between(HTML, "#car-loc-card .mode-row {", "}")
         self.assertIn("border-top: none", loc_css)
         self.assertIn("padding-top: 0", loc_css)
@@ -75,8 +75,10 @@ class CardTests(unittest.TestCase):
         self.assertNotIn('area + " (집)"', HTML)
         self.assertIn("car-loc-home-icon", HTML)
         icon = _between(HTML, "#car-loc-area .car-loc-home-icon {", "}")
-        self.assertIn("width: 1em", icon)
-        self.assertIn("height: 1em", icon)
+        self.assertIn("width: 0.8em", icon)
+        self.assertIn("height: 0.8em", icon)
+        self.assertIn("width: 1cap", icon)
+        self.assertIn("height: 1cap", icon)
         # same path as the pin save house
         self.assertIn("M4 11.5 12 4.5l8 7V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z", HTML)
         self.assertGreaterEqual(HTML.count("M4 11.5 12 4.5l8 7V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"), 2)
@@ -372,7 +374,7 @@ class CardHierarchyTests(unittest.TestCase):
         self.assertIn("car-loc-addr-pop", HTML)
         self.assertIn("car-loc-addr-copy", HTML)
         self.assertIn("navigator.clipboard.writeText", HTML)
-        self.assertIn("copyLocAddr(text.textContent, copy)", HTML)
+        self.assertIn("copyLocAddr(text.textContent)", HTML)
         text_css = _between(HTML, ".car-loc-addr-text {", "}")
         self.assertIn("overflow-wrap: anywhere", text_css)
         self.assertIn("word-break: break-word", text_css)

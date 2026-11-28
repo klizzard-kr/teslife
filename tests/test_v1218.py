@@ -47,9 +47,6 @@ def _node(src: str) -> str:
 
 class VersionTests(unittest.TestCase):
     def test_version_and_docs(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
-        self.assertIn("현재 버전은 v1.21.8입니다.", README)
-        self.assertIn("화면의 제품 버전은 `v1.21.8`", DESIGN)
         self.assertIn("## v1.21.8", CHANGELOG)
         self.assertIn("집 핀을 눌러 고르면 지우기", CHANGELOG)
         self.assertIn("약 8px", CHANGELOG)
@@ -86,7 +83,7 @@ class LayoutCssTests(unittest.TestCase):
         self.assertIn("align-items: baseline", area)
         self.assertIn("min-height: 0", area)
         main = _between(HTML, "#car-loc-area .car-loc-area-main {", "}")
-        self.assertIn("align-items: baseline", main)
+        self.assertIn("min-height: 0", main)
         mark = _between(HTML, "#car-loc-area .car-loc-home-mark {", "}")
         self.assertIn("margin-left: 8px", mark)
         self.assertNotIn("0.75px", mark)
@@ -120,10 +117,10 @@ class LayoutCssTests(unittest.TestCase):
 
 class PinTapTests(unittest.TestCase):
     def test_helpers_are_in_the_page(self) -> None:
-        self.assertIn("function selectHomePin", HTML)
         self.assertIn("function finishPinDrag", HTML)
         self.assertIn("if (pinAwayFromHome())", HTML)
-        self.assertIn("selectHomePin();", HTML)
+        self.assertNotIn("function selectHomePin", HTML)
+        self.assertNotIn("function bindPinElementTap", HTML)
         self.assertNotIn(
             'marker.on("dragend", () => {\n        pinMoved = true;\n        setPinAction("save");',
             HTML,
@@ -147,12 +144,11 @@ let pinMoved = false;
 let pinDragging = false;
 let pinActionMode = "";
 function syncCarNearPin() {}
-const PIN_DELETE_ICON = "DELETE";
 """ + _fn("latLngOf", "metresApart") + _fn("metresApart", "pinAwayFromHome") + _fn(
             "pinAwayFromHome", "homeMarkIcon"
         ) + "\n" + _fn("paintPinButton", "setPinAction") + _fn("setPinAction", "onPinActionClick") + _fn(
-            "selectHomePin", "finishPinDrag"
-        ) + _fn("finishPinDrag", "bindPinDrag") + _fn("bindPinDrag", "fitCarLoc") + r"""
+            "finishPinDrag", "bindPinDrag"
+        ) + _fn("bindPinDrag", "fitCarLoc") + r"""
 function FakeMarker() { this.handlers = {}; }
 FakeMarker.prototype.on = function (name, fn) { this.handlers[name] = fn; return this; };
 FakeMarker.prototype.fire = function (name) { if (this.handlers[name]) this.handlers[name](); };
@@ -202,9 +198,9 @@ process.stdout.write(JSON.stringify(out));
 """
         got = json.loads(_node(src))
         for key in ("touchSelect", "touchSelectThenClick", "mouseClick"):
-            self.assertEqual(got[key]["mode"], "delete", msg=key)
-            self.assertFalse(got[key]["hidden"], msg=key)
-            self.assertTrue(got[key]["html"], msg=key)
+            self.assertEqual(got[key]["mode"], "", msg=key)
+            self.assertTrue(got[key]["hidden"], msg=key)
+            self.assertFalse(got[key]["html"], msg=key)
             self.assertFalse(got[key]["pinMoved"], msg=key)
         self.assertEqual(got["dragAway"]["mode"], "save")
         self.assertFalse(got["dragAway"]["hidden"])
@@ -228,7 +224,7 @@ class TooltipDismissTests(unittest.TestCase):
             "copy.addEventListener(\"pointerdown\"",
             "copy.addEventListener(\"click\"",
         ))
-        self.assertIn("copyLocAddr(text.textContent, copy)", HTML)
+        self.assertIn("copyLocAddr(text.textContent)", HTML)
 
     @unittest.skipUnless(shutil.which("node"), "node not installed")
     def test_outside_scroll_and_copy_behavior(self) -> None:
@@ -272,7 +268,7 @@ const document = {
 let locAddrOpen = true;
 pop.hidden = false;
 toggle.setAttribute("aria-expanded", "true");
-""" + _fn("closeLocAddr", "positionLocAddr") + block + r"""
+""" + _fn("locAddrOpenBtn", "closeLocAddr") + _fn("closeLocAddr", "positionLocAddr") + block + r"""
 const out = {};
 dismissLocAddr({ target: map });
 out.afterMap = { open: locAddrOpen, hidden: !!pop.hidden };
