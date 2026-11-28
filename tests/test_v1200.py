@@ -112,10 +112,10 @@ class CarLocationCardTests(unittest.TestCase):
         self.assertIn("movePinToCar", block)
         self.assertIn("savePinHome", block)
         self.assertIn('writeHome({ lat: here.lat, lon: here.lon })', block)
-        self.assertNotIn("use_last", block.split("function savePinHome", 1)[1].split("function deleteCarHome", 1)[0])
+        self.assertNotIn("use_last", block.split("function savePinHome", 1)[1].split("function bindCarLoc", 1)[0])
         self.assertIn("car-loc-pin-action", HTML)
         self.assertIn("선택한 위치를 집으로 저장할까요?", HTML)
-        self.assertIn("집으로 저장된 위치를 삭제할까요?", HTML)
+        self.assertNotIn("집으로 저장된 위치를 삭제할까요?", HTML)
         self.assertNotIn("carBadgeIcon", HTML)
         self.assertNotIn("여기를 집으로 저장", HTML)
         self.assertNotIn("이 위치로 저장", HTML)
@@ -123,7 +123,7 @@ class CarLocationCardTests(unittest.TestCase):
         self.assertIn("draggable: !!options.draggable", NAVER)
         self.assertIn("function control(", NAVER)
         self.assertIn("disableClickPropagation", NAVER)
-        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
         note = HTML.split('version: "1.20.0"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("화살표", note)
 

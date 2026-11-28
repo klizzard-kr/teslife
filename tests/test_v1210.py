@@ -106,7 +106,7 @@ class CarMapArtTests(unittest.TestCase):
         self.assertIn(".leaflet-div-icon.car-loc-car, .car-loc-car { overflow: visible; }", HTML)
         self.assertNotIn("#2f7dcc", HTML)
         self.assertNotIn("#145a9c", HTML)
-        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
         note = _between(HTML, 'version: "1.21.0"', "fixes:")
         self.assertIn("위에서 본 차 그림", note)
         self.assertIn("파란 압정", note)
