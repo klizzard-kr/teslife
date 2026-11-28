@@ -484,7 +484,7 @@ class ScreenTests(unittest.TestCase):
         self.assertNotIn('" (추정)"', HTML)
         self.assertNotIn("예상보다", HTML)
         self.assertIn("할인·포인트 (원)", HTML)
-        self.assertIn('const APP_VERSION = "v1.21.1"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
 
 
 if __name__ == "__main__":
