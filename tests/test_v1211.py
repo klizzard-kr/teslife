@@ -33,13 +33,13 @@ class LocateCrosshairTests(unittest.TestCase):
         self.assertIn("M18 1.6v5.2M18 29.2v5.2M1.6 18h5.2M29.2 18h5.2", locate)
         self.assertIn("CAR_ICON_SRC", locate)
         self.assertIn("car-loc-locate-car", locate)
-        self.assertIn("width='8'", locate)
-        self.assertIn("height='16'", locate)
+        self.assertIn("width='6'", locate)
+        self.assertIn("height='12'", locate)
         self.assertIn("movePinToCar()", locate)
         self.assertNotIn("pearlT1H", locate)
-        self.assertIn(".car-loc-cross {\n      width: 36px; height: 36px; display: block; color: var(--text);", HTML)
-        self.assertIn("width: 8px; height: 16px;", HTML)
-        self.assertIn('const APP_VERSION = "v1.21.1"', HTML)
+        self.assertIn(".car-loc-cross {\n      width: 26px; height: 26px; display: block; color: var(--loc-btn-fg);", HTML)
+        self.assertIn("width: 6px; height: 12px;", HTML)
+        self.assertIn('const APP_VERSION = "v1.21.7"', HTML)
         note = _between(HTML, 'version: "1.21.1"', "fixes:")
         self.assertIn("조준 고리", note)
 
@@ -54,7 +54,7 @@ class CarNearPinTests(unittest.TestCase):
         self.assertIn('map.on("moveend", syncCarNearPin)', bind)
         sync = _between(HTML, "function syncCarNearPin(", "function bindCarOverlap(")
         self.assertIn("if (homeMarker && carLocMap)", sync)
-        self.assertIn("hide = carHiddenNearPin(gap)", sync)
+        self.assertIn("hide = carHiddenNearPin(gap, mapZoomLevel(carLocMap))", sync)
         self.assertIn("setCarVisible(!hide)", sync)
         self.assertIn("bindCarOverlap(carLocMap)", HTML)
         self.assertIn('zoom: "zoom_changed"', NAVER)
@@ -65,15 +65,16 @@ class CarNearPinTests(unittest.TestCase):
     def test_threshold_hides_only_under_28px(self) -> None:
         src = (
             "const CAR_NEAR_PIN_PX = 28;\n"
+            "const CAR_HIDE_MAX_ZOOM = 15;\n"
             + _fn("screenGap")
             + _fn("carHiddenNearPin")
             + "const out = {\n"
-            "  zero: carHiddenNearPin(screenGap({x:0,y:0},{x:0,y:0})),\n"
-            "  under: carHiddenNearPin(27.9),\n"
-            "  edge: carHiddenNearPin(28),\n"
-            "  over: carHiddenNearPin(screenGap({x:0,y:0},{x:20,y:21})),\n"
-            "  empty: carHiddenNearPin(screenGap(null, {x:1,y:1})),\n"
-            "  bad: carHiddenNearPin(Number.NaN)\n"
+            "  zero: carHiddenNearPin(screenGap({x:0,y:0},{x:0,y:0}), 15),\n"
+            "  under: carHiddenNearPin(27.9, 15),\n"
+            "  edge: carHiddenNearPin(28, 15),\n"
+            "  over: carHiddenNearPin(screenGap({x:0,y:0},{x:20,y:21}), 15),\n"
+            "  empty: carHiddenNearPin(screenGap(null, {x:1,y:1}), 15),\n"
+            "  bad: carHiddenNearPin(Number.NaN, 15)\n"
             "};\n"
             "process.stdout.write(JSON.stringify(out));"
         )
