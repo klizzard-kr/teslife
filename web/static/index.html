@@ -546,6 +546,69 @@
     .charge-flow .flow-drop { fill: var(--text-secondary); }
     .charge-flow .flow-val { fill: var(--text); font-weight: 600; }
     .charge-flow text.dim { fill: var(--text-secondary); font-weight: 500; }
+
+    .app-toast {
+      position: fixed;
+      left: 16px; right: 16px;
+      bottom: calc(var(--tab-h) + var(--safe-b) + 12px);
+      z-index: 28;
+      margin: 0 auto; max-width: 420px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: var(--card); color: var(--text);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+      font-size: 0.9rem; line-height: 1.35; text-align: center;
+      pointer-events: none;
+      opacity: 0; transform: translateY(8px); visibility: hidden;
+      transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    }
+    .app-toast.is-on { opacity: 1; transform: none; visibility: visible; }
+    .teslife-map-pop, .ev-pop {
+      position: relative; box-sizing: border-box;
+      min-width: 160px; max-width: 260px;
+      padding: 8px 12px 12px;
+      background: var(--card); color: var(--text);
+      border: 1px solid var(--line); border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+      font-size: 0.85rem; line-height: 1.4; text-align: left;
+    }
+    .teslife-map-pop div + div, .ev-pop div + div { margin-top: 4px; }
+    .teslife-map-pop b, .ev-pop b { color: var(--muted); font-weight: 600; }
+    .teslife-map-pop::after, .ev-pop::after {
+      content: ""; position: absolute; left: 50%; bottom: -6px;
+      width: 12px; height: 12px;
+      background: var(--card);
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      transform: translateX(-50%) rotate(45deg);
+    }
+    .map-box .leaflet-popup-content-wrapper,
+    .map-box .leaflet-popup-tip {
+      background: transparent; color: inherit;
+      box-shadow: none; border: 0; padding: 0;
+    }
+    .map-box .leaflet-popup-content { margin: 0; }
+    .map-box .leaflet-container a.leaflet-popup-close-button { display: none; }
+    .trips-map-legend {
+      position: absolute; top: 10px; right: 10px; z-index: 900;
+      pointer-events: none;
+      background: rgba(26, 34, 44, 0.88); color: var(--text);
+      border: 1px solid var(--line); border-radius: 10px;
+      padding: 6px 8px;
+      font-size: 0.7rem; line-height: 1.35;
+      max-width: 48%;
+    }
+    [data-theme="light"] .trips-map-legend {
+      background: rgba(255, 255, 255, 0.9);
+    }
+    .trips-map-legend[hidden] { display: none !important; }
+    .trips-map-legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+    .trips-map-legend li { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .trips-map-legend i {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      flex: 0 0 auto;
+    }
     .map-box { position: relative; z-index: 0; isolation: isolate; height: 240px; margin-top: 8px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--card); }
     .map-box.tall { height: 420px; }
     .map-box .leaflet-tile-pane { filter: var(--map-filter); }
@@ -1103,7 +1166,12 @@
     .chart-empty { margin: 8px 0; color: var(--text-secondary); min-height: 64px; }
     .map-card.map-empty .map-box, .map-card.map-empty .map-tools, .map-card.map-empty .route-chooser,
     .map-card.map-failed .map-box, .map-card.map-failed .map-tools { display: none; }
-    .map-card.map-empty .route-note, .map-card.map-failed .route-note { min-height: 64px; display: flex; align-items: center; }
+    .map-card-status { margin: 8px 0 0; color: var(--muted); font-size: 0.85rem; }
+    .map-card-status[hidden] { display: none !important; }
+    .map-card.map-empty .map-card-status, .map-card.map-failed .map-card-status {
+      min-height: 64px; display: flex; align-items: center; gap: 8px;
+    }
+    .trips-map-legend i.line { width: 14px; height: 4px; border-radius: 2px; }
     #battery-card.day-empty > .chart-legend, #battery-card.day-empty #bat-day,
     #battery-card.day-empty #mode-title, #battery-card.day-empty #mode-sum, #battery-card.day-empty #bat-timeline { display: none; }
     .bat-scope { font-size: 12px; line-height: 18px; margin: -6px 0 8px; }
@@ -1121,29 +1189,42 @@
       min-height: 0; line-height: inherit;
     }
     #car-loc-area .car-loc-area-main {
-      display: flex; align-items: baseline; gap: 0; flex-wrap: wrap;
-      min-height: 0; line-height: inherit;
+      display: inline-flex; align-items: center; justify-content: flex-start;
+      gap: 0; flex-wrap: nowrap; vertical-align: middle;
+      min-height: 0; height: auto; width: auto; max-width: 100%;
+      line-height: inherit; box-sizing: border-box;
+      margin: 0; padding: 0; border: 0; border-radius: 4px;
+      background: transparent; color: inherit;
+      font: inherit; font-size: inherit; font-weight: inherit;
+      text-align: left; text-decoration: none; box-shadow: none;
+      cursor: default; -webkit-appearance: none; appearance: none;
     }
+    #car-loc-area button.car-loc-area-main {
+      cursor: pointer;
+    }
+    #car-loc-area button.car-loc-area-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     #car-loc-area .car-loc-home-mark {
-      flex: none; display: inline-flex; align-items: center;
-      margin-left: 8px;
+      flex: none; display: inline-flex; align-items: center; justify-content: center;
+      margin-left: 8px; line-height: 0;
+      width: 0.8em; height: 0.8em; width: 1cap; height: 1cap;
     }
     #car-loc-area .car-loc-home-icon {
-      width: 1em; height: 1em; flex: none; display: block;
+      width: 0.8em; height: 0.8em; width: 1cap; height: 1cap;
+      flex: none; display: block;
     }
     #car-loc-area .car-loc-addr-toggle {
       flex: none; display: inline-flex; align-items: center; justify-content: center;
-      font-size: inherit;
-      width: 1em; height: 1em; min-width: 0; min-height: 0;
+      font-size: inherit; line-height: 0; pointer-events: none;
+      width: 0.8em; height: 0.8em; width: 1cap; height: 1cap;
+      min-width: 0; min-height: 0;
       padding: 0; margin: 0 0 0 6px; border: 0;
-      background: transparent; color: var(--muted); cursor: pointer; border-radius: 4px;
+      background: transparent; color: var(--muted); border-radius: 4px;
       -webkit-appearance: none; appearance: none;
     }
     #car-loc-area .car-loc-addr-toggle svg {
-      width: 1em; height: 1em; display: block; transition: transform 0.15s ease;
+      width: 100%; height: 100%; display: block; transition: transform 0.15s ease;
     }
-    #car-loc-area .car-loc-addr-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
-    #car-loc-area .car-loc-addr-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #car-loc-area .car-loc-area-main[aria-expanded="true"] .car-loc-addr-toggle svg { transform: rotate(180deg); }
     .car-loc-addr-pop {
       position: absolute; z-index: 1100; box-sizing: border-box;
       background: #243140; color: var(--text);
@@ -1158,21 +1239,22 @@
     }
     .car-loc-addr-pop[hidden] { display: none !important; }
     .car-loc-addr-row {
-      display: flex; align-items: flex-start; gap: 6px;
+      display: flex; align-items: center; gap: 6px;
       padding: 2px 6px; border-radius: 6px;
     }
-    .car-loc-addr-row + .car-loc-addr-row { border-top: 1px solid var(--line); padding-top: 2px; }
+    .car-loc-addr-row + .car-loc-addr-row { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 6px; }
     .car-loc-addr-meta { flex: 1; min-width: 0; }
     .car-loc-addr-kind {
-      font-size: 0.7rem; line-height: 1.2; font-weight: 600; color: var(--muted);
-      margin-bottom: 0;
+      display: block; font-size: 0.7rem; line-height: 1.3; font-weight: 600; color: var(--muted);
+      margin: 0 0 2px;
     }
     .car-loc-addr-text {
-      font-size: 0.8rem; line-height: 1.3; font-weight: 400; color: var(--text);
+      display: block; font-size: 0.8rem; line-height: 1.35; font-weight: 400; color: var(--text);
+      margin: 0;
       white-space: normal; overflow-wrap: anywhere; word-break: break-word;
     }
     .car-loc-addr-copy {
-      flex: none; align-self: flex-start; margin: 0; padding: 1px 6px;
+      flex: none; align-self: center; margin: 0; padding: 1px 6px;
       min-height: 0; height: auto; min-width: 0; width: auto;
       border: 1px solid var(--control-border); border-radius: 999px;
       background: transparent; color: var(--text);
@@ -1419,7 +1501,7 @@
           </div>
         </div>
         <div class="route-chooser hidden" id="trips-chooser" role="dialog" aria-label="겹친 경로 고르기"></div>
-        <p class="route-note" id="trips-map-note"></p>
+        <p class="map-card-status" id="trips-map-status" hidden></p>
         <ul id="trips-event-list" class="trips-events"></ul>
       </section>
       <section class="card" id="trips-eff">
@@ -1542,6 +1624,8 @@
       정비
     </button>
   </nav>
+
+  <div id="app-toast" class="app-toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <div id="inbox-overlay" class="overlay">
     <div class="sheet" role="dialog" aria-labelledby="inbox-title">
@@ -2037,10 +2121,20 @@
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=10"></script>
-  <script src="/static/naver-map.js?v=2"></script>
+  <script src="/static/i18n.js?v=11"></script>
+  <script src="/static/naver-map.js?v=3"></script>
   <script>
-    function mapLib() { return window.__teslifeMapLib || window.L; }
+    function mapLib() {
+      const lib = window.__teslifeMapLib || window.L;
+      if (lib && lib.polyline && !lib.__teslifeRoundLines) {
+        const orig = lib.polyline.bind(lib);
+        lib.polyline = function (latlngs, style) {
+          return orig(latlngs, Object.assign({ lineJoin: "round", lineCap: "round" }, style || {}));
+        };
+        lib.__teslifeRoundLines = true;
+      }
+      return lib;
+    }
     const TABS = ["home", "trips", "charges", "ledger", "consumables"];
     function uiLang() {
       return (window.TeslifeI18n && TeslifeI18n.lang === "en") ? "en" : "ko";
@@ -2284,8 +2378,10 @@
         else openTireSet(null, true);
       });
     }
-    const APP_VERSION = "v1.21.8"; // display constant only
+    const APP_VERSION = "v1.21.10"; // display constant only
     const RELEASE_NOTES = [
+      { version: "1.21.10", features: ["알림: 짧은 결과는 아래 메뉴 바로 위에 약 2초 동안 보여 줘요. 주소를 복사하면 '도로명 주소를 복사했어요' 또는 '지번 주소를 복사했어요'가 나와요", "주행 지도: 속도·오토파일럿·이벤트는 색 안내가 지도 위에 있어요. 기본은 안내가 없어요"], fixes: ["현재 위치: 집 핀을 눌러도 지우기 단추는 나오지 않아요. 핀을 옮겨 집으로 저장하는 것은 그대로예요", "주행 지도: 구간 정보창은 어두운 화면에서도 글자가 잘 보여요. 밖을 누르거나 화면을 내리거나 표시를 바꾸면 닫혀요", "주행 지도: 고른 경로를 눌러도 선택이 풀리지 않아요. 그 구간의 정보창만 열려요"] },
+      { version: "1.21.9", features: [], fixes: ["현재 위치: 집 핀을 눌러 고르면 지우기 단추가 나와요. 지도 위 핀 그림을 손가락으로 눌러도 같아요", "현재 위치: 집 아이콘과 화살표를 동 이름 글자 가운데에 맞춰요", "현재 위치: 동 이름, 집 아이콘, 화살표 줄 전체를 누르면 상세 주소가 열려요", "상세 주소 상자: 도로명·지번 칸 이름은 주소와 겹치지 않게 한 줄로 두고, 복사 단추는 그 항목의 세로 가운데에 둬요"] },
       { version: "1.21.8", features: [], fixes: ["현재 위치: 집 핀을 눌러 고르면 지우기 단추가 나와요. 손가락으로 눌러도 같아요", "현재 위치: 위치와 상태 글자 높이를 맞춰요. 동 이름과 집 아이콘 사이를 조금 더 띄워요", "상세 주소 상자: 복사 단추를 작고 둥글게 줄이고, 배경을 카드와 구분해 보여요. 화면을 스크롤하거나 상자 밖을 누르면 닫혀요"] },
       { version: "1.21.7", features: ["메뉴: 이미 보고 있는 탭의 단추를 다시 누르면, 그 화면이 맨 위로 부드럽게 올라가요. 다섯 탭 모두 같아요"], fixes: [] },
       { version: "1.21.6", features: ["현재 위치: 지도 위에 구분선이 없어요. 집이면 동 이름 뒤에 집 아이콘이 붙어요", "위치 수신: 받은 시각은 네이버 지도와 Leaflet 모두 오른쪽 위에 있어요. 네이버 확대 단추는 왼쪽 위에 있어요", "현재 위치: 위치 값은 동 이름 하나예요. 동이 없으면 구, 구가 없으면 시·군, 그것도 없으면 도를 보여 줘요. 자세한 도로명·지번 주소는 화살표를 누르면 열려요"], fixes: [] },
@@ -4951,6 +5047,8 @@
 
     // ---------------------------------------------------------------- 주행
     let tripsMap = null, tripsLayer = null, modeLayer = null, arrowLayer = null, tripsGen = 0;
+    let tripPieces = [];
+    let roadLegendData = null;
     let tripRoutes = [];   // [{start_ts, label, lines: [mapLib().polyline], segments, points, events}]
     let pickedTrip = null; // start_ts
     let traceToken = 0;
@@ -5012,9 +5110,18 @@
       tripsLayer = mapLib().layerGroup().addTo(tripsMap);
       modeLayer = mapLib().layerGroup().addTo(tripsMap);
       arrowLayer = mapLib().layerGroup().addTo(tripsMap);
-      tripsMap.on("click", ev => pickRouteAt(ev.latlng, ev.containerPoint));
+      tripsMap.on("click", ev => {
+        const box = document.getElementById("trips-chooser");
+        if (box) box.classList.add("hidden");
+        if (pickedTrip && ev && ev.latlng) {
+          const hit = nearestTripPiece(ev.latlng, 20);
+          if (hit) { openPiecePop(hit, ev.latlng); return; }
+        }
+        closeTripMapPop();
+      });
       tripsMap.on("zoomend", () => { if (pickedTrip) highlightTrip(pickedTrip, false); });
       syncMapTools();
+      paintTripMapLegend();
     }
     function tripTitle(t) {
       return fmtSeoul(t.start_ts) + "–" + fmtHm(t.end_ts) + (t.km != null ? " · " + fmtTripDistance(t.km) : "");
@@ -5038,6 +5145,123 @@
           b.setAttribute("aria-pressed", String(b.getAttribute("data-mode") === mapPrefs.mode));
         });
       }
+      paintTripMapLegend();
+    }
+    function ensureTripMapLegend() {
+      let el = document.getElementById("trips-map-legend");
+      const host = document.getElementById("trips-map");
+      if (!el && host) {
+        el = document.createElement("div");
+        el.id = "trips-map-legend";
+        el.className = "trips-map-legend";
+        el.setAttribute("aria-hidden", "true");
+        el.hidden = true;
+        host.appendChild(el);
+      } else if (el && host && el.parentNode !== host) {
+        host.appendChild(el);
+      }
+      return el;
+    }
+    function paintTripMapLegend() {
+      const el = ensureTripMapLegend();
+      if (!el) return;
+      const rows = [];
+      if (roadLegendData) {
+        if (roadLegendData.trips) {
+          rows.push({ label: "지나간 길 · 주행 " + roadLegendData.trips + "건" });
+          ROAD_LEVELS.forEach(lv => rows.push({ color: lv.color, label: lv.label, swatch: "line" }));
+        } else {
+          rows.push({ label: "도로에 맞춘 경로 없음" });
+        }
+      }
+      const mode = pickedTrip ? mapPrefs.mode : "basic";
+      if (mode === "speed") {
+        SPEED_BANDS.forEach(b => rows.push({ color: b.color, label: b.label }));
+      } else if (mode === "ap") {
+        const r = tripRoutes.find(x => x.start_ts === pickedTrip);
+        const pts = (r && r.points) || [];
+        const hasAp = pts.some(pt => pt.ap === 0 || pt.ap === 1 || pt.ap === true || pt.ap === false);
+        if (!pts.length || hasAp) {
+          rows.push({ color: "#3b82f6", label: "오토파일럿 켜짐" });
+          rows.push({ color: "#8aa0b5", label: "오토파일럿 꺼짐" });
+        } else {
+          rows.push({ label: "오토파일럿 기록 없음" });
+        }
+      }
+      if (pickedTrip && mapPrefs.events) {
+        const r = tripRoutes.find(x => x.start_ts === pickedTrip);
+        const n = {};
+        ((r && r.events) || []).forEach(e => { if (e && e.lat != null) n[e.kind] = (n[e.kind] || 0) + 1; });
+        Object.keys(EVENT_STYLE).forEach(k => {
+          if (n[k]) rows.push({ color: EVENT_STYLE[k][1], label: EVENT_STYLE[k][0] + " " + n[k] });
+        });
+      }
+      if (!rows.length) {
+        el.hidden = true;
+        el.replaceChildren();
+        return;
+      }
+      el.innerHTML = "<ul>" + rows.map(row => {
+        if (row.color) {
+          const cls = row.swatch === "line" ? " class='line'" : "";
+          return "<li><i" + cls + " style='background:" + row.color + "'></i>" + escHtml(row.label) + "</li>";
+        }
+        return "<li>" + escHtml(row.label) + "</li>";
+      }).join("") + "</ul>";
+      el.hidden = false;
+    }
+    let tripPopHold = false;
+    function closeLayerPops(layer) {
+      if (!layer) return;
+      if (layer.items) layer.items.forEach(it => { if (it && it.closePopup) it.closePopup(); });
+      if (layer.eachLayer) layer.eachLayer(l => { if (l && l.closePopup) l.closePopup(); });
+    }
+    function closeTripMapPop() {
+      if (tripPopHold) return;
+      clearSegHighlight();
+      if (tripsMap && tripsMap.closePopup) tripsMap.closePopup();
+      closeLayerPops(modeLayer);
+      closeLayerPops(pickedEvents);
+      closeLayerPops(tripsLayer);
+    }
+    function holdTripMapPop() {
+      tripPopHold = true;
+      setTimeout(function () { tripPopHold = false; }, 0);
+    }
+    function setTripMapStatus(html) {
+      const el = document.getElementById("trips-map-status");
+      if (!el) return;
+      if (!html) { el.hidden = true; el.replaceChildren(); return; }
+      el.innerHTML = html;
+      el.hidden = false;
+      const retry = document.getElementById("trip-map-retry");
+      if (retry) retry.addEventListener("click", () => refreshTrips());
+    }
+    function nearestTripPiece(latlng, maxPx) {
+      if (!tripsMap || !tripPieces.length || !latlng) return null;
+      const p = tripsMap.latLngToLayerPoint(latlng);
+      const hitPx = maxPx == null ? 20 : maxPx;
+      let best = null, bestD = hitPx;
+      tripPieces.forEach(piece => {
+        const pts = piece.latlngs || [];
+        for (let i = 1; i < pts.length; i++) {
+          const a = tripsMap.latLngToLayerPoint(pts[i - 1]);
+          const b = tripsMap.latLngToLayerPoint(pts[i]);
+          const d = mapLib().LineUtil.pointToSegmentDistance(p, a, b);
+          if (d <= bestD) { bestD = d; best = piece; }
+        }
+      });
+      return best;
+    }
+    function openPiecePop(piece, latlng) {
+      if (!piece || !piece.line) return;
+      holdTripMapPop();
+      clearSegHighlight();
+      segHighlight = piece.line;
+      const style = piece.style || {};
+      piece.line.setStyle({ weight: (style.weight || 6) + 3 });
+      const at = latlng || (piece.latlngs && piece.latlngs[Math.floor(piece.latlngs.length / 2)]);
+      if (piece.popup) piece.line.bindPopup(piece.popup).openPopup(at);
     }
     function eventKindLabel(kind) {
       const st = EVENT_STYLE[kind];
@@ -5060,7 +5284,11 @@
       return bits.filter(Boolean).join(" · ");
     }
     function clearSegHighlight() {
-      if (segHighlight) { segHighlight.setStyle(segHighlight._baseStyle || {}); segHighlight = null; }
+      if (segHighlight) {
+        if (segHighlight.closePopup) segHighlight.closePopup();
+        segHighlight.setStyle(segHighlight._baseStyle || {});
+        segHighlight = null;
+      }
     }
     function runsFromPoints(points, mode) {
       const pts = (points || []).filter(p => p.lat != null && p.lon != null);
@@ -5171,12 +5399,16 @@
             iconSize: [18, 18], iconAnchor: [9, 9],
           }),
         });
-        if (html) marker.bindPopup(html, { autoPan: true });
+        if (html) marker.bindPopup("<div class='ev-pop'>" + html + "</div>", { autoPan: true });
+        marker.on("click", ev => {
+          if (mapLib().DomEvent) mapLib().DomEvent.stopPropagation(ev);
+          holdTripMapPop();
+        });
         marker.addTo(pickedEvents);
       });
     }
     function paintSelected(route, index) {
-      clearSegHighlight();
+      closeTripMapPop();
       if (modeLayer) modeLayer.clearLayers();
       const arrowLines = [];
       let arrowStyle = route ? routeStyle(Math.max(index, 0), pickedTrip) : null;
@@ -5188,6 +5420,7 @@
         });
       });
       let replaced = false;
+      tripPieces = [];
       const mode = pickedTrip ? mapPrefs.mode : "basic";
       if (route && modeLayer && (mode === "speed" || mode === "ap" || mode === "basic")) {
         const pieces = runsFromPoints(route.points, mode);
@@ -5207,17 +5440,22 @@
             } else if (piece.k === "R") {
               dash = "6 6";
             }
-            const style = { color: color, weight: base.weight || 6, opacity: 1, dashArray: dash };
+            const style = { color: color, weight: base.weight || 6, opacity: 1, dashArray: dash, lineJoin: "round", lineCap: "round" };
             const line = mapLib().polyline(latlngs, style).addTo(modeLayer);
             line._baseStyle = style;
             const popup = piecePopup(piece, mode);
-            line.on("click", ev => {
-              mapLib().DomEvent.stopPropagation(ev);
-              clearSegHighlight();
-              segHighlight = line;
-              line.setStyle({ weight: (style.weight || 6) + 3 });
-              if (popup) line.bindPopup(popup).openPopup(ev.latlng);
-            });
+            const rec = { line: line, latlngs: latlngs, popup: popup, style: style };
+            tripPieces.push(rec);
+            const hit = mapLib().polyline(latlngs, {
+              color: color, weight: 24, opacity: 0, interactive: true,
+              lineJoin: "round", lineCap: "round"
+            }).addTo(modeLayer);
+            const onSeg = ev => {
+              if (mapLib().DomEvent) mapLib().DomEvent.stopPropagation(ev);
+              openPiecePop(rec, ev && ev.latlng);
+            };
+            line.on("click", onSeg);
+            hit.on("click", onSeg);
             arrowLines.push(latlngs);
             arrowStyle = style;
           });
@@ -5244,13 +5482,6 @@
         const line = el.querySelector(".trip-line");
         if (line) line.setAttribute("aria-pressed", String(on));
       });
-      const note = document.getElementById("trips-map-note");
-      let extra = "";
-      if (r && mapPrefs.mode === "ap" && !(r.points || []).some(p => p.ap === 0 || p.ap === 1 || p.ap === true || p.ap === false)) {
-        extra = "<span>오토파일럿 기록 없음</span>";
-      }
-      note.innerHTML = r ? "<span>선택 " + escHtml(r.label) + "</span>" + eventLegend(mapPrefs.events ? r.events : []) +
-        (r.matched ? "" : "<span>도로 맞춤 전</span>") + extra : note.dataset.base || "";
       if (r && !r.points) loadTrace(r);
     }
     function mapPrefsPaintBasic() { /* deselect keeps the saved mode but draws the plain line */ }
@@ -5262,39 +5493,12 @@
       if (token !== traceToken || !data) return;
       route.points = data.points || [];
       if (route.points.some(p => p.gear === "R") || mapPrefs.mode !== "basic") paintSelected(route, tripRoutes.indexOf(route));
-      const note = document.getElementById("trips-map-note");
-      if (pickedTrip === route.start_ts && mapPrefs.mode === "ap" && !route.points.some(p => p.ap === 0 || p.ap === 1 || p.ap === true || p.ap === false)) {
-        if (note && note.innerHTML.indexOf("오토파일럿 기록 없음") < 0) note.innerHTML += "<span>오토파일럿 기록 없음</span>";
-      }
+      if (pickedTrip === route.start_ts) paintTripMapLegend();
     }
     function pickRouteAt(latlng, cpt) {
-      if (!tripRoutes.length || !tripsMap) return;
-      const p = tripsMap.latLngToLayerPoint(latlng);
-      const hits = [];
-      const pool = pickedTrip ? tripRoutes.filter(r => r.start_ts === pickedTrip) : tripRoutes;
-      pool.forEach(r => {
-        let best = Infinity;
-        r.segments.forEach(seg => {
-          for (let i = 1; i < seg.length; i++) {
-            const a = tripsMap.latLngToLayerPoint(seg[i - 1]), b = tripsMap.latLngToLayerPoint(seg[i]);
-            best = Math.min(best, mapLib().LineUtil.pointToSegmentDistance(p, a, b));
-          }
-        });
-        if (best <= 14) hits.push(r);
-      });
       const box = document.getElementById("trips-chooser");
-      if (!hits.length) { box.classList.add("hidden"); return; }
-      if (hits.length === 1) { box.classList.add("hidden"); toggleTrip(hits[0].start_ts, false); return; }
-      box.innerHTML = "<p>겹친 경로 " + hits.length + "개</p>" + hits.map(r =>
-        "<button type='button' data-pick='" + escHtml(r.start_ts) + "'>" + escHtml(r.label) + "</button>").join("");
-      box.style.left = Math.min(cpt.x, document.getElementById("trips-map").clientWidth - 200) + "px";
-      box.style.top = (cpt.y + 8) + "px";
-      box.classList.remove("hidden");
-      box.querySelectorAll("[data-pick]").forEach(b => b.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        box.classList.add("hidden");
-        toggleTrip(b.getAttribute("data-pick"), false);
-      }));
+      if (box) box.classList.add("hidden");
+      // Map taps must never change the trip list selection.
     }
     function drawTripRoutes(data, rows) {
       tripsLayer.clearLayers();
@@ -5312,20 +5516,19 @@
         const r = tripRoutes[i];
         r.segments.forEach(seg => r.lines.push(mapLib().polyline(seg, routeStyle(i, pickedTrip)).addTo(tripsLayer)));
       }
-      const note = document.getElementById("trips-map-note");
-      const base = tripRoutes.length ? "<span>경로 " + tripRoutes.length + "개" + (tripRoutes.length > 8 ? " · 누르면 강조" : "") + "</span>" +
-        (data.truncated ? "<span>최근 100건만</span>" : "") : "<span>이 기간에는 경로 기록이 없어요</span>";
-      note.dataset.base = base;
-      note.innerHTML = base;
+      roadLegendData = null;
+      paintTripMapLegend();
       const tripCard = document.getElementById("trips-map-card");
       if (tripCard) {
         tripCard.classList.toggle("map-empty", !tripRoutes.length && !window.__tripMapFailed);
         tripCard.classList.toggle("map-failed", !!window.__tripMapFailed);
-        if (window.__tripMapFailed) {
-          note.innerHTML = "<span>지도를 불러오지 못했어요</span> <button type='button' class='retry-btn' id='trip-map-retry'>다시 불러오기</button>";
-          const retry = document.getElementById("trip-map-retry");
-          if (retry) retry.addEventListener("click", () => refreshTrips());
-        }
+      }
+      if (window.__tripMapFailed) {
+        setTripMapStatus("<span>지도를 불러오지 못했어요</span> <button type='button' class='retry-btn' id='trip-map-retry'>다시 불러오기</button>");
+      } else if (!tripRoutes.length) {
+        setTripMapStatus("이 기간에는 경로 기록이 없어요");
+      } else {
+        setTripMapStatus("");
       }
       const evList = document.getElementById("trips-event-list");
       if (evList && !pickedTrip) evList.innerHTML = "";
@@ -5643,12 +5846,9 @@
         syncMapTools();
         if (roads) drawRoadLevels(tripsMap, tripsLayer, roads);
         else tripsLayer.clearLayers();
-        const note = document.getElementById("trips-map-note");
-        note.innerHTML = roads && roads.trips
-          ? "<span>지나간 길 · 주행 " + roads.trips + "건</span>" + ROAD_LEVELS.map(lv =>
-              "<span class='ev-key'><i class='line' style='background:" + lv.color + "'></i>" + lv.label + "</span>").join("")
-          : "<span>도로에 맞춘 경로 없음</span>";
-        note.dataset.base = note.innerHTML;
+        roadLegendData = roads ? { trips: roads.trips || 0 } : { trips: 0 };
+        paintTripMapLegend();
+        setTripMapStatus("");
         const tripCard = document.getElementById("trips-map-card");
         if (tripCard) { tripCard.classList.remove("map-empty"); tripCard.classList.remove("map-failed"); }
         const body = document.getElementById("trips-months-body");
@@ -5674,10 +5874,16 @@
 
     // ---------------------------------------------------------------- 충전
     let chargesMap = null, chargesLayer = null, chargesGen = 0, chargesShownN = PAGE_SIZE;
+    function closeChargeMapPop() {
+      if (tripPopHold) return;
+      closeLayerPops(chargesLayer);
+      if (chargesMap && chargesMap.closePopup) chargesMap.closePopup();
+    }
     async function ensureChargesMap() {
       if (chargesMap) { setTimeout(() => chargesMap.invalidateSize(), 0); return; }
       chargesMap = await rawMap(document.getElementById("charges-map"));
       chargesLayer = mapLib().layerGroup().addTo(chargesMap);
+      chargesMap.on("click", function () { closeChargeMapPop(); });
     }
     let pickedCharge = null;   // charge_id; one at a time, row tap or dot tap toggles
     let chargeDots = [];       // [{marker, d}]
@@ -5785,7 +5991,9 @@
           interactive: false, keyboard: false, zIndexOffset: -100,
         }).addTo(chargesLayer) : null;
         chargeDots.push({ marker: m, d: d, badge: badge });
-        m.on("click", () => {
+        m.on("click", ev => {
+          if (mapLib().DomEvent) mapLib().DomEvent.stopPropagation(ev);
+          holdTripMapPop();
           // a dot is one place: tapping it selects that place's newest charge; tapping again clears
           const ids = d.charge_ids || [];
           if (pickedCharge && ids.indexOf(pickedCharge) >= 0) { highlightCharge(null, false); return; }
@@ -6478,21 +6686,24 @@
     }
     const ADDR_CHEVRON = "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>";
     let locAddrOpen = false;
-    let locAddrCopyTimer = 0;
     function locAddrLabel(key, fallback) {
       return (window.TeslifeI18n && TeslifeI18n.t) ? TeslifeI18n.t(key) : fallback;
+    }
+    function locAddrOpenBtn() {
+      return document.querySelector("#car-loc-area button.car-loc-area-main")
+        || document.querySelector("#car-loc-area .car-loc-addr-toggle");
     }
     function closeLocAddr() {
       locAddrOpen = false;
       const pop = document.getElementById("car-loc-addr-pop");
-      const btn = document.querySelector("#car-loc-area .car-loc-addr-toggle");
+      const btn = locAddrOpenBtn();
       if (pop) pop.hidden = true;
       if (btn) btn.setAttribute("aria-expanded", "false");
     }
     function positionLocAddr() {
       const pop = document.getElementById("car-loc-addr-pop");
       const card = document.getElementById("car-loc-card");
-      const btn = document.querySelector("#car-loc-area .car-loc-addr-toggle");
+      const btn = locAddrOpenBtn();
       if (!pop || pop.hidden || !card || !btn) return;
       const cardBox = card.getBoundingClientRect();
       const btnBox = btn.getBoundingClientRect();
@@ -6502,16 +6713,23 @@
       pop.style.width = "auto";
       pop.style.top = Math.round(btnBox.bottom - cardBox.top + 6) + "px";
     }
-    function copyLocAddr(text, btn) {
+    let toastTimer = 0;
+    function showToast(message) {
+      const el = document.getElementById("app-toast");
+      if (!el) return;
+      const text = String(message || "");
+      if (!text) return;
+      el.textContent = text;
+      el.classList.add("is-on");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () {
+        toastTimer = 0;
+        el.classList.remove("is-on");
+      }, 2000);
+    }
+    function copyLocAddr(text) {
       const shown = String(text || "");
       if (!shown) return;
-      const done = function () {
-        btn.textContent = locAddrLabel("복사했어요", "복사했어요");
-        if (locAddrCopyTimer) clearTimeout(locAddrCopyTimer);
-        locAddrCopyTimer = setTimeout(function () {
-          btn.textContent = locAddrLabel("복사", "복사");
-        }, 1500);
-      };
       const fallback = function () {
         const ta = document.createElement("textarea");
         ta.value = shown;
@@ -6522,10 +6740,9 @@
         ta.select();
         try { document.execCommand("copy"); } catch (err) {}
         document.body.removeChild(ta);
-        done();
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(shown).then(done).catch(fallback);
+        navigator.clipboard.writeText(shown).catch(fallback);
       } else fallback();
     }
     function paintLocAddrPop(road, jibun) {
@@ -6533,8 +6750,8 @@
       if (!pop) return;
       pop.replaceChildren();
       const rows = [
-        { kind: locAddrLabel("도로명", "도로명"), text: road || "" },
-        { kind: locAddrLabel("지번", "지번"), text: jibun || "" }
+        { kind: locAddrLabel("도로명", "도로명"), text: road || "", copied: "도로명 주소를 복사했어요" },
+        { kind: locAddrLabel("지번", "지번"), text: jibun || "", copied: "지번 주소를 복사했어요" }
       ];
       rows.forEach(function (row) {
         if (!row.text) return;
@@ -6559,7 +6776,8 @@
         copy.addEventListener("click", function (ev) {
           ev.preventDefault();
           ev.stopPropagation();
-          copyLocAddr(text.textContent, copy);
+          copyLocAddr(text.textContent);
+          showToast(locAddrLabel(row.copied, row.copied));
         });
         wrap.append(meta, copy);
         pop.append(wrap);
@@ -6568,7 +6786,7 @@
     function toggleLocAddr(ev) {
       if (ev) { ev.preventDefault(); ev.stopPropagation(); }
       const pop = document.getElementById("car-loc-addr-pop");
-      const btn = document.querySelector("#car-loc-area .car-loc-addr-toggle");
+      const btn = locAddrOpenBtn();
       if (!pop || !btn) return;
       if (locAddrOpen) { closeLocAddr(); return; }
       locAddrOpen = true;
@@ -6579,23 +6797,27 @@
     function setLocArea(el, text, atHome, homeWord, detail) {
       el.replaceChildren();
       closeLocAddr();
-      const main = document.createElement("span");
+      const road = detail && detail.road;
+      const jibun = detail && detail.jibun;
+      const hasDetail = !!(road || jibun);
+      const main = document.createElement(hasDetail ? "button" : "span");
       main.className = "car-loc-area-main";
+      if (hasDetail) {
+        main.type = "button";
+        main.setAttribute("aria-expanded", "false");
+        main.setAttribute("aria-controls", "car-loc-addr-pop");
+        main.setAttribute("aria-label", locAddrLabel("상세 주소", "상세 주소"));
+        main.addEventListener("click", toggleLocAddr);
+      }
       if (text) main.append(document.createTextNode(text));
       if (atHome) main.append(homeMarkIcon());
       if (homeWord) main.append(document.createTextNode("집"));
-      const road = detail && detail.road;
-      const jibun = detail && detail.jibun;
-      if (road || jibun) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "car-loc-addr-toggle";
-        btn.setAttribute("aria-expanded", "false");
-        btn.setAttribute("aria-controls", "car-loc-addr-pop");
-        btn.setAttribute("aria-label", locAddrLabel("상세 주소", "상세 주소"));
-        btn.innerHTML = ADDR_CHEVRON;
-        btn.addEventListener("click", toggleLocAddr);
-        main.append(btn);
+      if (hasDetail) {
+        const chev = document.createElement("span");
+        chev.className = "car-loc-addr-toggle";
+        chev.setAttribute("aria-hidden", "true");
+        chev.innerHTML = ADDR_CHEVRON;
+        main.append(chev);
         paintLocAddrPop(road, jibun);
       } else {
         paintLocAddrPop("", "");
@@ -6606,6 +6828,7 @@
       const t = ev && ev.target;
       if (!t || !t.closest) return false;
       if (t.closest("#car-loc-addr-pop")) return true;
+      if (t.closest("#car-loc-area .car-loc-area-main")) return true;
       if (t.closest("#car-loc-area .car-loc-addr-toggle")) return true;
       return false;
     }
@@ -6621,17 +6844,21 @@
     });
     window.addEventListener("resize", function () { if (locAddrOpen) positionLocAddr(); });
     window.addEventListener("scroll", function () { if (locAddrOpen) closeLocAddr(); }, true);
+    document.addEventListener("pointerdown", function (ev) {
+      const t = ev && ev.target;
+      if (t && t.closest && t.closest(".teslife-map-pop, .ev-pop, .leaflet-popup, .app-toast")) return;
+      closeTripMapPop();
+      closeChargeMapPop();
+    }, true);
+    window.addEventListener("scroll", function () { closeTripMapPop(); closeChargeMapPop(); }, true);
 
-    const PIN_DELETE_ICON = "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linejoin='round' stroke-linecap='round'><path d='M5 7h14'/><path d='M10 7V5h4v2'/><path d='M7 7l1 13h8l1-13'/></svg>";
     let pinActionMode = "";
     let pinDragging = false;
     function paintPinButton() {
       const btn = document.getElementById("car-loc-pin-action");
       if (!btn) return;
-      const home = carLocData && carLocData.home;
       let mode = pinActionMode;
-      if (mode === "save" && !pinAwayFromHome()) mode = "";
-      if (mode === "delete" && (!home || pinAwayFromHome())) mode = "";
+      if (mode !== "save" || !pinAwayFromHome()) mode = "";
       pinActionMode = mode;
       if (!mode) {
         btn.hidden = true;
@@ -6640,27 +6867,19 @@
         return;
       }
       btn.hidden = false;
-      btn.dataset.mode = mode;
-      if (mode === "save") {
-        btn.setAttribute("aria-label", "선택한 위치를 집으로 저장할까요?");
-        btn.title = "선택한 위치를 집으로 저장할까요?";
-        btn.innerHTML = PIN_SAVE_ICON;
-      } else {
-        btn.setAttribute("aria-label", "집으로 저장된 위치를 삭제할까요?");
-        btn.title = "집으로 저장된 위치를 삭제할까요?";
-        btn.innerHTML = PIN_DELETE_ICON;
-      }
+      btn.dataset.mode = "save";
+      btn.setAttribute("aria-label", "선택한 위치를 집으로 저장할까요?");
+      btn.title = "선택한 위치를 집으로 저장할까요?";
+      btn.innerHTML = PIN_SAVE_ICON;
     }
     function setPinAction(mode) {
-      pinActionMode = mode || "";
+      pinActionMode = (mode === "save") ? "save" : "";
       paintPinButton();
     }
     function onPinActionClick(ev) {
       if (ev) { ev.preventDefault(); ev.stopPropagation(); }
       const btn = document.getElementById("car-loc-pin-action");
-      const mode = btn && btn.dataset.mode;
-      if (mode === "save") savePinHome();
-      else if (mode === "delete") deleteCarHome();
+      if (btn && btn.dataset.mode === "save") savePinHome();
     }
     function paintLocate() {
       const btn = document.getElementById("car-loc-locate");
@@ -6668,31 +6887,24 @@
       const data = carLocData || {};
       btn.hidden = !(data.lat != null && data.lon != null);
     }
-    function selectHomePin() {
-      const home = carLocData && carLocData.home;
-      if (home && !pinAwayFromHome()) setPinAction("delete");
-    }
     function finishPinDrag() {
       if (pinAwayFromHome()) {
         pinMoved = true;
         setPinAction("save");
       } else {
-        selectHomePin();
+        setPinAction("");
       }
       syncCarNearPin();
     }
     function bindPinDrag(marker) {
-      if (!marker || marker.__pinBound) return;
+      if (!marker) return;
+      if (marker.__pinBound) return;
       marker.__pinBound = true;
       marker.on("dragstart", () => { pinDragging = true; });
       marker.on("drag", () => syncCarNearPin());
       marker.on("dragend", () => {
         finishPinDrag();
         setTimeout(() => { pinDragging = false; }, 0);
-      });
-      marker.on("click", () => {
-        if (pinDragging) return;
-        selectHomePin();
       });
     }
     function fitCarLoc(points) {
@@ -6730,8 +6942,8 @@
             homeMarker = lib.marker(pin, {
               draggable: true, icon: homePinIcon(), autoPan: true, zIndexOffset: 500
             }).addTo(carLocMap);
-            bindPinDrag(homeMarker);
           } else homeMarker.setLatLng(pin);
+          bindPinDrag(homeMarker);
         } else if (homeMarker) {
           carLocMap.removeLayer(homeMarker);
           homeMarker = null;
@@ -6986,23 +7198,6 @@
       await writeHome({ lat: here.lat, lon: here.lon });
       setPinAction("");
     }
-    async function deleteCarHome() {
-      if (!askKo("집으로 저장된 위치를 삭제할까요?")) return;
-      try {
-        await writeJson("DELETE", "/api/home", {});
-      } catch (e) {
-        alert((e && e.message) || "지우지 못했어요");
-        return;
-      }
-      pinMoved = false;
-      carLocFitted = false;
-      setPinAction("");
-      if (homeMarker && carLocMap) {
-        carLocMap.removeLayer(homeMarker);
-        homeMarker = null;
-      }
-      await refreshCarLoc(true);
-    }
     function bindCarLoc() {
       const saveNow = document.getElementById("car-loc-save-now");
       if (saveNow) saveNow.addEventListener("click", (ev) => {
@@ -7138,8 +7333,7 @@
       syncMapTools();
       const r = tripRoutes.find(x => x.start_ts === pickedTrip) || null;
       paintEvents(r);
-      const note = document.getElementById("trips-map-note");
-      if (r && note) note.innerHTML = "<span>선택 " + escHtml(r.label) + "</span>" + eventLegend(mapPrefs.events ? r.events : []) + (r.matched ? "" : "<span>도로 맞춤 전</span>");
+      paintTripMapLegend();
     });
     document.getElementById("trips-modes").addEventListener("click", (ev) => {
       const b = ev.target.closest("[data-mode]");

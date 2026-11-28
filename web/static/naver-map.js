@@ -96,16 +96,45 @@
       });
       return this;
     };
+    function wrapMapPop(html) {
+      var s = html == null ? "" : String(html);
+      if (!s) return "";
+      if (s.indexOf("teslife-map-pop") >= 0 || s.indexOf("ev-pop") >= 0) return s;
+      return "<div class=\"teslife-map-pop\">" + s + "</div>";
+    }
+    var openInfo = null;
+    function closeOpenInfo() {
+      if (openInfo && openInfo.close) openInfo.close();
+      openInfo = null;
+    }
     Overlay.prototype.bindPopup = function (html) {
-      this._popup = html || "";
+      this._popup = wrapMapPop(html || "");
+      return this;
+    };
+    Overlay.prototype.closePopup = function () {
+      if (this._info && this._info.close) this._info.close();
+      if (openInfo === this._info) openInfo = null;
       return this;
     };
     Overlay.prototype.openPopup = function (pt) {
       if (!this._map || !maps.InfoWindow) return this;
-      if (!this._info) this._info = new maps.InfoWindow({ content: this._popup });
-      else if (this._info.setContent) this._info.setContent(this._popup);
+      var html = wrapMapPop(this._popup || this._tip || "");
+      this._popup = html;
+      var opts = {
+        content: html,
+        backgroundColor: "transparent",
+        borderColor: "transparent",
+        borderWidth: 0,
+        anchorSize: new maps.Size(0, 0),
+        anchorColor: "transparent",
+        pixelOffset: new maps.Point(0, -8)
+      };
+      if (!this._info) this._info = new maps.InfoWindow(opts);
+      else if (this._info.setContent) this._info.setContent(html);
+      if (openInfo && openInfo !== this._info) closeOpenInfo();
       var at = pt ? ll(pt) : (this._raw.getPosition ? this._raw.getPosition() : this._at);
       this._info.open(this._map._raw, at);
+      openInfo = this._info;
       return this;
     };
     Overlay.prototype.bindTooltip = function (html) {
@@ -122,12 +151,15 @@
     };
 
     function strokeOf(style) {
+      style = style || {};
       return {
         strokeColor: style.color || "#5b9fd6",
         strokeWeight: style.weight || 4,
         strokeOpacity: style.opacity == null ? 0.9 : style.opacity,
         strokeStyle: style.dashArray ? "shortdash" : "solid",
-        clickable: style.interactive !== false && style.opacity !== 0
+        strokeLineJoin: style.lineJoin || "round",
+        strokeLineCap: style.lineCap || "round",
+        clickable: style.interactive === true || (style.interactive !== false && style.opacity !== 0)
       };
     }
 
@@ -216,6 +248,20 @@
       return dot;
     }
 
+
+    function hookMarkerDomClick(raw) {
+      var el = raw && raw.getElement && raw.getElement();
+      if (!el || el.__teslifeDomClick) return;
+      el.__teslifeDomClick = true;
+      el.addEventListener("click", function (domEv) {
+        maps.Event.trigger(raw, "click", {
+          pointerEvent: domEv,
+          domEvent: domEv,
+          coord: raw.getPosition && raw.getPosition()
+        });
+      });
+    }
+
     function marker(pt, opts) {
       var options = opts || {};
       var icon = options.icon || {};
@@ -268,8 +314,10 @@
       var baseAttach = pin._attach;
       pin._attach = function (map) {
         baseAttach.call(pin, map);
+        hookMarkerDomClick(raw);
         if (pin._rotation != null) pin.setRotationAngle(pin._rotation);
       };
+      hookMarkerDomClick(raw);
       return pin;
     }
 
@@ -357,6 +405,7 @@
           if (raw.autoResize) raw.autoResize();
           if (maps.Event && maps.Event.trigger) maps.Event.trigger(raw, "resize");
         },
+        closePopup: function () { closeOpenInfo(); },
         getBounds: function () {
           var box = raw.getBounds();
           return {
