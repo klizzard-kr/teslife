@@ -114,6 +114,38 @@ def last_fix(conn: sqlite3.Connection, vehicle_id: str) -> dict[str, Any] | None
     return {"lat": float(point[0]), "lon": float(point[1]), "received_at": row[0]}
 
 
+def last_gear(conn: sqlite3.Connection, vehicle_id: str) -> str | None:
+    """Newest stored Gear (P/R/N/D). Missing or unreadable stays None.
+
+    Same signal /api/live uses for trip_in_progress. Nothing is requested from the car.
+    """
+    try:
+        row = conn.execute(
+            "SELECT value FROM signals WHERE vehicle_id = ? AND name = 'Gear' "
+            "ORDER BY ts DESC LIMIT 1",
+            (vehicle_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if not row or row[0] in (None, ""):
+        return None
+    try:
+        value = decode_value(row[0])
+    except (TypeError, ValueError):
+        return None
+    if value is None:
+        return None
+    text = str(value).strip().upper()
+    return text or None
+
+
+def driving_flag(gear: str | None) -> bool | None:
+    """True when Gear is present and not P. Same rule as in_progress_flags."""
+    if not gear:
+        return None
+    return gear != "P"
+
+
 def located_at_home(conn: sqlite3.Connection, vehicle_id: str) -> bool | None:
     """The newest LocatedAtHome sample. Missing or unreadable stays None."""
     try:
@@ -141,12 +173,22 @@ def car_location_payload(
 
     heading is the newest stored GpsHeading in degrees, or None when the car has not
     sent one. home_km and home_via come from home_leg. Both are empty when either
-    point is missing. No street address is included.
+    point is missing. area is the cached primary admin name (동·읍·면, else 구,
+    else 시·군, else 도), or None. area_en is the English primary name, or None.
+    road_addr is the full road address ('시도 시군구 도로명 건물번호 (건물명)'), or None.
+    jibun_addr is the full lot address ('시도 시군구 동 지번'), or None. driving is True when the newest Gear is present and not P, False when it is P, and None when Gear is missing. That is the same rule /api/live uses for trip_in_progress. This function does not call
+    a geocoder; the process loop fills the cache when the last Location moves about
+    100 m (a 3-decimal cache cell), and gradually refills older rows that lack 구/시/도 or the two addresses.
     """
+    from process.geocode import admin_display, cached_addresses
+
     fix = last_fix(conn, vehicle_id)
     row = _home_row(conn, vehicle_id)
     origin = (fix["lat"], fix["lon"]) if fix else None
     km, via = home_leg(origin, home_point(row), route_opener)
+    area, _unused_up = admin_display(conn, origin[0], origin[1], "ko") if origin else (None, None)
+    area_en, _unused_up_en = admin_display(conn, origin[0], origin[1], "en") if origin else (None, None)
+    road_addr, jibun_addr = cached_addresses(conn, origin[0], origin[1]) if origin else (None, None)
     return {
         "vehicle_id": vehicle_id,
         "lat": None if fix is None else fix["lat"],
@@ -157,6 +199,11 @@ def car_location_payload(
         "home_km": km,
         "home_via": via,
         "home": home_dict(row),
+        "area": area,
+        "area_en": area_en,
+        "road_addr": road_addr,
+        "jibun_addr": jibun_addr,
+        "driving": driving_flag(last_gear(conn, vehicle_id)),
     }
 
 

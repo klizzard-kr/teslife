@@ -98,6 +98,25 @@ def _region(payload: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def region_area_names(payload: dict[str, Any]) -> tuple[str, str, str, str]:
+    """area1..area4 names from a reverse-geocode body. Empty when a level is missing.
+
+    This reads only region names. Road, lot, and building fields are ignored.
+    """
+    region = _region(payload)
+    names: list[str] = []
+    for key in ("area1", "area2", "area3", "area4"):
+        area = region.get(key)
+        if not isinstance(area, dict):
+            names.append("")
+            continue
+        name = str(area.get("name") or "").strip()
+        if name.lower() == "kr":
+            name = ""
+        names.append(name)
+    return names[0], names[1], names[2], names[3]
+
+
 def sigungu_name(payload: dict[str, Any]) -> str | None:
     """시·군·구 from a reverse-geocode body (area2). An empty name is a miss."""
     area = _region(payload).get("area2")
@@ -251,6 +270,48 @@ def place_name_from_sources(
     if building:
         return building
     return road_address_from_reverse(payload)
+
+
+def _area_name(region: dict[str, Any], key: str) -> str:
+    area = region.get(key)
+    if not isinstance(area, dict):
+        return ""
+    name = str(area.get("name") or "").strip()
+    return "" if name.lower() == "kr" else name
+
+
+def _land_number(land: dict[str, Any]) -> str:
+    main = str(land.get("number1") or "").strip()
+    sub = str(land.get("number2") or "").strip()
+    if main and sub and sub != "0":
+        return f"{main}-{sub}"
+    return main
+
+
+def detail_address_parts(payload: dict[str, Any] | None) -> tuple[dict[str, str], dict[str, str]]:
+    """Components for the full road and lot (지번) address strings. No shortening."""
+    road_parts = {"sido": "", "sigungu": "", "road": "", "number": "", "building": ""}
+    jibun_parts = {"sido": "", "sigungu": "", "dong": "", "jibun": ""}
+    if not isinstance(payload, dict):
+        return road_parts, jibun_parts
+    for item in _named_results(payload, "roadaddr"):
+        region = item.get("region") if isinstance(item.get("region"), dict) else {}
+        land = item.get("land") if isinstance(item.get("land"), dict) else {}
+        road_parts["sido"] = _area_name(region, "area1")
+        road_parts["sigungu"] = _area_name(region, "area2")
+        road_parts["road"] = str(land.get("name") or "").strip()
+        road_parts["number"] = _land_number(land)
+        road_parts["building"] = _building_in(land) or ""
+        break
+    for item in _named_results(payload, "addr"):
+        region = item.get("region") if isinstance(item.get("region"), dict) else {}
+        land = item.get("land") if isinstance(item.get("land"), dict) else {}
+        jibun_parts["sido"] = _area_name(region, "area1")
+        jibun_parts["sigungu"] = _area_name(region, "area2")
+        jibun_parts["dong"] = _area_name(region, "area3") or _area_name(region, "area4")
+        jibun_parts["jibun"] = _land_number(land)
+        break
+    return road_parts, jibun_parts
 
 
 def label_from_naver(payload: dict[str, Any]) -> str | None:
