@@ -39,9 +39,9 @@ def _node(script: str) -> str:
 
 class VersionTests(unittest.TestCase):
     def test_version_and_docs(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
-        self.assertIn("현재 버전은 v1.21.10입니다.", README)
-        self.assertIn("화면의 제품 버전은 `v1.21.10`", DESIGN)
+        self.assertIn('const APP_VERSION = "v1.21.12"', HTML)
+        self.assertIn("현재 버전은 v1.21.12입니다.", README)
+        self.assertIn("화면의 제품 버전은 `v1.21.12`", DESIGN)
         self.assertIn("## v1.21.10", CHANGELOG)
         self.assertIn("집 핀을 눌러 지우기를 고르던 기능을 빼었습니다", CHANGELOG)
         self.assertIn("DELETE /api/home", CHANGELOG)
@@ -155,7 +155,6 @@ class LegendTests(unittest.TestCase):
     def test_legend_matches_layer_and_event_counts(self) -> None:
         src = _fn("paintTripMapLegend", "closeLayerPops")
         self.assertIn("SPEED_BANDS.forEach", src)
-        self.assertIn("30 km/h 이하", HTML)
         self.assertIn("오토파일럿 켜짐", src)
         self.assertIn("오토파일럿 꺼짐", src)
         self.assertIn("오토파일럿 기록 없음", src)

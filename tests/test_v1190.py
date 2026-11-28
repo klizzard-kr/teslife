@@ -65,7 +65,7 @@ class HomeCardMarkupTests(unittest.TestCase):
 
     def test_version_note(self) -> None:
         self.assertEqual(PROCESS_VERSION, "25")
-        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.12"', HTML)
         note = HTML.split('version: "1.19.0"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("차 위치", note)
         self.assertIn("집 한 곳", note)

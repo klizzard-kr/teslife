@@ -49,7 +49,7 @@ class PolishHtmlTests(unittest.TestCase):
         self.assertIn("hour12: false", ago)
         self.assertIn("fmtAgo(ts)", ago)
         self.assertIn('id="home-foot"', HTML)
-        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.12"', HTML)
         self.assertIn('href="https://github.com/klizzard-kr/teslife" target="_blank" rel="noopener">GitHub</a>', HTML)
         self.assertIn(">by klizzard<", HTML)
         self.assertIn('"연결 끊김"', HTML)

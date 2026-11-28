@@ -86,7 +86,7 @@ def _put_cache(conn: sqlite3.Connection, lat: float, lon: float,
 
 class CardMarkupTests(unittest.TestCase):
     def test_card_matches_vehicle_card_and_stays_open(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.12"', HTML)
         loc = HTML[HTML.index('id="car-loc-card"'):HTML.index('id="home-foot"')]
         self.assertIn("<h2>현재 위치</h2>", loc)
         self.assertIn('class="live-grid home-hero"', loc)

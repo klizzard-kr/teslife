@@ -51,7 +51,7 @@ def _node(expr: str) -> str:
 
 class CardTests(unittest.TestCase):
     def test_version_and_no_divider(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.12"', HTML)
         loc_css = _between(HTML, "#car-loc-card .mode-row {", "}")
         self.assertIn("border-top: none", loc_css)
         self.assertIn("padding-top: 0", loc_css)

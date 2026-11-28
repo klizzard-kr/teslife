@@ -123,7 +123,7 @@ class CarLocationCardTests(unittest.TestCase):
         self.assertIn("draggable: !!options.draggable", NAVER)
         self.assertIn("function control(", NAVER)
         self.assertIn("disableClickPropagation", NAVER)
-        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.12"', HTML)
         note = HTML.split('version: "1.20.0"', 1)[1].split("fixes:", 1)[0]
         self.assertIn("화살표", note)
 
