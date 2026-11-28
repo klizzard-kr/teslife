@@ -304,7 +304,8 @@ class RowAlignTests(unittest.TestCase):
         self.assertIn("tripRoutes.findIndex(r => r.start_ts === t.start_ts)", trips)
         self.assertIn("pal[ri % pal.length]", trips)
         self.assertIn('"<i class=\'sw\'"', trips)
-        self.assertIn('tripRoutes.length > 8 ? " · 누르면 강조"', html)
+        self.assertNotIn("trips-map-note", html)
+        self.assertNotIn("누르면 강조", html)
         charges = html[html.index("function renderChargeRows("):html.index("function openChargeDetail(")]
         self.assertIn('"<span class=\'trip-place\'><span class=\'trip-route-label\'>" + escHtml(place || "") + "</span>"', charges)
         self.assertIn("trip-place", charges)
@@ -403,7 +404,14 @@ class SelectionUiTests(unittest.TestCase):
         self.assertIn("highlightTrip(pickedTrip === startTs ? null : startTs, fit)", self._fn("toggleTrip"))
         self.assertNotIn("highlightTrip", self._fn("openTripSheet"))
         self.assertNotIn("highlightCharge", self._fn("openChargeDetail"))
-        self.assertIn("toggleTrip(hits[0].start_ts, false)", self._fn("pickRouteAt"))
+        pick = self._fn("pickRouteAt")
+        self.assertNotIn("toggleTrip", pick)
+        click_i = self.html.index('tripsMap.on("click"')
+        click = self.html[click_i:self.html.index("syncMapTools();", click_i)]
+        self.assertNotIn("toggleTrip", click)
+        self.assertNotIn("pickRouteAt", click)
+        self.assertIn("closeTripMapPop()", click)
+        self.assertIn("toggleTrip(t.start_ts, true)", self._fn("renderTripRows"))
         self.assertIn("highlightCharge(null, false)", self._fn("drawChargeDots"))
         self.assertIn(".detail-btn { flex: none; width: 44px; height: 44px; min-height: 44px; min-width: 44px; margin: -8px", self.html)
 
