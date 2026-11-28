@@ -269,7 +269,7 @@ def _fn(name: str) -> str:
 @unittest.skipUnless(shutil.which("node"), "node not installed")
 class PageGraphTests(unittest.TestCase):
     def test_labels_tabs_and_crosshair_hooks(self) -> None:
-        self.assertIn('const APP_VERSION = "v1.21.8"', HTML)
+        self.assertIn('const APP_VERSION = "v1.21.10"', HTML)
         self.assertNotIn("function climateTabs(", HTML)
         self.assertNotIn("<strong>공조</strong>", _fn("mountClimate"))
         self.assertIn("climateSvg(model)", _fn("mountClimate"))
