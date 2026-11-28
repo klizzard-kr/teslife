@@ -290,7 +290,7 @@
       div.style.gap = "8px";
       div.style.pointerEvents = "none";
       div.style.alignItems = left ? "flex-start" : "flex-end";
-      div.style[bottom ? "bottom" : "top"] = bottom ? "36px" : "10px";
+      div.style[bottom ? "bottom" : "top"] = "10px";
       div.style[left ? "left" : "right"] = "10px";
       host.appendChild(div);
       return div;
@@ -327,7 +327,8 @@
       var raw = new maps.Map(el, {
         center: new maps.LatLng(36.5, 127.8),
         zoom: 7,
-        zoomControl: !opts || opts.zoomControl !== false
+        zoomControl: !opts || opts.zoomControl !== false,
+        zoomControlOptions: { position: maps.Position.TOP_LEFT }
       });
       return {
         _raw: raw,
